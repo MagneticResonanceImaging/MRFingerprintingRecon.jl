@@ -51,18 +51,19 @@ end
 
 function LinearAlgebra.mul!(x::Vector{T}, S::NFFTNormalOpBasisFunc, b) where {T}
     idx = CartesianIndices(S.shape)
+    idxos = CartesianIndices(2 .* S.shape)
     Ncoils = length(S.cmaps)
 
     b = reshape(b, S.shape..., S.Ncoeff)
-    xL = @view S.kL2[:, :, :, 1]
+    xL = @view S.kL2[idxos, 1]
     fill!(x, zero(T))
 
     for icoil ∈ 1:Ncoils
         fill!(xL, zero(T))
 
         @inbounds for i = 1:S.Ncoeff
-            @views xL[idx] .= S.cmaps[icoil] .* b[:, :, :, i]
-            @views mul!(S.kL1[:, :, :, i], S.fftplan, xL)
+            @views xL[idx] .= S.cmaps[icoil] .* b[idx, i]
+            @views mul!(S.kL1[idxos, i], S.fftplan, xL)
         end
 
         kin = reshape(S.kL1, :, S.Ncoeff)
@@ -72,7 +73,7 @@ function LinearAlgebra.mul!(x::Vector{T}, S::NFFTNormalOpBasisFunc, b) where {T}
         end
 
         @batch for i = 1:S.Ncoeff
-            @views mul!(S.kL1[:, :, :, i], S.ifftplan, S.kL2[:, :, :, i])
+            @views mul!(S.kL1[idxos, i], S.ifftplan, S.kL2[idxos, i])
         end
 
         @views x .+= vec(conj.(S.cmaps[icoil]) .* S.kL1[idx, :])
