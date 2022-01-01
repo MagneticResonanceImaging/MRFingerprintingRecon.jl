@@ -2,9 +2,11 @@ module MRFingerprintingRecon
 
 using Polyester
 using LinearAlgebra
-using MRIReco
-using NFFT
 using FFTW
+using NFFT
+import MRIReco
+
+export NFFTNormalOpBasisFunc, calcCoilMaps, calculateBackProjection
 
 function __init__()
     if Threads.nthreads() > 1
@@ -14,5 +16,7 @@ function __init__()
 end
 
 include("NFFTNormalOpBasisFunc.jl")
+include("CoilMaps.jl")
+include("BackProjection.jl")
 
 end # module
