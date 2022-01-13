@@ -6,7 +6,7 @@ using FFTW
 using NFFT
 import MRIReco
 
-export NFFTNormalOpBasisFunc, calcCoilMaps, calculateBackProjection
+export NFFTNormalOpBasisFunc, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA
 
 function __init__()
     if Threads.nthreads() > 1
@@ -18,5 +18,6 @@ end
 include("NFFTNormalOpBasisFunc.jl")
 include("CoilMaps.jl")
 include("BackProjection.jl")
+include("Trajectories.jl")
 
 end # module

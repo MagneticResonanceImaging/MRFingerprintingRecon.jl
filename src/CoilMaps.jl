@@ -11,10 +11,12 @@ function calcCoilMaps(data, trj, U, img_shape::NTuple{N,Int}; kernel_size = ntup
     pv = [copy(p) for _ = 1:Ncoils]
     xbp = Array{ComplexF32}(undef, img_shape..., Ncoils)
 
+    img_idx = CartesianIndices(img_shape)
+
     print("BP for coils maps: ")
     @time begin
         @batch for ic ∈ 1:Ncoils
-            @views NFFT.nfft_adjoint!(pv[ic], dataU[:,ic], xbp[:,:,:,ic])
+            @views NFFT.nfft_adjoint!(pv[ic], dataU[:,ic], xbp[img_idx,ic])
         end
     end
 
@@ -27,5 +29,7 @@ function calcCoilMaps(data, trj, U, img_shape::NTuple{N,Int}; kernel_size = ntup
 
     print("espirit; number of singular vectors: ")
     cmaps = @time MRIReco.espirit(kcenter, img_shape, kernel_size, eigThresh_1=eigThresh_1, eigThresh_2=eigThresh_2, nmaps=nmaps)
-    return cmaps
+
+    cmapsv = [cmaps[img_idx,ic,1] for ic=1:20]
+    return cmaps, cmapsv
 end

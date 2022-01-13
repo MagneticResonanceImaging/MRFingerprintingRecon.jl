@@ -1,24 +1,26 @@
 function calculateBackProjection(data::Array{T}, trj, U, cmaps) where {T}
     test_dimension(data, trj, U, cmaps)
+    print("Calculating backprojection: ")
+    @time begin
+        Nt, Ncoef = size(U)
+        img_shape = size(cmaps[1])
+        Ncoils = length(cmaps)
 
-    Nt, Ncoef = size(U)
-    img_shape = size(cmaps[1])
-    Ncoils = length(cmaps)
+        FFTW.set_num_threads(1)
+        p = NFFT.NFFTPlan(trj[1], img_shape; flags = FFTW.MEASURE)
+        pv = [copy(p) for _ = 1:Threads.nthreads()]
+        xbp = [zeros(T, img_shape..., Ncoef) for _ = 1:Threads.nthreads()]
+        xtmp = [Array{T}(undef, img_shape) for _ = 1:Threads.nthreads()]
 
-    FFTW.set_num_threads(1)
-    p = NFFT.NFFTPlan(trj[1], img_shape; flags = FFTW.MEASURE)
-    pv = [copy(p) for _ = 1:Threads.nthreads()]
-    xbp = [zeros(T, img_shape..., Ncoef) for _ = 1:Threads.nthreads()]
-    xtmp = [Array{T}(undef, img_shape) for _ = 1:Threads.nthreads()]
+        Threads.@threads for it ∈ 1:Nt
+            tid = Threads.threadid()
+            Ui = reshape(U[it, :], one.(img_shape)..., Ncoef)
+            NFFT.NFFTPlan!(pv[tid], trj[it])
 
-    Threads.@threads for it ∈ 1:Nt
-        tid = Threads.threadid()
-        Ui = reshape(U[it, :], one.(img_shape)..., Ncoef)
-        NFFT.NFFTPlan!(pv[tid], trj[it])
-
-        for icoil ∈ 1:Ncoils
-            @views NFFT.nfft_adjoint!(pv[tid], data[:, it, icoil], xtmp[tid])
-            @views xbp[tid] .+= conj.(cmaps[icoil]) .* xtmp[tid] .* Ui
+            for icoil ∈ 1:Ncoils
+                @views NFFT.nfft_adjoint!(pv[tid], data[:, it, icoil], xtmp[tid])
+                @views xbp[tid] .+= conj.(cmaps[icoil]) .* xtmp[tid] .* Ui
+            end
         end
     end
     return sum(xbp)

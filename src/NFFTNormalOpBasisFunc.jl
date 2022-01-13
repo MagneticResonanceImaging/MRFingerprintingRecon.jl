@@ -1,10 +1,10 @@
 
-struct NFFTNormalOpBasisFunc{S,D,T}
+struct NFFTNormalOpBasisFunc{S,D,T,E,F}
     shape::S
     Ncoeff::Int
     weights::D
-    fftplan
-    ifftplan
+    fftplan::E
+    ifftplan::F
     λ::Array{Complex{T},3}
     kL1::Array{Complex{T}}
     kL2::Array{Complex{T}}
@@ -82,17 +82,7 @@ function LinearAlgebra.mul!(x::Vector{T}, S::NFFTNormalOpBasisFunc, b) where {T}
 end
 
 
-function Base.:*(S::NFFTNormalOpBasisFunc, b::AbstractVector{T}) where {T}
-    x = similar(b)
-    return mul!(x, S, b)
-end
-
-
-function Base.size(S::NFFTNormalOpBasisFunc)
-    return S.shape
-end
-
-
-function Base.size(S::NFFTNormalOpBasisFunc, dim)
-    return S.shape[dim]
-end
+Base.:*(S::NFFTNormalOpBasisFunc, b::AbstractVector) = mul!(similar(b), S, b)
+Base.size(S::NFFTNormalOpBasisFunc) = S.shape
+Base.size(S::NFFTNormalOpBasisFunc, dim) = S.shape[dim]
+Base.eltype(::Type{NFFTNormalOpBasisFunc{S,D,T}}) where {S,D,T} = T
