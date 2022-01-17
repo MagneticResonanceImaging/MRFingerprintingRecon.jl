@@ -11,7 +11,7 @@ struct NFFTNormalOpBasisFunc{S,D,T,E,F}
     cmaps
 end
 
-function NFFTNormalOpBasisFunc(img_shape, tr::Vector{Matrix{T}}, U::Matrix{Complex{T}}, cmaps = (1,)) where {T}
+function NFFTNormalOpBasisFunc(img_shape, tr::Vector{Matrix{T}}, U::Matrix{Complex{T}}, cmaps = (1,); verbose=false) where {T}
     img_shape_os = 2 .* img_shape
     Ncoeff = size(U, 2)
 
@@ -23,26 +23,27 @@ function NFFTNormalOpBasisFunc(img_shape, tr::Vector{Matrix{T}}, U::Matrix{Compl
     FFTW.set_num_threads(Threads.nthreads())
     fftplan = plan_fft(xtmp; flags = FFTW.MEASURE)
     ifftplan = plan_ifft(xtmp; flags = FFTW.MEASURE)
-    nfftplan = plan_nfft(tr[1], img_shape_os, 4, 2; flags = FFTW.MEASURE)
-    println("Planned FFTs")
+    nfftplan = plan_nfft(tr[1], img_shape_os, m=4, σ=2; fftflags = FFTW.MEASURE)
+    verbose && println("Planned FFTs")
 
     λ = Array{Complex{T}}(undef, img_shape_os)
     Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, prod(img_shape_os))
     Λ .= 0
-    println("Λ initialized")
+    verbose && println("Λ initialized")
 
     for i ∈ eachindex(tr)
-        println(string("Time frame ", i))
-        @time calculateToeplitzKernel!(λ, nfftplan, tr[i], fftplan)
+        verbose && println(string("Time frame ", i))
+        verbose && @time calculateToeplitzKernel!(λ, nfftplan, tr[i], fftplan)
+        !verbose && calculateToeplitzKernel!(λ, nfftplan, tr[i], fftplan)
 
         @views U2 = U[i, :] * U[i, :]'
-        @time begin
+        # @time begin
             @batch for j ∈ eachindex(λ)
                 @simd for iu ∈ CartesianIndices(U2)
                     @inbounds Λ[iu, j] += U2[iu] * λ[j]
                 end
             end
-        end
+        # end
     end
 
     return NFFTNormalOpBasisFunc(img_shape, Ncoeff, I, fftplan, ifftplan, Λ, kL1, kL2, cmaps)
