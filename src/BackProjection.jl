@@ -14,7 +14,7 @@ function calculateBackProjection(data::Array{T}, trj, U, cmaps) where {T}
 
         Threads.@threads for it ∈ 1:Nt
             tid = Threads.threadid()
-            Ui = reshape(U[it, :], one.(img_shape)..., Ncoef)
+            Ui = reshape(conj.(U[it, :]), one.(img_shape)..., Ncoef)
             NFFT.nodes!(pv[tid], trj[it])
 
             for icoil ∈ 1:Ncoils

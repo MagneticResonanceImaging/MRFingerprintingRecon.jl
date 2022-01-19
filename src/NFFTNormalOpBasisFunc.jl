@@ -36,7 +36,7 @@ function NFFTNormalOpBasisFunc(img_shape, tr::Vector{Matrix{T}}, U::Matrix{Compl
         verbose && @time calculateToeplitzKernel!(λ, nfftplan, tr[i], fftplan)
         !verbose && calculateToeplitzKernel!(λ, nfftplan, tr[i], fftplan)
 
-        @views U2 = U[i, :] * U[i, :]'
+        @views U2 = conj.(U[i, :]) * transpose(U[i, :])
         # @time begin
             @batch for j ∈ eachindex(λ)
                 @simd for iu ∈ CartesianIndices(U2)
