@@ -18,7 +18,7 @@ function calculateBackProjection(data::Array{T}, trj, U, cmaps) where {T}
             NFFT.nodes!(pv[tid], trj[it])
 
             for icoil ∈ 1:Ncoils
-                @views NFFT.nfft_adjoint!(pv[tid], data[:, it, icoil], xtmp[tid])
+                @views mul!(xtmp[tid], adjoint(pv[tid]), data[:, it, icoil])
                 @views xbp[tid] .+= conj.(cmaps[icoil]) .* xtmp[tid] .* Ui
             end
         end

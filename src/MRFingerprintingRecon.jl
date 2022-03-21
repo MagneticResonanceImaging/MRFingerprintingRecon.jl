@@ -4,6 +4,7 @@ using Polyester
 using LinearAlgebra
 using FFTW
 using NFFT
+using NFFTTools
 import MRIReco
 
 export NFFTNormalOpBasisFunc, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA

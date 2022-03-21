@@ -14,10 +14,9 @@ function calcCoilMaps(data, trj, U, img_shape::NTuple{N,Int}; kernel_size = ntup
     img_idx = CartesianIndices(img_shape)
 
     @info "BP for coils maps: "
-    flush(stdout)
     @time begin
         @batch for ic ∈ 1:Ncoils
-            @views NFFT.nfft_adjoint!(pv[ic], dataU[:,ic], xbp[img_idx,ic])
+            @views mul!(xbp[img_idx,ic], adjoint(pv[ic]), dataU[:,ic])
         end
     end
 
