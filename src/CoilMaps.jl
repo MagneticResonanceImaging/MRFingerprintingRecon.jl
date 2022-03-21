@@ -13,7 +13,7 @@ function calcCoilMaps(data, trj, U, img_shape::NTuple{N,Int}; kernel_size = ntup
 
     img_idx = CartesianIndices(img_shape)
 
-    print("BP for coils maps: ")
+    @info "BP for coils maps: "
     flush(stdout)
     @time begin
         @batch for ic ∈ 1:Ncoils
@@ -28,9 +28,9 @@ function calcCoilMaps(data, trj, U, img_shape::NTuple{N,Int}; kernel_size = ntup
     m = CartesianIndices(calib_size) .+ CartesianIndex((img_shape .- calib_size) .÷ 2)
     kcenter = xbp[m,:]
 
-    print("espirit: "); flush(stdout)
+    @info "espirit: "
     cmaps = @time MRIReco.espirit(kcenter, img_shape, kernel_size, eigThresh_1=eigThresh_1, eigThresh_2=eigThresh_2, nmaps=nmaps)
 
-    cmapsv = [cmaps[img_idx,ic,1] for ic=1:20]
+    cmapsv = [cmaps[img_idx,ic,1] for ic=1:Ncoils]
     return cmaps, cmapsv
 end
