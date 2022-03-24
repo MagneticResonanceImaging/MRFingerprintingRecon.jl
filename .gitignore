@@ -1,2 +1,7 @@
+*.out
+.vscode/
+docs/build
+docs/src/build*
+docs/Manifest.toml
 /Manifest.toml
-.vscode
+.DS_Store
