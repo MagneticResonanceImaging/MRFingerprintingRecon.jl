@@ -6,8 +6,9 @@ using FFTW
 using NFFT
 using NFFTTools
 import MRIReco
+using LinearOperators
 
-export NFFTNormalOpBasisFunc, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA
+export NFFTNormalOpBasisFunc, NFFTNormalOpBasisFuncLO, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA
 
 function __init__()
     if Threads.nthreads() > 1
