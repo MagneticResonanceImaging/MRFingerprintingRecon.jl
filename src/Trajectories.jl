@@ -14,16 +14,16 @@ end
 
 # delay is in (HF, AP, LR)
 function kooshball(Nr, theta, phi; delay=(0,0,0), T=Float32)
-    Ncyc,Nt = size(theta)
+    Ncyc, Nt = size(theta)
     theta = vec(theta)
     phi   = vec(phi)
 
     kr = ((-Nr+1)/2:(Nr-1)/2) / Nr
 
     k = Matrix{T}(undef, 3, length(kr)*length(theta))
-    k[1,:] = kron(sin.(theta) .* cos.(phi), (kr .+ delay[1]))
-    k[2,:] = kron(sin.(theta) .* sin.(phi), (kr .+ delay[2]))
-    k[3,:] = kron(cos.(theta),              (kr .+ delay[3]))
+    k[1,:] = -kron(sin.(theta) .* cos.(phi), (kr .+ delay[1]))
+    k[2,:] =  kron(sin.(theta) .* sin.(phi), (kr .+ delay[2]))
+    k[3,:] =  kron(cos.(theta),              (kr .+ delay[3]))
 
     k = reshape(k, 3, :, Nt)
     kv = [k[:,:,t] for t=1:Nt]
