@@ -4,7 +4,7 @@ function calcToeplitzKernel(img_shape_os, trj::Vector{Matrix{T}}, U::Matrix{Comp
     Ncoeff = size(U, 2)
 
     FFTW.set_num_threads(Threads.nthreads())
-    nfftplan = plan_nfft(trj[1], img_shape_os; m=4, σ=2.0, precompute=LINEAR, blocking = false, fftflags = FFTW.MEASURE)
+    nfftplan = plan_nfft(trj[1], img_shape_os; precompute=LINEAR, blocking = false, fftflags = FFTW.MEASURE)
 
     λ = Array{Complex{T}}(undef, img_shape_os)
     Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, prod(img_shape_os))

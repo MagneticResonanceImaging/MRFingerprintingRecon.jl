@@ -7,7 +7,7 @@ function calculateBackProjection(data::Array{T}, trj, U, cmaps) where {T}
 
     FFTW.set_num_threads(1)
 
-    p = NFFT.NFFTPlan(trj[1], img_shape; m=4, σ=2.0, precompute=LINEAR, blocking = false, fftflags = FFTW.MEASURE)
+    p = NFFT.NFFTPlan(trj[1], img_shape; precompute=LINEAR, blocking = false, fftflags = FFTW.MEASURE)
     pv = [copy(p) for _ = 1:Threads.nthreads()]
     xbp = [zeros(T, img_shape..., Ncoef) for _ = 1:Threads.nthreads()]
     xtmp = [Array{T}(undef, img_shape) for _ = 1:Threads.nthreads()]

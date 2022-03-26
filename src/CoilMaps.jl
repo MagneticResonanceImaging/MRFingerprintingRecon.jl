@@ -12,7 +12,7 @@ function calcCoilMaps(data, trj, U, img_shape::NTuple{N,Int}; kernel_size = ntup
     end
     dataU = reshape(dataU, :, size(dataU, 3))
 
-    p = plan_nfft(reduce(hcat,trj), img_shape; m=4, σ=2.0)
+    p = plan_nfft(reduce(hcat,trj), img_shape)
     xbp = Array{ComplexF32}(undef, img_shape..., Ncoils)
 
     img_idx = CartesianIndices(img_shape)
