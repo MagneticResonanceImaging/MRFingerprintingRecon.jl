@@ -3,11 +3,16 @@ function calcCoilMaps(data, trj, U, img_shape::NTuple{N,Int}; kernel_size = ntup
     Ndims = length(img_shape)
     imdims = ntuple(i->i, Ndims)
 
-    dataU = data .* U[:,1]'
-    dataU .*= dropdims(sum(abs2, trj, dims=1), dims=1)
+    # dataU = data .* U[:,1]'
+    # dataU .*= dropdims(sum(abs2, combinedimsview(trj), dims=1), dims=1)
+    dataU = similar(data) # size = Ncycles*Nr x Nt x Ncoils
+    cU1 = conj(U[:,1])
+    @batch for i ∈ CartesianIndices(dataU)
+        dataU[i] = data[i] * cU1[i[2]] * sum(abs2, @view trj[i[2]][:,i[1]])
+    end
     dataU = reshape(dataU, :, size(dataU, 3))
 
-    p = plan_nfft(reshape(trj, 3, :), img_shape; m=4, σ=2.0)
+    p = plan_nfft(reduce(hcat,trj), img_shape; m=4, σ=2.0)
     xbp = Array{ComplexF32}(undef, img_shape..., Ncoils)
 
     img_idx = CartesianIndices(img_shape)
