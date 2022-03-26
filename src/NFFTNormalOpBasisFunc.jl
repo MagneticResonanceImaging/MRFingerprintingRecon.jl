@@ -1,4 +1,4 @@
-function calcToeplitzKernel(img_shape_os, trj::Vector{Matrix{T}}, U::Matrix{Complex{T}};
+function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::Matrix{Complex{T}};
     fftplan = plan_fft(Array{Complex{T}}(undef, img_shape_os); flags = FFTW.MEASURE)
     ) where {T}
     Ncoeff = size(U, 2)
@@ -45,7 +45,7 @@ end
 function NFFTNormalOpBasisFunc(img_shape, trj::Vector{Matrix{T}}, U::Matrix{Complex{T}};
     cmaps = (1,),
     fftplan = plan_fft(Array{Complex{T}}(undef, 2 .* img_shape); flags = FFTW.MEASURE),
-    Λ = calcToeplitzKernel(2 .* img_shape, trj, U; fftplan = fftplan)
+    Λ = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; fftplan = fftplan)
     ) where {T}
     # FFTW.set_num_threads(Threads.nthreads())
 
@@ -120,7 +120,7 @@ end
 function NFFTNormalOpBasisFuncLO(img_shape, trj::Vector{Matrix{T}}, U::Matrix{Complex{T}};
     cmaps = (1,),
     fftplan = plan_fft(Array{Complex{T}}(undef, 2 .* img_shape); flags = FFTW.MEASURE),
-    Λ = calcToeplitzKernel(2 .* img_shape, trj, U; fftplan = fftplan)
+    Λ = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; fftplan = fftplan)
     ) where {T}
 
     S = NFFTNormalOpBasisFunc(img_shape, trj, U; cmaps = cmaps, fftplan = fftplan, Λ = Λ)
