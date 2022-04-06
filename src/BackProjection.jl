@@ -1,4 +1,4 @@
-function calculateBackProjection(data::Array{T}, trj, U, cmaps) where {T}
+function calculateBackProjection(data::AbstractArray{T}, trj, U, cmaps) where {T}
     test_dimension(data, trj, U, cmaps)
 
     Nt, Ncoef = size(U)

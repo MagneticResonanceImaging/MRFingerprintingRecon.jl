@@ -1,4 +1,4 @@
-function calcCoilMaps(data, trj, U, img_shape::NTuple{N,Int}; kernel_size = ntuple(_->6, N), calib_size =  ntuple(_->24, N), eigThresh_1=0.04, eigThresh_2=0.0, nmaps=1) where {N}
+function calcCoilMaps(data::AbstractArray{Complex{T},3}, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractMatrix{Complex{T}}, img_shape::NTuple{N,Int}; kernel_size = ntuple(_->6, N), calib_size =  ntuple(_->24, N), eigThresh_1=0.04, eigThresh_2=0.0, nmaps=1) where {N,T}
     Ncoils = size(data,3)
     Ndims = length(img_shape)
     imdims = ntuple(i->i, Ndims)
@@ -13,7 +13,7 @@ function calcCoilMaps(data, trj, U, img_shape::NTuple{N,Int}; kernel_size = ntup
     dataU = reshape(dataU, :, size(dataU, 3))
 
     p = plan_nfft(reduce(hcat,trj), img_shape)
-    xbp = Array{ComplexF32}(undef, img_shape..., Ncoils)
+    xbp = Array{Complex{T}}(undef, img_shape..., Ncoils)
 
     img_idx = CartesianIndices(img_shape)
 
