@@ -1,10 +1,30 @@
-function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::Matrix{Complex{T}};
-    fftplan = plan_fft(Array{Complex{T}}(undef, img_shape_os); flags = FFTW.MEASURE)
-    ) where {T}
+function calculateToeplitzKernelBasis(
+    img_shape_os,
+    trj::Vector{Matrix{T}},
+    U::Matrix{Complex{T}};
+    fftplan = plan_fft(Array{Complex{T}}(undef, img_shape_os); flags = FFTW.MEASURE),
+) where {T}
     Ncoeff = size(U, 2)
 
     FFTW.set_num_threads(Threads.nthreads())
-    nfftplan = plan_nfft(trj[1], img_shape_os; precompute=LINEAR, blocking = false, fftflags = FFTW.MEASURE)
+    nfftplan = try
+        plan_nfft(
+            trj[1],
+            img_shape_os;
+            precompute = LINEAR,
+            blocking = false,
+            fftflags = FFTW.MEASURE,
+        )
+    catch
+        @info "plan_nfft failed with MEASURE, using ESTIMATE instead. "
+        plan_nfft(
+            trj[1],
+            img_shape_os;
+            precompute = LINEAR,
+            blocking = false,
+            fftflags = FFTW.ESTIMATE,
+        )
+    end
 
     λ = Array{Complex{T}}(undef, img_shape_os)
     Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, prod(img_shape_os))
@@ -42,11 +62,14 @@ struct NFFTNormalOpBasisFunc{S,T,E,F,G}
     cmaps::G
 end
 
-function NFFTNormalOpBasisFunc(img_shape, trj::Vector{Matrix{T}}, U::Matrix{Complex{T}};
+function NFFTNormalOpBasisFunc(
+    img_shape,
+    trj::Vector{Matrix{T}},
+    U::Matrix{Complex{T}};
     cmaps = (1,),
     fftplan = plan_fft(Array{Complex{T}}(undef, 2 .* img_shape); flags = FFTW.MEASURE),
-    Λ = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; fftplan = fftplan)
-    ) where {T}
+    Λ = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; fftplan = fftplan),
+) where {T}
     # FFTW.set_num_threads(Threads.nthreads())
 
     ifftplan = plan_ifft(Array{Complex{T}}(undef, 2 .* img_shape); flags = FFTW.MEASURE)
@@ -71,25 +94,31 @@ function LinearAlgebra.mul!(x::Vector{T}, S::NFFTNormalOpBasisFunc, b, α, β) w
         x .*= β
     end
 
-    for icoil ∈ 1:Ncoils
-        fill!(xL, zero(T))
+    bthreads = BLAS.get_num_threads()
+    try
+        BLAS.set_num_threads(1)
+        for icoil ∈ 1:Ncoils
+            fill!(xL, zero(T))
 
-        @inbounds for i = 1:S.Ncoeff
-            @views xL[idx] .= S.cmaps[icoil] .* b[idx, i]
-            @views mul!(S.kL1[idxos, i], S.fftplan, xL)
+            @inbounds for i = 1:S.Ncoeff
+                @views xL[idx] .= S.cmaps[icoil] .* b[idx, i]
+                @views mul!(S.kL1[idxos, i], S.fftplan, xL)
+            end
+
+            kin = reshape(S.kL1, :, S.Ncoeff)
+            kout = reshape(S.kL2, :, S.Ncoeff)
+            @batch for i ∈ eachindex(view(S.Λ, 1, 1, :))
+                @views @inbounds mul!(kout[i, :], S.Λ[:, :, i], kin[i, :])
+            end
+
+            @batch for i = 1:S.Ncoeff
+                @views mul!(S.kL1[idxos, i], S.ifftplan, S.kL2[idxos, i])
+            end
+
+            @views x .+= α .* vec(conj.(S.cmaps[icoil]) .* S.kL1[idx, :])
         end
-
-        kin = reshape(S.kL1, :, S.Ncoeff)
-        kout = reshape(S.kL2, :, S.Ncoeff)
-        @batch for i ∈ eachindex(view(S.Λ, 1, 1, :))
-            @views @inbounds mul!(kout[i, :], S.Λ[:, :, i], kin[i, :])
-        end
-
-        @batch for i = 1:S.Ncoeff
-            @views mul!(S.kL1[idxos, i], S.ifftplan, S.kL2[idxos, i])
-        end
-
-        @views x .+= α .* vec(conj.(S.cmaps[icoil]) .* S.kL1[idx, :])
+    finally
+        BLAS.set_num_threads(bthreads)
     end
     return x
 end
@@ -106,21 +135,24 @@ Base.eltype(::Type{NFFTNormalOpBasisFunc{S,D,T}}) where {S,D,T} = T
 ############################################################################################
 function NFFTNormalOpBasisFuncLO(A::NFFTNormalOpBasisFunc{S,T,E,F,G}) where {S,T,E,F,G}
     return LinearOperator(
-       Complex{T},
-       prod(A.shape) * A.Ncoeff,
-       prod(A.shape) * A.Ncoeff,
-       true,
-       true,
-       (res, x, α, β) -> mul!(res, A, x, α, β),
-       nothing,
-       (res, x, α, β) -> mul!(res, A, x, α, β),
+        Complex{T},
+        prod(A.shape) * A.Ncoeff,
+        prod(A.shape) * A.Ncoeff,
+        true,
+        true,
+        (res, x, α, β) -> mul!(res, A, x, α, β),
+        nothing,
+        (res, x, α, β) -> mul!(res, A, x, α, β),
     )
 end
 
-function NFFTNormalOpBasisFuncLO(img_shape, trj::Vector{Matrix{T}}, U::Matrix{Complex{T}};
+function NFFTNormalOpBasisFuncLO(
+    img_shape,
+    trj::Vector{Matrix{T}},
+    U::Matrix{Complex{T}};
     cmaps = (1,),
     fftplan = plan_fft(Array{Complex{T}}(undef, 2 .* img_shape); flags = FFTW.MEASURE),
-    Λ = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; fftplan = fftplan)
+    Λ = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; fftplan = fftplan),
     ) where {T}
 
     S = NFFTNormalOpBasisFunc(img_shape, trj, U; cmaps = cmaps, fftplan = fftplan, Λ = Λ)
