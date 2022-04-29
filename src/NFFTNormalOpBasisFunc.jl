@@ -7,24 +7,7 @@ function calculateToeplitzKernelBasis(
     Ncoeff = size(U, 2)
 
     FFTW.set_num_threads(Threads.nthreads())
-    nfftplan = try
-        plan_nfft(
-            trj[1],
-            img_shape_os;
-            precompute = LINEAR,
-            blocking = false,
-            fftflags = FFTW.MEASURE,
-        )
-    catch
-        @info "plan_nfft failed with MEASURE, using ESTIMATE instead. "
-        plan_nfft(
-            trj[1],
-            img_shape_os;
-            precompute = LINEAR,
-            blocking = false,
-            fftflags = FFTW.ESTIMATE,
-        )
-    end
+    plan_nfft(trj[1], img_shape_os; precompute = LINEAR, blocking = false, fftflags = FFTW.ESTIMATE)
 
     λ = Array{Complex{T}}(undef, img_shape_os)
     Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, prod(img_shape_os))
