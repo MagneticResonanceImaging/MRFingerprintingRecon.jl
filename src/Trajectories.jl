@@ -1,36 +1,62 @@
-function kooshballGA(Nr, Ncyc, Nt; delay=(0,0,0), T=Float32)
-    M = [0 1 0; 0 0 1; 1 0 1]
-    v = eigvecs(M)
-    GA1 = real(v[1,3] / v[3,3])
-    GA2 = real(v[2,3] / v[3,3])
-    theta = acos.(mod.((0:(Ncyc*Nt-1))*GA1, 1))
-    phi = (0:(Ncyc*Nt-1)) * 2π * GA2
+function kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
+    gm1, gm2 = calculateGoldenMeans()
+    theta = acos.(mod.((0:(Ncyc*Nt-1)) * gm1, 1))
+    phi = (0:(Ncyc*Nt-1)) * 2π * gm2
 
     theta = reshape(theta, Nt, Ncyc)
-    phi   = reshape(phi,   Nt, Ncyc)
+    phi = reshape(phi, Nt, Ncyc)
 
-    return kooshball(Nr, theta', phi'; delay=delay, T=T)
+    return kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = thetaRot, delay = delay, T = T)
 end
 
 # delay is in (HF, AP, LR)
-function kooshball(Nr, theta, phi; delay=(0,0,0), T=Float32)
+function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
     Ncyc, Nt = size(theta)
 
     kr = collect(((-Nr+1)/2:(Nr-1)/2) / Nr)
     stheta = sin.(theta)
     ctheta = cos.(theta)
-    sphi   = sin.(phi)
-    cphi   = cos.(phi)
+    sphi = sin.(phi)
+    cphi = cos.(phi)
 
     k = Vector{Matrix{T}}(undef, Nt)
-    for it ∈ eachindex(k)
-        ki = Array{T,3}(undef, 3, Nr, Ncyc)
-        @batch for ic = 1:Ncyc, ir ∈ 1:Nr
-            ki[1,ir,ic] = -stheta[ic,it] * cphi[ic,it] * (kr[ir] + delay[1])
-            ki[2,ir,ic] =  stheta[ic,it] * sphi[ic,it] * (kr[ir] + delay[2])
-            ki[3,ir,ic] =  ctheta[ic,it] *               (kr[ir] + delay[3])
+    if thetaRot == 0 && phiRot == 0
+        for it ∈ eachindex(k)
+            ki = Array{T,3}(undef, 3, Nr, Ncyc)
+            @batch for ic = 1:Ncyc, ir ∈ 1:Nr
+                ki[1, ir, ic] = -stheta[ic, it] * cphi[ic, it] * (kr[ir] + delay[1])
+                ki[2, ir, ic] =  stheta[ic, it] * sphi[ic, it] * (kr[ir] + delay[2])
+                ki[3, ir, ic] =  ctheta[ic, it]                * (kr[ir] + delay[3])
+            end
+            k[it] = reshape(ki, 3, :)
+            @. k[it] = max(min(k[it], 0.5), -0.5) # avoid NFFT.jl to throw erros. This should alter only very few points
         end
-        k[it] = reshape(ki, 3, :)
+    else
+        @info "check"
+        sthetaRot = sin(thetaRot)
+        cthetaRot = cos(thetaRot)
+        sphiRot   = sin(phiRot)
+        cphiRot   = cos(phiRot)
+
+        k = Vector{Matrix{T}}(undef, Nt)
+        for it ∈ eachindex(k)
+            ki = Array{T,3}(undef, 3, Nr, Ncyc)
+            @batch for ic = 1:Ncyc, ir ∈ 1:Nr
+                ki[1, ir, ic] = -(cphiRot * cphi[ic, it] * cthetaRot * stheta[ic, it] - sphiRot *  sphi[ic, it] * stheta[ic, it] + cphiRot * ctheta[ic, it] * sthetaRot)    * (kr[ir] + delay[1])
+                ki[2, ir, ic] =  (cphiRot * sphi[ic, it]             * stheta[ic, it] + sphiRot * (cphi[ic, it] * cthetaRot * stheta[ic, it] + ctheta[ic, it] * sthetaRot)) * (kr[ir] + delay[2])
+                ki[3, ir, ic] =  (cthetaRot * ctheta[ic, it] - sthetaRot * cphi[ic, it] * stheta[ic, it])                                                                   * (kr[ir] + delay[3])
+            end
+            k[it] = reshape(ki, 3, :)
+            @. k[it] = max(min(k[it], 0.5), -0.5) # avoid NFFT.jl to throw erros. This should alter only very few points
+        end
     end
     return k
+end
+
+function calculateGoldenMeans()
+    M = [0 1 0; 0 0 1; 1 0 1]
+    v = eigvecs(M)
+    gm1 = real(v[1, 3] / v[3, 3])
+    gm2 = real(v[2, 3] / v[3, 3])
+    return gm1, gm2
 end
