@@ -3,16 +3,18 @@ function calculateToeplitzKernelBasis(
     trj::Vector{Matrix{T}},
     U::Matrix{Complex{T}};
     fftplan = plan_fft(Array{Complex{T}}(undef, img_shape_os); flags = FFTW.MEASURE),
+    nfftflag = FFTW.ESTIMATE,
 ) where {T}
     Ncoeff = size(U, 2)
 
     FFTW.set_num_threads(Threads.nthreads())
-    plan_nfft(trj[1], img_shape_os; precompute = LINEAR, blocking = false, fftflags = FFTW.ESTIMATE)
+    nfftplan = plan_nfft(trj[1], img_shape_os; precompute = LINEAR, blocking = false, fftflags = nfftflag, σ = T(2))
 
     λ = Array{Complex{T}}(undef, img_shape_os)
     Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, prod(img_shape_os))
     Λ .= 0
     @info "Planned FFTs and Λ initialized, iterating throught the time frames: "
+    flush(stdout)
 
     for i ∈ eachindex(trj)
         t_kernel = @elapsed calculateToeplitzKernel!(λ, nfftplan, trj[i], fftplan)
@@ -26,6 +28,7 @@ function calculateToeplitzKernelBasis(
             end
         end
         @info "Time frame $i" t_kernel t_multiplcation
+        flush(stdout)
     end
 
     return Λ
@@ -51,7 +54,8 @@ function NFFTNormalOpBasisFunc(
     U::Matrix{Complex{T}};
     cmaps = (1,),
     fftplan = plan_fft(Array{Complex{T}}(undef, 2 .* img_shape); flags = FFTW.MEASURE),
-    Λ = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; fftplan = fftplan),
+    nfftflag = FFTW.ESTIMATE,
+    Λ = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; fftplan = fftplan, nfftflag = nfftflag),
 ) where {T}
     # FFTW.set_num_threads(Threads.nthreads())
 
@@ -135,7 +139,8 @@ function NFFTNormalOpBasisFuncLO(
     U::Matrix{Complex{T}};
     cmaps = (1,),
     fftplan = plan_fft(Array{Complex{T}}(undef, 2 .* img_shape); flags = FFTW.MEASURE),
-    Λ = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; fftplan = fftplan),
+    nfftflag = FFTW.ESTIMATE,
+    Λ = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; fftplan = fftplan, nfftflag = nfftflag),
     ) where {T}
 
     S = NFFTNormalOpBasisFunc(img_shape, trj, U; cmaps = cmaps, fftplan = fftplan, Λ = Λ)
