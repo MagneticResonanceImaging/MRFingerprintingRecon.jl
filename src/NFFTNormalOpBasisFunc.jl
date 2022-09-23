@@ -14,7 +14,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::M
         t_kernel = @elapsed calculateToeplitzKernel!(λ, nfftplan, trj[i], fftplan)
 
         @views U2 = conj.(U[i, :]) * transpose(U[i, :])
-        t_multiplcation = @elapsed begin
+        t_multiplication = @elapsed begin
             Threads.@threads for j ∈ eachindex(λ)
                 @simd for iu ∈ CartesianIndices(U2)
                     @inbounds Λ[iu, j] += U2[iu] * λ[j]
@@ -23,7 +23,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::M
         end
 
         if verbose
-            println("Time frame $i: t_kernel = $t_kernel; t_multiplcation = $t_multiplcation")
+            println("Time frame $i: t_kernel = $t_kernel; t_multiplication = $t_multiplication")
             flush(stdout)
         end
     end
