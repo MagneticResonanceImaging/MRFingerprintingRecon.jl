@@ -32,7 +32,6 @@ function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), 
             @. k[it] = max(min(k[it], 0.5), -0.5) # avoid NFFT.jl to throw erros. This should alter only very few points
         end
     else
-        @info "check"
         sthetaRot = sin(thetaRot)
         cthetaRot = cos(thetaRot)
         sphiRot   = sin(phiRot)
