@@ -4,7 +4,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::M
 
     FFTW.set_num_threads(Threads.nthreads())
     fftplan = plan_fft(Array{Complex{T}}(undef, img_shape_os); flags = FFTW.MEASURE)
-    nfftplan = plan_nfft(trj[1], img_shape_os; precompute = LINEAR, blocking = false, fftflags = FFTW.ESTIMATE)
+    nfftplan = plan_nfft(trj[1], img_shape_os; precompute = POLYNOMIAL, blocking = false, fftflags = FFTW.ESTIMATE)
 
     λ = Array{Complex{T}}(undef, img_shape_os)
     Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, prod(img_shape_os))
