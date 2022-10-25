@@ -5,7 +5,7 @@ using LinearAlgebra
 using FFTW
 using NFFT
 using NFFTTools
-import MRIReco
+using MRICoilSensitivities
 using LinearOperators
 
 export NFFTNormalOpBasisFunc, NFFTNormalOpBasisFuncLO, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA

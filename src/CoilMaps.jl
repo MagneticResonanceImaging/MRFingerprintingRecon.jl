@@ -32,7 +32,7 @@ function calcCoilMaps(data::AbstractArray{Complex{T},3}, trj::AbstractVector{<:A
     kbp = kbp[m,:]
 
     @info "espirit: "
-    cmaps = @time MRIReco.espirit(kbp, img_shape, kernel_size, eigThresh_1=eigThresh_1, eigThresh_2=eigThresh_2, nmaps=nmaps)
+    cmaps = @time espirit(kbp, img_shape, kernel_size, eigThresh_1=eigThresh_1, eigThresh_2=eigThresh_2, nmaps=nmaps)
 
     cmaps = [cmaps[img_idx,ic,1] for ic=1:Ncoils]
     xbp   = [  xbp[img_idx,ic  ] for ic=1:Ncoils]
