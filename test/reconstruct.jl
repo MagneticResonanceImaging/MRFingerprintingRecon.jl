@@ -9,7 +9,7 @@ using NFFT
 using Test
 
 ## set parameters
-T  = Float32
+T  = Float64
 Nx = 64
 Nc = 4
 Nt = 100
@@ -52,12 +52,16 @@ end
 b = vec(calculateBackProjection(data, trj, U, [ones(T, Nx,Nx)]))
 
 ## construct forward operator
-A = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U; verbose = false)
+A = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U; verbose = true)
+# λo = copy(A.prod!.A.Λ)
+# λo = reshape(λo, Nc, Nc, 2Nx, 2Nx)
+# heatmap(abs.(λo[1,2,:,:]), clims=(0,5.1e18))
+# heatmap(abs.(λo[1,2,:,:]))
 
 ## reconstruct
 xr = similar(b)
 xr .= 0
-cg!(xr, A, b)
+cg!(xr, A, b, maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
 
 ## crop x
@@ -74,4 +78,6 @@ xc = ifft(ifftshift(xc, 1:2), 1:2)
 
 ##
 # using Plots
+# plotlyjs(bg = RGBA(31/255,36/255,36/255,1.0), ticks=:native); #hide
 # heatmap(abs.(cat(reshape(xr, Nx, :), reshape(xc, Nx, :), dims=1)))
+# heatmap(abs.(reshape(xr, Nx, :)))

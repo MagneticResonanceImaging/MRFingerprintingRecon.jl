@@ -2,29 +2,48 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::M
 
     Ncoeff = size(U, 2)
 
-    fftplan = plan_fft(Array{Complex{T}}(undef, img_shape_os); flags = FFTW.MEASURE, num_threads=Threads.nthreads())
-    nfftplan = plan_nfft(trj[1], img_shape_os; precompute = POLYNOMIAL, blocking = false, fftflags = FFTW.ESTIMATE)
+    # fftplan = plan_fft(Array{Complex{T}}(undef, img_shape_os); flags = FFTW.MEASURE, num_threads=Threads.nthreads())
+    nfftplan = plan_nfft(trj[1], img_shape_os; precompute = FULL, blocking = false, fftflags = FFTW.ESTIMATE, m=7, σ=1, storeDeconvolutionIdx=true)
 
-    λ = Array{Complex{T}}(undef, img_shape_os)
+    # λ = Array{Complex{T}}(undef, img_shape_os)
     Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, prod(img_shape_os))
     Λ .= 0
 
     for i ∈ eachindex(trj)
-        t_kernel = @elapsed calculateToeplitzKernel!(λ, nfftplan, trj[i], fftplan)
-
         @views U2 = conj.(U[i, :]) * transpose(U[i, :])
+
+        t_kernel = @elapsed nodes!(nfftplan, trj[i])
+
+        # mul!(vec(λ), nfftplan.B, ones(Complex{T}, size(trj[i],2)))
+        # t_multiplication = @elapsed begin
+        #     Threads.@threads for j ∈ eachindex(λ)
+        #         @simd for iu ∈ CartesianIndices(U2)
+        #             @inbounds Λ[iu, j] += U2[iu] * λ[j]
+        #         end
+        #     end
+        # end
+
         t_multiplication = @elapsed begin
-            Threads.@threads for j ∈ eachindex(λ)
-                @simd for iu ∈ CartesianIndices(U2)
-                    @inbounds Λ[iu, j] += U2[iu] * λ[j]
+            Threads.@threads for iu ∈ CartesianIndices(U2)
+                @simd for j ∈ eachindex(nfftplan.B.rowval, nfftplan.B.nzval)
+                    @inbounds Λ[iu, nfftplan.B.rowval[j]] += U2[iu] * nfftplan.B.nzval[j]
                 end
             end
         end
 
         if verbose
-            println("Time frame $i: t_kernel = $t_kernel; t_multiplication = $t_multiplication")
+            println("Time frame $i: nodes! = $t_kernel; t_multiplication = $t_multiplication")
             flush(stdout)
         end
+    end
+
+    deconv = ifftshift(reshape(nfftplan.windowHatInvLUT[1], img_shape_os))
+    for i = CartesianIndices(@view Λ[:,:,1])
+        nfftplan.tmpVec .= reshape(Λ[i,:], img_shape_os)
+        nfftplan.backwardFFT * nfftplan.tmpVec
+        nfftplan.tmpVec .*= deconv
+        nfftplan.forwardFFT * nfftplan.tmpVec
+        Λ[i,:] .= vec(nfftplan.tmpVec)
     end
 
     return Λ
