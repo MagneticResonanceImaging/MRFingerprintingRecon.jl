@@ -1,6 +1,10 @@
 using MRFingerprintingRecon
 using Test
 
-@testset "Greens_Interpolation" begin
-    include("cmaps.jl")
+# @testset "Coil Maps" begin
+#     include("cmaps.jl")
+# end
+
+@testset "Reconstruct" begin
+    include("reconstruct.jl")
 end

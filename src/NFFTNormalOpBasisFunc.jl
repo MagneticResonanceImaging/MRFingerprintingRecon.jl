@@ -30,9 +30,9 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::M
     return Λ
 end
 
-############################################################################################
+## ##########################################################################
 # NFFTNormalOpBasisFunc
-############################################################################################
+#############################################################################
 struct NFFTNormalOpBasisFunc{S,T,E,F,G}
     shape::S
     Ncoeff::Int
@@ -111,9 +111,9 @@ Base.size(S::NFFTNormalOpBasisFunc, dim) = S.shape[dim]
 Base.eltype(::Type{NFFTNormalOpBasisFunc{S,D,T}}) where {S,D,T} = T
 
 
-############################################################################################
+## ##########################################################################
 # LinearOperator of NFFTNormalOpBasisFunc
-############################################################################################
+#############################################################################
 function NFFTNormalOpBasisFuncLO(A::NFFTNormalOpBasisFunc{S,T,E,F,G}) where {S,T,E,F,G}
     return LinearOperator(
         Complex{T},
