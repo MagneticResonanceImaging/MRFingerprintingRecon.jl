@@ -51,20 +51,18 @@ b = vec(calculateBackProjection(data, trj, U, [ones(T, Nx,Nx)]))
 A = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U; verbose = true)
 λ = copy(A.prod!.A.Λ)
 λ = reshape(λ, Nc, Nc, 2Nx, 2Nx)
-# λ = fftshift(λ, 3:4)
 
+# λ = fftshift(λ, 3:4)
+# i=1; j=2
 for i = 1:Nc, j = 1:Nc
     l1 = λ[i,j,:,:]
-    l2 = λ[j,i,end:-1:1,end:-1:1]
-    l2 = circshift(l2, (1,1))
+    l2 = λ[j,i,:,:]
+    l2 = conj.(fft(conj.(ifft(l2))))
     @test conj.(l1) ≈ l2 rtol = 1e-4
-    # heatmap(angle.(l1))
-    # heatmap(angle.(conj.(l2)))
     # heatmap(abs.(l1))
     # heatmap(abs.(l2))
-
-    # heatmap(abs.(conj.(l1) .- l2))
-    # heatmap(angle.(λ[1,2,:,:] ./ λ[2,1,:,:]))
+    # heatmap(angle.(l1))
+    # heatmap(angle.(conj.(l2)))
 end
 
 ## reconstruct
@@ -90,4 +88,3 @@ xc = ifft(ifftshift(xc, 1:2), 1:2)
 # plotlyjs(bg = RGBA(31/255,36/255,36/255,1.0), ticks=:native); #hide
 # heatmap(abs.(cat(reshape(xr, Nx, :), reshape(xc, Nx, :), dims=1)))
 # heatmap(angle.(cat(reshape(xr, Nx, :), reshape(xc, Nx, :), dims=1)))
-# heatmap(abs.(reshape(xr, Nx, :)))
