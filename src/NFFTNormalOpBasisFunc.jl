@@ -1,49 +1,43 @@
 function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::Matrix{Complex{T}}; verbose = false) where {T}
 
     Ncoeff = size(U, 2)
+    Nt = length(trj)
+    Nk = size(trj[1],2)
 
-    # fftplan = plan_fft(Array{Complex{T}}(undef, img_shape_os); flags = FFTW.MEASURE, num_threads=Threads.nthreads())
-    nfftplan = plan_nfft(trj[1], img_shape_os; precompute = FULL, blocking = false, fftflags = FFTW.ESTIMATE, m=7, σ=1, storeDeconvolutionIdx=true)
+    trjm = reduce(hcat, trj)
 
-    # λ = Array{Complex{T}}(undef, img_shape_os)
-    Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, prod(img_shape_os))
-    Λ .= 0
+    fftplan  = plan_fft(Array{Complex{T}}(undef, img_shape_os); flags = FFTW.MEASURE, num_threads=Threads.nthreads())
+    nfftplan = plan_nfft(trjm, img_shape_os; precompute = POLYNOMIAL, blocking = true, fftflags = FFTW.MEASURE, m=5, σ=2, storeDeconvolutionIdx=true)
+    deconv = ifftshift(reshape(nfftplan.windowHatInvLUT[1], img_shape_os))
 
-    for i ∈ eachindex(trj)
-        @views U2 = conj.(U[i, :]) * transpose(U[i, :])
+    λ  = Array{Complex{T}}(undef, img_shape_os)
+    λ2 = similar(λ)
+    Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, prod(img_shape_os))
+    S = Array{Complex{T}}(undef, Nk, Nt)
 
-        t_kernel = @elapsed nodes!(nfftplan, trj[i])
+    for ic ∈ CartesianIndices(@view Λ[:,:,1])
+        t_S = @elapsed begin
+        for it ∈ axes(S,2)
+            S[:,it] .= conj.(U[it,ic[1]]) * U[it,ic[2]]
+        end
+        end
+        t_conv = @elapsed begin
+            mul!(λ, adjoint(nfftplan), vec(S))
+            fftshift!(λ2, λ)
+            mul!(λ, fftplan, λ2)
+            Λ[ic,:] .= vec(λ)
 
-        # mul!(vec(λ), nfftplan.B, ones(Complex{T}, size(trj[i],2)))
-        # t_multiplication = @elapsed begin
-        #     Threads.@threads for j ∈ eachindex(λ)
-        #         @simd for iu ∈ CartesianIndices(U2)
-        #             @inbounds Λ[iu, j] += U2[iu] * λ[j]
-        #         end
-        #     end
-        # end
-
-        t_multiplication = @elapsed begin
-            Threads.@threads for iu ∈ CartesianIndices(U2)
-                @simd for j ∈ eachindex(nfftplan.B.rowval, nfftplan.B.nzval)
-                    @inbounds Λ[iu, nfftplan.B.rowval[j]] += U2[iu] * nfftplan.B.nzval[j]
-                end
-            end
+        # NFFT.convolve_transpose!(nfftplan, vec(S), nfftplan.tmpVec)
+        # nfftplan.backwardFFT * nfftplan.tmpVec
+        # nfftplan.tmpVec .*= deconv
+        # nfftplan.forwardFFT * nfftplan.tmpVec
+        # Λ[ic,:] .= vec(nfftplan.tmpVec)
         end
 
         if verbose
-            println("Time frame $i: nodes! = $t_kernel; t_multiplication = $t_multiplication")
+            println("ic = $ic: t_S = $t_S; t_conv = $t_conv")
             flush(stdout)
         end
-    end
-
-    deconv = ifftshift(reshape(nfftplan.windowHatInvLUT[1], img_shape_os))
-    for i = CartesianIndices(@view Λ[:,:,1])
-        nfftplan.tmpVec .= reshape(Λ[i,:], img_shape_os)
-        nfftplan.backwardFFT * nfftplan.tmpVec
-        nfftplan.tmpVec .*= deconv
-        nfftplan.forwardFFT * nfftplan.tmpVec
-        Λ[i,:] .= vec(nfftplan.tmpVec)
     end
 
     return Λ
