@@ -11,7 +11,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::M
     S  = Array{Complex{T}}(undef, Nk, Nt)
 
     fftplan  = plan_fft(λ; flags = FFTW.MEASURE, num_threads=Threads.nthreads())
-    nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = POLYNOMIAL, blocking = true, fftflags = FFTW.MEASURE, m=5, σ=2, storeDeconvolutionIdx=true)
+    nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = TENSOR, blocking = true, fftflags = FFTW.MEASURE, m=5, σ=2, storeDeconvolutionIdx=true)
     deconv = ifftshift(reshape(nfftplan.windowHatInvLUT[1], img_shape_os))
 
     for ic2 ∈ axes(Λ, 2), ic1 ∈ axes(Λ, 1)
@@ -20,19 +20,19 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::M
                 @inbounds S[:,it] .= conj.(U[it,ic1]) * U[it,ic2]
             end
 
-            t_nfft = @elapsed mul!(λ, adjoint(nfftplan), vec(S))
-            t_ffts = @elapsed fftshift!(λ2, λ)
-            t_fft  = @elapsed mul!(λ, fftplan, λ2)
+            t_nfft  = @elapsed mul!(λ, adjoint(nfftplan), vec(S))
+            t_shift = @elapsed fftshift!(λ2, λ)
+            t_fft   = @elapsed mul!(λ, fftplan, λ2)
             λ2 .= conj.(λ2)
             t_fft += @elapsed mul!(λ3, fftplan, λ2)
 
-            t_wrt  = @elapsed Threads.@threads for it ∈ eachindex(λ)
+            t_wrt = @elapsed Threads.@threads for it ∈ eachindex(λ)
                 @inbounds Λ[ic2,ic1,it] = λ3[it]
                 @inbounds Λ[ic1,ic2,it] = λ[it]
             end
 
             if verbose
-                println("ic = ($ic1, $ic2): t_nfft = $t_nfft, t_ffts = $t_ffts, t_fft = $t_fft, t_wrt = $t_wrt")
+                println("ic = ($ic1, $ic2): t_nfft = $t_nfft, t_shift = $t_shift, t_fft = $t_fft, t_wrt = $t_wrt")
                 flush(stdout)
             end
         end
