@@ -63,9 +63,8 @@ function NFFTNormalOpBasisFunc(
     Λ = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose = verbose),
 ) where {T}
 
-    FFTW.set_num_threads(1)
-    fftplan  = plan_fft!(Array{Complex{T}}(undef, 2 .* img_shape); flags = FFTW.MEASURE)
-    ifftplan = plan_ifft!(Array{Complex{T}}(undef, 2 .* img_shape); flags = FFTW.MEASURE)
+    fftplan  = plan_fft!(Array{Complex{T}}(undef, 2 .* img_shape); flags = FFTW.MEASURE, num_threads=1)
+    ifftplan = plan_ifft!(Array{Complex{T}}(undef, 2 .* img_shape); flags = FFTW.MEASURE, num_threads=1)
     Ncoeff = size(U, 2)
     kL1 = Array{Complex{T}}(undef, (2 .* img_shape)..., Ncoeff)
     kL2 = similar(kL1)
