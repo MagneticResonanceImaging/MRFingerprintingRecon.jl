@@ -11,8 +11,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::M
     S  = Array{Complex{T}}(undef, Nk, Nt)
 
     fftplan  = plan_fft(λ; flags = FFTW.MEASURE, num_threads=Threads.nthreads())
-    nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = TENSOR, blocking = true, fftflags = FFTW.MEASURE, m=5, σ=2, storeDeconvolutionIdx=true)
-    deconv = ifftshift(reshape(nfftplan.windowHatInvLUT[1], img_shape_os))
+    nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = TENSOR, blocking = true, fftflags = FFTW.MEASURE, m=5, σ=2)
 
     for ic2 ∈ axes(Λ, 2), ic1 ∈ axes(Λ, 1)
         if ic2 >= ic1 # eval. only upper triangular matrix
