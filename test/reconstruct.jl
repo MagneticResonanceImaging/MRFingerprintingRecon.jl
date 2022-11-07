@@ -18,6 +18,7 @@ Ncyc = 100
 ## create test image
 x = zeros(Complex{T}, Nx, Nx, Nc)
 x[:,:,1] = shepp_logan(Nx)
+x[1:end÷2,:,1] .*= exp(1im * π/3)
 
 ## set up trajectory
 α_g = 2π / (1+√5)
@@ -30,12 +31,7 @@ trj = kooshball(2Nx, theta, phi; T = T)
 trj = [trj[i][1:2,:] for i ∈ eachindex(trj)]
 
 ## set up basis functions
-U = Matrix{Complex{T}}(undef, Nt, Nc)
-t = range(-1,1,length=Nt)
-U[:,1] .= Legendre([1,0,0,0]).(t)
-U[:,2] .= Legendre([0,1,0,0]).(t)
-U[:,3] .= Legendre([0,0,1,0]).(t)
-U[:,4] .= Legendre([0,0,0,1]).(t)
+U = randn(Complex{T}, Nt, Nc)
 U,_,_ = svd(U)
 
 ## simulate data
@@ -52,12 +48,27 @@ end
 b = vec(calculateBackProjection(data, trj, U, [ones(T, Nx,Nx)]))
 
 ## construct forward operator
-A = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U; verbose = false)
+A = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U; verbose = true)
+λ = copy(A.prod!.A.Λ)
+λ = reshape(λ, Nc, Nc, 2Nx, 2Nx)
+
+# λ = fftshift(λ, 3:4)
+# i=1; j=2
+for i = 1:Nc, j = 1:Nc
+    l1 = λ[i,j,:,:]
+    l2 = λ[j,i,:,:]
+    l2 = conj.(fft(conj.(ifft(l2))))
+    @test conj.(l1) ≈ l2 rtol = 1e-4
+    # heatmap(abs.(l1))
+    # heatmap(abs.(l2))
+    # heatmap(angle.(l1))
+    # heatmap(angle.(conj.(l2)))
+end
 
 ## reconstruct
 xr = similar(b)
 xr .= 0
-cg!(xr, A, b)
+cg!(xr, A, b, maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
 
 ## crop x
@@ -74,4 +85,6 @@ xc = ifft(ifftshift(xc, 1:2), 1:2)
 
 ##
 # using Plots
+# plotlyjs(bg = RGBA(31/255,36/255,36/255,1.0), ticks=:native); #hide
 # heatmap(abs.(cat(reshape(xr, Nx, :), reshape(xc, Nx, :), dims=1)))
+# heatmap(angle.(cat(reshape(xr, Nx, :), reshape(xc, Nx, :), dims=1)))

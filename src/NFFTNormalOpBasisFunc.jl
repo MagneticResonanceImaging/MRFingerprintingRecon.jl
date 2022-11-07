@@ -1,29 +1,40 @@
 function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::Matrix{Complex{T}}; verbose = false) where {T}
 
     Ncoeff = size(U, 2)
+    Nt = size(U,1)
+    Nk = size(trj[1],2)
 
-    fftplan = plan_fft(Array{Complex{T}}(undef, img_shape_os); flags = FFTW.MEASURE, num_threads=Threads.nthreads())
-    nfftplan = plan_nfft(trj[1], img_shape_os; precompute = POLYNOMIAL, blocking = false, fftflags = FFTW.ESTIMATE)
+    λ  = Array{Complex{T}}(undef, img_shape_os)
+    λ2 = similar(λ)
+    λ3 = similar(λ)
+    Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, prod(img_shape_os))
+    S  = Array{Complex{T}}(undef, Nk, Nt)
 
-    λ = Array{Complex{T}}(undef, img_shape_os)
-    Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, prod(img_shape_os))
-    Λ .= 0
+    fftplan  = plan_fft(λ; flags = FFTW.MEASURE, num_threads=Threads.nthreads())
+    nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = TENSOR, blocking = true, fftflags = FFTW.MEASURE, m=5, σ=2, storeDeconvolutionIdx=true)
+    deconv = ifftshift(reshape(nfftplan.windowHatInvLUT[1], img_shape_os))
 
-    for i ∈ eachindex(trj)
-        t_kernel = @elapsed calculateToeplitzKernel!(λ, nfftplan, trj[i], fftplan)
-
-        @views U2 = conj.(U[i, :]) * transpose(U[i, :])
-        t_multiplication = @elapsed begin
-            Threads.@threads for j ∈ eachindex(λ)
-                @simd for iu ∈ CartesianIndices(U2)
-                    @inbounds Λ[iu, j] += U2[iu] * λ[j]
-                end
+    for ic2 ∈ axes(Λ, 2), ic1 ∈ axes(Λ, 1)
+        if ic2 >= ic1 # eval. only upper triangular matrix
+            @simd for it ∈ axes(U,1)
+                @inbounds S[:,it] .= conj.(U[it,ic1]) * U[it,ic2]
             end
-        end
 
-        if verbose
-            println("Time frame $i: t_kernel = $t_kernel; t_multiplication = $t_multiplication")
-            flush(stdout)
+            t_nfft  = @elapsed mul!(λ, adjoint(nfftplan), vec(S))
+            t_shift = @elapsed fftshift!(λ2, λ)
+            t_fft   = @elapsed mul!(λ, fftplan, λ2)
+            λ2 .= conj.(λ2)
+            t_fft += @elapsed mul!(λ3, fftplan, λ2)
+
+            t_wrt = @elapsed Threads.@threads for it ∈ eachindex(λ)
+                @inbounds Λ[ic2,ic1,it] = λ3[it]
+                @inbounds Λ[ic1,ic2,it] = λ[it]
+            end
+
+            if verbose
+                println("ic = ($ic1, $ic2): t_nfft = $t_nfft, t_shift = $t_shift, t_fft = $t_fft, t_wrt = $t_wrt")
+                flush(stdout)
+            end
         end
     end
 
@@ -88,7 +99,7 @@ function LinearAlgebra.mul!(x::Vector{T}, S::NFFTNormalOpBasisFunc, b, α, β) w
 
             kL1_rs = reshape(S.kL1, :, S.Ncoeff)
             kL2_rs = reshape(S.kL2, :, S.Ncoeff)
-            Threads.@threads for i ∈ eachindex(view(S.Λ, 1, 1, :))
+            Threads.@threads for i ∈ axes(S.Λ, 3)
                 @views @inbounds mul!(kL2_rs[i, :], S.Λ[:, :, i], kL1_rs[i, :])
             end
 
