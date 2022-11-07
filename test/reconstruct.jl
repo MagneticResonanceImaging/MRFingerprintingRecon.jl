@@ -2,7 +2,6 @@ using BenchmarkTools
 using MRFingerprintingRecon
 using ImagePhantoms
 using LinearAlgebra
-using SpecialPolynomials
 using IterativeSolvers
 using FFTW
 using NFFT
