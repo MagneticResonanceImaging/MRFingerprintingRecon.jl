@@ -61,14 +61,16 @@ function NFFTNormalOpBasisFunc(
     cmaps = (1,),
     verbose = false,
     Λ = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose = verbose),
-) where {T}
+    ) where {T}
 
-    fftplan  = plan_fft!(Array{Complex{T}}(undef, 2 .* img_shape); flags = FFTW.MEASURE, num_threads=1)
-    ifftplan = plan_ifft!(Array{Complex{T}}(undef, 2 .* img_shape); flags = FFTW.MEASURE, num_threads=1)
     Ncoeff = size(U, 2)
-    kL1 = Array{Complex{T}}(undef, (2 .* img_shape)..., Ncoeff)
+    img_shape_os = 2 .* img_shape
+    kL1 = Array{Complex{T}}(undef, img_shape_os..., Ncoeff)
     kL2 = similar(kL1)
 
+    ktmp = @view kL1[CartesianIndices(img_shape_os),1]
+    fftplan  = plan_fft!( ktmp; flags = FFTW.MEASURE, num_threads=round(Int, Threads.nthreads()/Ncoeff))
+    ifftplan = plan_ifft!(ktmp; flags = FFTW.MEASURE, num_threads=round(Int, Threads.nthreads()/Ncoeff))
     return NFFTNormalOpBasisFunc(img_shape, Ncoeff, fftplan, ifftplan, Λ, kL1, kL2, cmaps)
 end
 
@@ -84,13 +86,14 @@ function LinearAlgebra.mul!(x::Vector{T}, S::NFFTNormalOpBasisFunc, b, α, β) w
     else
         x .*= β
     end
+    xr = reshape(x, S.shape..., S.Ncoeff)
 
     bthreads = BLAS.get_num_threads()
     try
         BLAS.set_num_threads(1)
         for icoil ∈ 1:Ncoils
-            Threads.@threads for i = 1:S.Ncoeff
-                S.kL1[idxos, i] .= 0
+            Threads.@threads for i ∈ 1:S.Ncoeff
+                S.kL1[idxos, i] .= zero(T)
                 @views S.kL1[idx, i] .= S.cmaps[icoil] .* b[idx, i]
                 @views S.fftplan * S.kL1[idxos, i]
             end
@@ -101,11 +104,11 @@ function LinearAlgebra.mul!(x::Vector{T}, S::NFFTNormalOpBasisFunc, b, α, β) w
                 @views @inbounds mul!(kL2_rs[i, :], S.Λ[:, :, i], kL1_rs[i, :])
             end
 
-            Threads.@threads for i = 1:S.Ncoeff
+            Threads.@threads for i ∈ 1:S.Ncoeff
                 @views S.ifftplan * S.kL2[idxos, i]
             end
 
-            @views x .+= α .* vec(conj.(S.cmaps[icoil]) .* S.kL2[idx, :])
+            @views xr .+= α .* conj.(S.cmaps[icoil]) .* S.kL2[idx,:]
         end
     finally
         BLAS.set_num_threads(bthreads)
