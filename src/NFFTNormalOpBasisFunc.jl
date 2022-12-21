@@ -16,26 +16,22 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::M
     for ic2 ∈ axes(Λ, 2), ic1 ∈ axes(Λ, 1)
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
-            @simd for it ∈ axes(U,1)
-                @inbounds S[:,it] .= conj(U[it,ic1]) * U[it,ic2]
-            end
+                @simd for it ∈ axes(U,1)
+                    @inbounds S[:,it] .= conj(U[it,ic1]) * U[it,ic2]
+                end
 
-            mul!(λ, adjoint(nfftplan), vec(S))
-            fftshift!(λ2, λ)
-            mul!(λ, fftplan, λ2)
-            λ2 .= conj.(λ2)
-            mul!(λ3, fftplan, λ2)
+                mul!(λ, adjoint(nfftplan), vec(S))
+                fftshift!(λ2, λ)
+                mul!(λ, fftplan, λ2)
+                λ2 .= conj.(λ2)
+                mul!(λ3, fftplan, λ2)
 
-            Threads.@threads for it ∈ eachindex(λ)
-                @inbounds Λ[ic2,ic1,it] = λ3[it]
-                @inbounds Λ[ic1,ic2,it] = λ[it]
+                Threads.@threads for it ∈ eachindex(λ)
+                    @inbounds Λ[ic2,ic1,it] = λ3[it]
+                    @inbounds Λ[ic1,ic2,it] = λ[it]
+                end
             end
-            end
-
-            if verbose
-                println("ic = ($ic1, $ic2): t = $t")
-                flush(stdout)
-            end
+            verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
         end
     end
 

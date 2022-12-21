@@ -44,7 +44,7 @@ for it ∈ axes(data,2)
 end
 
 ## BackProjection
-b = vec(calculateBackProjection(data, trj, U, [ones(T, Nx,Nx)]))
+b = vec(calculateBackProjection(data, trj, U, [ones(T, Nx,Nx)], verbose = true))
 
 ## construct forward operator
 A = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U; verbose = true)

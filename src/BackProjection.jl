@@ -1,28 +1,26 @@
-function calculateBackProjection(data::AbstractArray{T}, trj, U, cmaps) where {T}
+function calculateBackProjection(data::AbstractArray{T}, trj, U, cmaps; verbose = false) where {T}
     test_dimension(data, trj, U, cmaps)
 
-    Nt, Ncoef = size(U)
+    _, Ncoef = size(U)
     img_shape = size(cmaps[1])
-    Ncoils = length(cmaps)
 
-    FFTW.set_num_threads(1)
+    p = plan_nfft(reduce(hcat,trj), img_shape; precompute=TENSOR, blocking = true, fftflags = FFTW.MEASURE)
+    xbp = zeros(T, img_shape..., Ncoef)
+    xtmp = Array{T}(undef, img_shape)
 
-    p = NFFT.NFFTPlan(trj[1], img_shape; precompute=POLYNOMIAL, blocking = false, fftflags = FFTW.MEASURE)
-    pv = [copy(p) for _ = 1:Threads.nthreads()]
-    xbp = [zeros(T, img_shape..., Ncoef) for _ = 1:Threads.nthreads()]
-    xtmp = [Array{T}(undef, img_shape) for _ = 1:Threads.nthreads()]
-
-    @batch for it ∈ 1:Nt
-        tid = Threads.threadid()
-        Ui = reshape(conj.(U[it, :]), one.(img_shape)..., Ncoef)
-        NFFT.nodes!(pv[tid], trj[it])
-
-        for icoil ∈ 1:Ncoils
-            @views mul!(xtmp[tid], adjoint(pv[tid]), data[:, it, icoil])
-            @views xbp[tid] .+= conj.(cmaps[icoil]) .* xtmp[tid] .* Ui
+    dataU = similar(@view data[:,:,1]) # size = Ncycles*Nr x Nt
+    img_idx = CartesianIndices(img_shape)
+    for icoef ∈ axes(U,2)
+        t = @elapsed for icoil ∈ eachindex(cmaps)
+            @simd for i ∈ CartesianIndices(dataU)
+                @inbounds dataU[i] = data[i,icoil] * conj(U[i[2],icoef])
+            end
+            mul!(xtmp, adjoint(p), vec(dataU))
+            xbp[img_idx,icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
+        verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
     end
-    return sum(xbp)
+    return xbp
 end
 
 function test_dimension(data, trj, U, cmaps)
