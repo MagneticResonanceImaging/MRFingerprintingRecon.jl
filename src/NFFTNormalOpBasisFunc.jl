@@ -104,9 +104,8 @@ function LinearAlgebra.mul!(x::Vector{T}, S::NFFTNormalOpBasisFunc, b, α, β) w
 
             Threads.@threads for i ∈ 1:S.Ncoeff
                 @views S.ifftplan * S.kL2[idxos, i]
+                @views xr[idx,i] .+= α .* conj.(S.cmaps[icoil]) .* S.kL2[idx,i]
             end
-
-            @views xr .+= α .* conj.(S.cmaps[icoil]) .* S.kL2[idx,:]
         end
     finally
         BLAS.set_num_threads(bthreads)
