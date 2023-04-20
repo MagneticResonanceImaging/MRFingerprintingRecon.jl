@@ -48,20 +48,19 @@ b = vec(calculateBackProjection(data, trj, U, [ones(T, Nx,Nx)], verbose = true))
 
 ## construct forward operator
 A = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U; verbose = true)
-λ = copy(A.prod!.A.Λ)
+
+## test forward operator
+λ = zeros(Complex{T}, Nc, Nc, 2Nx*2Nx)
+for i ∈ eachindex(A.prod!.A.kmask_indcs)
+    λ[:,:,A.prod!.A.kmask_indcs[i]] .= A.prod!.A.Λ[:,:,i]
+end
 λ = reshape(λ, Nc, Nc, 2Nx, 2Nx)
 
-# λ = fftshift(λ, 3:4)
-# i=1; j=2
 for i = 1:Nc, j = 1:Nc
-    l1 = λ[i,j,:,:]
+    l1 = conj.(λ[i,j,:,:])
     l2 = λ[j,i,:,:]
     l2 = conj.(fft(conj.(ifft(l2))))
-    @test conj.(l1) ≈ l2 rtol = 1e-4
-    # heatmap(abs.(l1))
-    # heatmap(abs.(l2))
-    # heatmap(angle.(l1))
-    # heatmap(angle.(conj.(l2)))
+    @test l1 ≈ l2 rtol = 1e-4
 end
 
 ## reconstruct

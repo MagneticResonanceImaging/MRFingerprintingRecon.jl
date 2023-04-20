@@ -1,5 +1,9 @@
 function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::Matrix{Complex{T}}; verbose = false) where {T}
 
+    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
+    @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
+    @assert all(kmask_indcs .<= prod(img_shape_os))
+
     Ncoeff = size(U, 2)
     Nt = size(U,1)
     Nk = size(trj[1],2)
@@ -7,7 +11,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::M
     λ  = Array{Complex{T}}(undef, img_shape_os)
     λ2 = similar(λ)
     λ3 = similar(λ)
-    Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, prod(img_shape_os))
+    Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
     S  = Array{Complex{T}}(undef, Nk, Nt)
 
     fftplan  = plan_fft(λ; flags = FFTW.MEASURE, num_threads=Threads.nthreads())
@@ -26,29 +30,30 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::M
                 λ2 .= conj.(λ2)
                 mul!(λ3, fftplan, λ2)
 
-                Threads.@threads for it ∈ eachindex(λ)
-                    @inbounds Λ[ic2,ic1,it] = λ3[it]
-                    @inbounds Λ[ic1,ic2,it] = λ[it]
+                Threads.@threads for it ∈ eachindex(kmask_indcs)
+                    @inbounds Λ[ic2,ic1,it] = λ3[kmask_indcs[it]]
+                    @inbounds Λ[ic1,ic2,it] =  λ[kmask_indcs[it]]
                 end
             end
             verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
         end
     end
 
-    return Λ
+    return Λ, kmask_indcs
 end
 
 ## ##########################################################################
 # NFFTNormalOpBasisFunc
 #############################################################################
-struct NFFTNormalOpBasisFunc{S,T,E,F,G}
+struct NFFTNormalOpBasisFunc{S,T,N,E,F,G}
     shape::S
     Ncoeff::Int
     fftplan::E
     ifftplan::F
     Λ::Array{Complex{T},3}
-    kL1::Array{Complex{T}}
-    kL2::Array{Complex{T}}
+    kmask_indcs::Vector{Int}
+    kL1::Array{Complex{T},N}
+    kL2::Array{Complex{T},N}
     cmaps::G
 end
 
@@ -58,8 +63,13 @@ function NFFTNormalOpBasisFunc(
     U::Matrix{Complex{T}};
     cmaps = (1,),
     verbose = false,
-    Λ = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose = verbose),
+    Λ_kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose = verbose),
     ) where {T}
+
+    Λ, kmask_indcs = Λ_kmask_indcs
+    @assert length(kmask_indcs) == size(Λ,3) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`
+    @assert all(kmask_indcs .> 0)
+    @assert all(kmask_indcs .<= prod(2 .* img_shape))
 
     Ncoeff = size(U, 2)
     img_shape_os = 2 .* img_shape
@@ -69,7 +79,7 @@ function NFFTNormalOpBasisFunc(
     ktmp = @view kL1[CartesianIndices(img_shape_os),1]
     fftplan  = plan_fft!( ktmp; flags = FFTW.MEASURE, num_threads=round(Int, Threads.nthreads()/Ncoeff))
     ifftplan = plan_ifft!(ktmp; flags = FFTW.MEASURE, num_threads=round(Int, Threads.nthreads()/Ncoeff))
-    return NFFTNormalOpBasisFunc(img_shape, Ncoeff, fftplan, ifftplan, Λ, kL1, kL2, cmaps)
+    return NFFTNormalOpBasisFunc(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps)
 end
 
 
@@ -98,8 +108,11 @@ function LinearAlgebra.mul!(x::Vector{T}, S::NFFTNormalOpBasisFunc, b, α, β) w
 
             kL1_rs = reshape(S.kL1, :, S.Ncoeff)
             kL2_rs = reshape(S.kL2, :, S.Ncoeff)
+            Threads.@threads for i in eachindex(kL2_rs)
+                kL2_rs[i] = 0
+            end
             Threads.@threads for i ∈ axes(S.Λ, 3)
-                @views @inbounds mul!(kL2_rs[i, :], S.Λ[:, :, i], kL1_rs[i, :])
+                @views @inbounds mul!(kL2_rs[S.kmask_indcs[i], :], S.Λ[:, :, i], kL1_rs[S.kmask_indcs[i], :])
             end
 
             Threads.@threads for i ∈ 1:S.Ncoeff
@@ -117,13 +130,13 @@ end
 Base.:*(S::NFFTNormalOpBasisFunc, b::AbstractVector) = mul!(similar(b), S, b)
 Base.size(S::NFFTNormalOpBasisFunc) = S.shape
 Base.size(S::NFFTNormalOpBasisFunc, dim) = S.shape[dim]
-Base.eltype(::Type{NFFTNormalOpBasisFunc{S,D,T}}) where {S,D,T} = T
+Base.eltype(::Type{NFFTNormalOpBasisFunc{S,T,N,E,F,G}}) where {S,T,N,E,F,G} = T
 
 
 ## ##########################################################################
 # LinearOperator of NFFTNormalOpBasisFunc
 #############################################################################
-function NFFTNormalOpBasisFuncLO(A::NFFTNormalOpBasisFunc{S,T,E,F,G}) where {S,T,E,F,G}
+function NFFTNormalOpBasisFuncLO(A::NFFTNormalOpBasisFunc{S,T,N,E,F,G}) where {S,T,N,E,F,G}
     return LinearOperator(
         Complex{T},
         prod(A.shape) * A.Ncoeff,
@@ -142,9 +155,24 @@ function NFFTNormalOpBasisFuncLO(
     U::Matrix{Complex{T}};
     cmaps = (1,),
     verbose = false,
-    Λ = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose = verbose),
+    Λ_kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose = verbose),
     ) where {T}
 
-    S = NFFTNormalOpBasisFunc(img_shape, trj, U; cmaps = cmaps, Λ = Λ)
+    S = NFFTNormalOpBasisFunc(img_shape, trj, U; cmaps = cmaps, Λ_kmask_indcs = Λ_kmask_indcs)
     return NFFTNormalOpBasisFuncLO(S)
+end
+
+
+
+
+## ##########################################################################
+# Internal healper functions
+#############################################################################
+function calculate_kmask_indcs(img_shape_os, trj::Vector{Matrix{T}}) where T
+    nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = POLYNOMIAL, blocking = false, fftflags = FFTW.MEASURE, m=5, σ=1)
+
+    convolve_transpose!(nfftplan, ones(Complex{T}, size(nfftplan)[1]), nfftplan.tmpVec)
+    kmask = (nfftplan.tmpVec .!= 0)
+    kmask_indcs = findall(vec(kmask))
+    return kmask_indcs
 end
