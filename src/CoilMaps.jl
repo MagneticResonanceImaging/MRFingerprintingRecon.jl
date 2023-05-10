@@ -15,7 +15,7 @@ function calcCoilMaps(data::AbstractArray{Complex{T},3}, trj::AbstractVector{<:A
             end
         elseif density_compensation == :radial_2D
             @simd for i ∈ CartesianIndices(dataU)
-                dataU[i] = data[i,icoil] * conj(U[i[2],1]) * sum(abs, @view trj[i[2]][:,i[1]])
+                dataU[i] = data[i,icoil] * conj(U[i[2],1]) * sqrt(sum(abs2, @view trj[i[2]][:,i[1]]))
             end
         elseif density_compensation == :none
             # no density compensation; premultiply data with inverse of sampling density before calling function
