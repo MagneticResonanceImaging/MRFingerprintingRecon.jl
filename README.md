@@ -19,8 +19,8 @@ MRFingerprintingRecon.jl is a Julia package that implements--so far--the *low ra
 [codecov-img]: https://codecov.io/gh/JakobAsslaender/MRFingerprintingRecon.jl/branch/master/graph/badge.svg
 [codecov-url]: https://codecov.io/gh/JakobAsslaender/MRFingerprintingRecon.jl
 
-[arXiv-img]: https://img.shields.io/badge/arXiv-2107.11000-blue.svg
+[arXiv-img]: https://img.shields.io/badge/arXiv-1608.06974-blue.svg
 [arXiv-url]: https://arxiv.org/pdf/1608.06974.pdf
 
-[paper-img]: https://img.shields.io/badge/doi-10.1002/mrm.29071-blue.svg
+[paper-img]: https://img.shields.io/badge/doi-10.1002/mrm.26639-blue.svg
 [paper-url]: https://doi.org/10.1002/mrm.26639
