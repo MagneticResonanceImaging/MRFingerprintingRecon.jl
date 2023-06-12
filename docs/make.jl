@@ -51,11 +51,11 @@ makedocs(;
     doctest = false,
     modules=[MRFingerprintingRecon],
     authors="Jakob Asslaender <jakob.asslaender@nyumc.org> and contributors",
-    repo="https://github.com/JakobAsslaender/MRFingerprintingRecon.jl/blob/{commit}{path}#{line}",
+    repo="https://github.com/MagneticResonanceImaging/MRFingerprintingRecon.jl/blob/{commit}{path}#{line}",
     sitename="MRFingerprintingRecon.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://JakobAsslaender.github.io/MRFingerprintingRecon.jl",
+        canonical="https://MagneticResonanceImaging.github.io/MRFingerprintingRecon.jl",
         assets=String[],
     ),
     pages=[
@@ -71,5 +71,5 @@ makedocs(;
 run(`sed -i'.old' 's/var darkPreference = false/var darkPreference = true/g' docs/build/assets/themeswap.js`)
 
 deploydocs(;
-    repo="github.com/JakobAsslaender/MRFingerprintingRecon.jl",
+    repo="github.com/MagneticResonanceImaging/MRFingerprintingRecon.jl",
 )
