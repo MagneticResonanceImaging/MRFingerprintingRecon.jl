@@ -83,7 +83,7 @@ function NFFTNormalOpBasisFunc(
 end
 
 
-function LinearAlgebra.mul!(x::Vector{T}, S::NFFTNormalOpBasisFunc, b, α, β) where {T}
+function LinearAlgebra.mul!(x::AbstractVector{T}, S::NFFTNormalOpBasisFunc, b, α, β) where {T}
     idx = CartesianIndices(S.shape)
     idxos = CartesianIndices(2 .* S.shape)
     Ncoils = length(S.cmaps)
