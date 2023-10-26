@@ -64,6 +64,7 @@ function NFFTNormalOpBasisFunc(
     cmaps = (1,),
     verbose = false,
     Λ_kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose = verbose),
+    num_fft_threads = round(Int, Threads.nthreads()/size(U, 2))
     ) where {T}
 
     Λ, kmask_indcs = Λ_kmask_indcs
@@ -77,8 +78,8 @@ function NFFTNormalOpBasisFunc(
     kL2 = similar(kL1)
 
     ktmp = @view kL1[CartesianIndices(img_shape_os),1]
-    fftplan  = plan_fft!( ktmp; flags = FFTW.MEASURE, num_threads=round(Int, Threads.nthreads()/Ncoeff))
-    ifftplan = plan_ifft!(ktmp; flags = FFTW.MEASURE, num_threads=round(Int, Threads.nthreads()/Ncoeff))
+    fftplan  = plan_fft!( ktmp; flags = FFTW.MEASURE, num_threads=num_fft_threads)
+    ifftplan = plan_ifft!(ktmp; flags = FFTW.MEASURE, num_threads=num_fft_threads)
     return NFFTNormalOpBasisFunc(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps)
 end
 
@@ -156,9 +157,10 @@ function NFFTNormalOpBasisFuncLO(
     cmaps = (1,),
     verbose = false,
     Λ_kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose = verbose),
+    num_fft_threads = round(Int, Threads.nthreads()/size(U, 2))
     ) where {T}
 
-    S = NFFTNormalOpBasisFunc(img_shape, trj, U; cmaps = cmaps, Λ_kmask_indcs = Λ_kmask_indcs)
+    S = NFFTNormalOpBasisFunc(img_shape, trj, U; cmaps = cmaps, Λ_kmask_indcs = Λ_kmask_indcs, num_fft_threads = num_fft_threads)
     return NFFTNormalOpBasisFuncLO(S)
 end
 
