@@ -64,7 +64,7 @@ function NFFTNormalOpBasisFunc(
     cmaps = (1,),
     verbose = false,
     Λ_kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose = verbose),
-    num_fft_threads = round(Int, Threads.nthreads()/Ncoeff)
+    num_fft_threads = round(Int, Threads.nthreads()/size(U, 2))
     ) where {T}
 
     Λ, kmask_indcs = Λ_kmask_indcs
@@ -157,7 +157,7 @@ function NFFTNormalOpBasisFuncLO(
     cmaps = (1,),
     verbose = false,
     Λ_kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose = verbose),
-    num_fft_threads = round(Int, Threads.nthreads()/Ncoeff)
+    num_fft_threads = round(Int, Threads.nthreads()/size(U, 2))
     ) where {T}
 
     S = NFFTNormalOpBasisFunc(img_shape, trj, U; cmaps = cmaps, Λ_kmask_indcs = Λ_kmask_indcs, num_fft_threads = num_fft_threads)
