@@ -7,7 +7,7 @@
 |                           | [![][arXiv-img]][arXiv-url] | [![][codecov-img]][codecov-url]       |
 
 
-MRFingerprintingRecon.jl is a Julia package that implements sub-space reconstructions as described in by [Jon Tamir et al.](https://onlinelibrary.wiley.com/doi/abs/10.1002/mrm.26102) and in the paper [Low-rank alternating direction method of multipliers reconstruction for MR fingerprinting](https://doi.org/10.1002/mrm.26639) as *low rank inversion*.
+MRFingerprintingRecon.jl is a Julia package that implements sub-space reconstructions as described by [Jon Tamir et al.](https://onlinelibrary.wiley.com/doi/abs/10.1002/mrm.26102) and by us in the paper [Low-rank alternating direction method of multipliers reconstruction for MR fingerprinting](https://doi.org/10.1002/mrm.26639) as *low rank inversion*.
 
 Currently, the package only supports non-Cartesian trajectories, but a Cartesian implementation is under active development. The package is still work in progress and the interface will likely change over time. The ultimate goal of this package is to provide a Julia implemenation of the low-rank ADMM algorithm, similar to our [Matlab package](https://bitbucket.org/asslaender/nyu_mrf_recon).
 
