@@ -168,7 +168,7 @@ end
 
 
 ## ##########################################################################
-# Internal healper functions
+# Internal helper functions
 #############################################################################
 function calculate_kmask_indcs(img_shape_os, trj::Vector{Matrix{T}}) where T
     nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = POLYNOMIAL, blocking = false, fftflags = FFTW.MEASURE, m=5, σ=1)
