@@ -1,4 +1,4 @@
-function calculateToeplitzKernelBasis(img_shape_os, trj::Vector{Matrix{T}}, U::Matrix{Complex{T}}; verbose = false) where {T}
+function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractMatrix{Tc}; verbose = false) where {T, Tc <: Union{T, Complex{T}}}
 
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
@@ -59,13 +59,13 @@ end
 
 function NFFTNormalOpBasisFunc(
     img_shape,
-    trj::Vector{Matrix{T}},
-    U::Matrix{Complex{T}};
+    trj::AbstractVector{<:AbstractMatrix{T}},
+    U::AbstractMatrix{Tc};
     cmaps = (1,),
     verbose = false,
     Λ_kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose = verbose),
     num_fft_threads = round(Int, Threads.nthreads()/size(U, 2))
-    ) where {T}
+    ) where {T, Tc <: Union{T, Complex{T}}}
 
     Λ, kmask_indcs = Λ_kmask_indcs
     @assert length(kmask_indcs) == size(Λ,3) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`
@@ -152,13 +152,13 @@ end
 
 function NFFTNormalOpBasisFuncLO(
     img_shape,
-    trj::Vector{Matrix{T}},
-    U::Matrix{Complex{T}};
+    trj::AbstractVector{<:AbstractMatrix{T}},
+    U::AbstractMatrix{Tc};
     cmaps = (1,),
     verbose = false,
     Λ_kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose = verbose),
     num_fft_threads = round(Int, Threads.nthreads()/size(U, 2))
-    ) where {T}
+    ) where {T, Tc <: Union{T, Complex{T}}}
 
     S = NFFTNormalOpBasisFunc(img_shape, trj, U; cmaps = cmaps, Λ_kmask_indcs = Λ_kmask_indcs, num_fft_threads = num_fft_threads)
     return NFFTNormalOpBasisFuncLO(S)
@@ -170,7 +170,7 @@ end
 ## ##########################################################################
 # Internal helper functions
 #############################################################################
-function calculate_kmask_indcs(img_shape_os, trj::Vector{Matrix{T}}) where T
+function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}) where T
     nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = POLYNOMIAL, blocking = false, fftflags = FFTW.MEASURE, m=5, σ=1)
 
     convolve_transpose!(nfftplan, ones(Complex{T}, size(nfftplan)[1]), nfftplan.tmpVec)
