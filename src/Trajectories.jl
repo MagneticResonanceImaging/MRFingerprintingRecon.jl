@@ -11,6 +11,11 @@ end
 
 # delay is in (HF, AP, LR)
 function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
+    rotmat = repeat([Matrix{T}(I, 3, 3)],size(theta,1),size(theta,2))
+    return kooshball(Nr, theta, phi, rotmat; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
+end
+
+function kooshball(Nr, theta, phi, rotmat; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
     Ncyc, Nt = size(theta)
 
     kr = collect(((-Nr+1)/2:(Nr-1)/2) / Nr)
@@ -23,11 +28,15 @@ function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), 
     if thetaRot == 0 && phiRot == 0
         for it ∈ eachindex(k)
             ki = Array{T,3}(undef, 3, Nr, Ncyc)
-            @batch for ic = 1:Ncyc, ir ∈ 1:Nr
-                ki[1, ir, ic] = -stheta[ic, it] * cphi[ic, it] * (kr[ir] + delay[1])
-                ki[2, ir, ic] =  stheta[ic, it] * sphi[ic, it] * (kr[ir] + delay[2])
-                ki[3, ir, ic] =  ctheta[ic, it]                * (kr[ir] + delay[3])
+            for ic = 1:Ncyc
+                for ir ∈ 1:Nr
+                    ki[1, ir, ic] = -stheta[ic, it] * cphi[ic, it] * (kr[ir] + delay[1])
+                    ki[2, ir, ic] =  stheta[ic, it] * sphi[ic, it] * (kr[ir] + delay[2])
+                    ki[3, ir, ic] =  ctheta[ic, it]                * (kr[ir] + delay[3])
+                end
+                ki[:,:,ic] = rotmat[ic, it] * @view(ki[:,:,ic])
             end
+
             k[it] = reshape(ki, 3, :)
             @. k[it] = max(min(k[it], 0.5), -0.5) # avoid NFFT.jl to throw erros. This should alter only very few points
         end
@@ -40,11 +49,15 @@ function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), 
         k = Vector{Matrix{T}}(undef, Nt)
         for it ∈ eachindex(k)
             ki = Array{T,3}(undef, 3, Nr, Ncyc)
-            @batch for ic = 1:Ncyc, ir ∈ 1:Nr
-                ki[1, ir, ic] = -(cphiRot * cphi[ic, it] * cthetaRot * stheta[ic, it] - sphiRot *  sphi[ic, it] * stheta[ic, it] + cphiRot * ctheta[ic, it] * sthetaRot)    * (kr[ir] + delay[1])
-                ki[2, ir, ic] =  (cphiRot * sphi[ic, it]             * stheta[ic, it] + sphiRot * (cphi[ic, it] * cthetaRot * stheta[ic, it] + ctheta[ic, it] * sthetaRot)) * (kr[ir] + delay[2])
-                ki[3, ir, ic] =  (cthetaRot * ctheta[ic, it] - sthetaRot * cphi[ic, it] * stheta[ic, it])                                                                   * (kr[ir] + delay[3])
+            for ic = 1:Ncyc
+                for ir ∈ 1:Nr
+                    ki[1, ir, ic] = -(cphiRot * cphi[ic, it] * cthetaRot * stheta[ic, it] - sphiRot *  sphi[ic, it] * stheta[ic, it] + cphiRot * ctheta[ic, it] * sthetaRot)    * (kr[ir] + delay[1])
+                    ki[2, ir, ic] =  (cphiRot * sphi[ic, it]             * stheta[ic, it] + sphiRot * (cphi[ic, it] * cthetaRot * stheta[ic, it] + ctheta[ic, it] * sthetaRot)) * (kr[ir] + delay[2])
+                    ki[3, ir, ic] =  (cthetaRot * ctheta[ic, it] - sthetaRot * cphi[ic, it] * stheta[ic, it])                                                                   * (kr[ir] + delay[3])
+                end
+                ki[:,:,ic] = rotmat[ic, it] * @view(ki[:,:,ic])
             end
+            
             k[it] = reshape(ki, 3, :)
             @. k[it] = max(min(k[it], 0.5), -0.5) # avoid NFFT.jl to throw erros. This should alter only very few points
         end
