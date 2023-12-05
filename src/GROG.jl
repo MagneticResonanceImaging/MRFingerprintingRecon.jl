@@ -37,8 +37,8 @@ function scGROG(data::AbstractArray{Complex{T}}, trj) where {T}
     return G
 end
 
-function GROGgrid(data::AbstractArray{T}, trj, U, cmaps; verbose = false) where {T}
+# function GROGgrid(data::AbstractArray{T}, trj, U, cmaps; verbose = false) where {T}
 
-    Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, img_shape...)
-    return xbp, Λ
-end
+#     Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, img_shape...)
+#     return xbp, Λ
+# end
