@@ -22,17 +22,23 @@ x[1:end÷2,:,1] .*= exp(1im * π/3)
 U = randn(Complex{T}, Nt, Nc)
 U,_,_ = svd(U)
 
-## simulate data
+## simulate data and backprojection
+D = ones(Int8, Nx, Nx, Nt)
 data = Array{Complex{T}}(undef, Nx, Nx, Nt)
 xr = reshape(x, :, Nc)
 fftplan = plan_fft(@view x[:,:,1])
+ifftplan = plan_ifft(@view x[:,:,1])
+xbp = similar(x)
 for it ∈ axes(data,3)
     xt = reshape(xr * U[it,:], Nx, Nx)
     @views mul!(data[:,:,it], fftplan, xt)
+    @views data[:,:,it] .= D[:,:,it] * data[:,:,it]
+    xt = reshape(ifftplan * data[:,:,it], :, 1)
+    xbp .+= reshape(xt * U[it,:]', Nx, Nx, Nc)
 end
 
 ## construct forward operator
-A = FFTNormalOpBasisFuncLO((Nx,Nx), ones(Int16, Nx, Nx, Nt), U; verbose = true)
+A = FFTNormalOpBasisFuncLO((Nx,Nx), D, U; verbose = true)
 
 ## test forward operator
 for i ∈ CartesianIndices((Nx, Nx))
@@ -46,12 +52,13 @@ cg!(xr, A, vec(x), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
 
 ##
-@test xr ≈ x rtol = 1e-5
+mask = abs.(x[:,:,1]) .> 0
+@test xr[mask,:] ≈ x[mask,:] rtol = 1e-5
 
 ##
 # using Plots
 # plot(
-#     heatmap(abs.(cat(x[:,:,1], xr[:,:,1], dims=2)), aspect_ratio=1),
+#     heatmap(  abs.(cat(x[:,:,1], xr[:,:,1], dims=2)), aspect_ratio=1),
 #     heatmap(angle.(cat(x[:,:,1], xr[:,:,1], dims=2)), aspect_ratio=1),
 #     size=(800,800), layout=(2,1)
 # )

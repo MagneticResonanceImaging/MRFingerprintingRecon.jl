@@ -7,4 +7,5 @@ using Test
 
 @testset "Reconstruct" begin
     include("reconstruct.jl")
+    include("reconstruct_cart.jl")
 end

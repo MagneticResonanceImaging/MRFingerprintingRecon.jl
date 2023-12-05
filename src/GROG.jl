@@ -8,6 +8,8 @@ function scGROG(data::AbstractArray{Complex{T}}, trj) where {T}
     Ncoil = size(data, 3)
     Nd = size(trj[1],1) # number of dimensions
     Δk = 2/Nr
+    @assert Nr > Ncoil "Ncoil < Nr, problem is ill posed"
+    @assert Ns > Ncoil^2 "Number of spokes < Ncoil^2, problem is ill posed"
 
     # preallocations
     G = Array{Complex{T}}(undef, Nd, Ncoil, Ncoil) #matrix of GROG operators
@@ -26,7 +28,7 @@ function scGROG(data::AbstractArray{Complex{T}}, trj) where {T}
 
     # 3) Solve Eq8 Nc^2 times
     Threads.@threads for i ∈ CartesianIndices(@view G[1,:,:])
-        G[:,i] .= nm \ vθ[:,i]
+        @views G[:,i] .= nm \ vθ[:,i]
     end
 
     # 4) Use Eq9 to form Gx, Gy, Gz
