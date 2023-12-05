@@ -8,7 +8,7 @@ using NFFTTools
 using MRICoilSensitivities
 using LinearOperators
 
-export NFFTNormalOpBasisFunc, NFFTNormalOpBasisFuncLO, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA
+export FFTNormalOpBasisFunc, FFTNormalOpBasisFuncLO, NFFTNormalOpBasisFunc, NFFTNormalOpBasisFuncLO, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA
 
 function __init__()
     if Threads.nthreads() > 1
@@ -17,6 +17,7 @@ function __init__()
     FFTW.set_num_threads(Threads.nthreads())
 end
 
+include("FFTNormalOpBasisFunc.jl")
 include("NFFTNormalOpBasisFunc.jl")
 include("CoilMaps.jl")
 include("BackProjection.jl")
