@@ -6,6 +6,10 @@ using Test
 # end
 
 @testset "Reconstruct" begin
-    include("reconstruct.jl")
-    include("reconstruct_cart.jl")
+    @testset "Radial" begin
+        include("reconstruct.jl")
+    end
+    @testset "Cartesian" begin
+        include("reconstruct_cart.jl")
+    end
 end

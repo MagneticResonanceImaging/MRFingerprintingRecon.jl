@@ -1,12 +1,12 @@
-function calculateKernelBasis(img_shape, dcf::AbstractArray{G}, U::Matrix{Complex{T}}; verbose = false) where {G,T}
+function calculateKernelBasis(img_shape, D::AbstractArray{G}, U::Matrix{Complex{T}}; verbose = false) where {G,T}
 
     Ncoeff = size(U,2)
     Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, img_shape...)
     t = @elapsed begin
         Threads.@threads for i ∈ CartesianIndices(img_shape) # takes 0.5s for 2D
-            Λ[:,:,i] .= U' * (dcf[i,:] .* U) #U' * diagm(dcf) * U
+            Λ[:,:,i] .= U' * (D[i,:] .* U) #U' * diagm(D) * U
         end
-        Λ .= fftshift(Λ, 3:(3+length(img_shape)-1)) #could fftshift dcf first
+        Λ .= fftshift(Λ, 3:(3+length(img_shape)-1)) #could fftshift D first
     end
     verbose && println("Kernel calculation: t = $t s"); flush(stdout)
 
@@ -29,11 +29,11 @@ end
 
 function FFTNormalOpBasisFunc(
     img_shape,
-    dcf::AbstractArray{G},
+    D::AbstractArray{G},
     U::Matrix{Complex{T}};
     cmaps = (1,),
     verbose = false,
-    Λ = calculateKernelBasis(img_shape, dcf, U; verbose = verbose),
+    Λ = calculateKernelBasis(img_shape, D, U; verbose = verbose),
     ) where {G,T}
 
     Ncoeff = size(U, 2)
@@ -107,13 +107,13 @@ end
 
 function FFTNormalOpBasisFuncLO(
     img_shape,
-    dcf::AbstractArray{G},
+    D::AbstractArray{G},
     U::Matrix{Complex{T}};
     cmaps = (1,),
     verbose = false,
-    Λ = calculateKernelBasis(img_shape, dcf, U; verbose = verbose),
+    Λ = calculateKernelBasis(img_shape, D, U; verbose = verbose),
     ) where {G,T}
 
-    S = FFTNormalOpBasisFunc(img_shape, dcf, U; cmaps = cmaps, Λ = Λ)
+    S = FFTNormalOpBasisFunc(img_shape, D, U; cmaps = cmaps, Λ = Λ)
     return FFTNormalOpBasisFuncLO(S)
 end
