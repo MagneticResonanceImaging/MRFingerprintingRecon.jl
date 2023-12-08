@@ -9,7 +9,7 @@ using MRICoilSensitivities
 using LinearOperators
 using SplitApplyCombine
 
-export FFTNormalOpBasisFunc, FFTNormalOpBasisFuncLO, scGROG
+export FFTNormalOpBasisFunc, FFTNormalOpBasisFuncLO, scGROG, griddedBackProjection
 export NFFTNormalOpBasisFunc, NFFTNormalOpBasisFuncLO, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA
 
 function __init__()

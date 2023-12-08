@@ -6,7 +6,7 @@ function calculateKernelBasis(img_shape, D::AbstractArray{G}, U::Matrix{Complex{
         Threads.@threads for i ∈ CartesianIndices(img_shape) # takes 0.5s for 2D
             Λ[:,:,i] .= U' * (D[i,:] .* U) #U' * diagm(D) * U
         end
-        Λ .= fftshift(Λ, 3:(3+length(img_shape)-1)) #could fftshift D first
+        Λ .= ifftshift(Λ, 3:(3+length(img_shape)-1)) #could fftshift D first
     end
     verbose && println("Kernel calculation: t = $t s"); flush(stdout)
 
@@ -29,10 +29,10 @@ end
 
 function FFTNormalOpBasisFunc(
     img_shape,
-    D::AbstractArray{G},
     U::Matrix{Complex{T}};
     cmaps = (1,),
     verbose = false,
+    D::AbstractArray{G} = ones(Int8, img_shape..., size(U,1)),
     Λ = calculateKernelBasis(img_shape, D, U; verbose = verbose),
     ) where {G,T}
 
@@ -45,7 +45,6 @@ function FFTNormalOpBasisFunc(
     ifftplan = plan_ifft!(ktmp; flags = FFTW.MEASURE, num_threads=round(Int, Threads.nthreads()/Ncoeff))
     return FFTNormalOpBasisFunc(img_shape, Ncoeff, fftplan, ifftplan, Λ, kL1, kL2, cmaps)
 end
-
 
 function LinearAlgebra.mul!(x::Vector{T}, S::FFTNormalOpBasisFunc, b, α, β) where {T}
     idx = CartesianIndices(S.shape)
@@ -107,13 +106,13 @@ end
 
 function FFTNormalOpBasisFuncLO(
     img_shape,
-    D::AbstractArray{G},
     U::Matrix{Complex{T}};
     cmaps = (1,),
     verbose = false,
+    D::AbstractArray{G} = ones(Int8, img_shape..., size(U,1)),
     Λ = calculateKernelBasis(img_shape, D, U; verbose = verbose),
     ) where {G,T}
 
-    S = FFTNormalOpBasisFunc(img_shape, D, U; cmaps = cmaps, Λ = Λ)
+    S = FFTNormalOpBasisFunc(img_shape, U; cmaps = cmaps, D=D, Λ = Λ)
     return FFTNormalOpBasisFuncLO(S)
 end
