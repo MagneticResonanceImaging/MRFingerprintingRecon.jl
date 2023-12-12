@@ -44,10 +44,10 @@ for it ∈ axes(data,2)
 end
 
 ## BackProjection
-b = vec(calculateBackProjection(data, trj, U, [ones(T, Nx,Nx)], verbose = true))
+b = vec(calculateBackProjection(data, trj, U, [ones(T, Nx,Nx)]))
 
 ## construct forward operator
-A = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U; verbose = true)
+A = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U)
 
 ## test forward operator
 λ = zeros(Complex{T}, Nc, Nc, 2Nx*2Nx)

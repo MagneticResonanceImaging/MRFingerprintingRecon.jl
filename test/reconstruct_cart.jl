@@ -58,7 +58,7 @@ for icoil = 1:Ncoils
 end
 
 ## construct forward operator
-A = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, D=D, verbose = true)
+A = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, D=D)
 
 ## test forward operator
 for i ∈ CartesianIndices((Nx, Nx))
@@ -67,7 +67,7 @@ end
 
 ## reconstruct
 xr = zeros(Complex{T}, size(vec(x)))
-cg!(xr, A, vec(xbp), maxiter=20, verbose=true)
+cg!(xr, A, vec(xbp), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
 
 ##
