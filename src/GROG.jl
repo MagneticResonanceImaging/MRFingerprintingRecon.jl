@@ -103,7 +103,7 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, G, trj, U::Matri
     # compute backprojection
     xbp = zeros(Complex{T}, img_shape..., Ncoef)
     xbpci = [Array{Complex{T}}(undef, img_shape...) for _ = 1:Threads.nthreads()]
-    @time Threads.@threads for icoef ∈ axes(U,2)
+    Threads.@threads for icoef ∈ axes(U,2)
         idt = Threads.threadid()
         for icoil ∈ eachindex(cmaps)
             xbpci[idt] = ifftshift(dataU[idx,icoil,icoef])

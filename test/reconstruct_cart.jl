@@ -19,6 +19,7 @@ x = zeros(Complex{T}, Nx, Nx, Nc)
 x[:,:,1] = transpose(shepp_logan(Nx))
 x[1:end÷2,:,1] .*= exp(1im * π/3)
 
+## coil maps
 cmaps = zeros(Complex{T}, Nx, Nx, 4)
 cmaps[:,:,1] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷4, Nx÷4),  (Nx,Nx))], 2)
 cmaps[:,:,2] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷4, 3Nx÷4), (Nx,Nx))], 2)
@@ -47,8 +48,6 @@ for icoil = 1:Ncoils
     data .= ifftshift(data, (1,2))
     fft!(data, (1,2))
     data .= fftshift(data, (1,2))
-    # heatmap(abs.(data[:,:,1]).^0.2, aspect_ratio=1)
-    # heatmap(fftshift(D[:,:,5]), aspect_ratio=1)
     data .*= D
     data .= ifftshift(data, (1,2))
     ifft!(data, (1,2))
@@ -57,16 +56,9 @@ for icoil = 1:Ncoils
         xbp[i,:] .+= U' * data[i,:] * conj(cmaps[icoil][i])
     end
 end
-plot(
-    heatmap(abs.(x[:,:,1]), aspect_ratio=1),
-    heatmap(abs.(xbp[:,:,1]), aspect_ratio=1),
-    heatmap(angle.(x[:,:,1]), aspect_ratio=1),
-    heatmap(angle.(xbp[:,:,1]), aspect_ratio=1),
-    layout=(2,2),size=(800,800)
-)
 
 ## construct forward operator
-A = FFTNormalOpBasisFuncLO((Nx,Nx), D, U; cmaps=cmaps, verbose = true)
+A = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, D=D, verbose = true)
 
 ## test forward operator
 for i ∈ CartesianIndices((Nx, Nx))
