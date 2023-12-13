@@ -7,7 +7,6 @@ function scGROG(data::AbstractArray{Complex{T}}, trj) where {T}
     Ns = size(data, 2) # number of spokes across whole trajectory
     Ncoil = size(data, 3)
     Nd = size(trj[1],1) # number of dimensions
-    Δk = 2/Nr
     @assert Nr > Ncoil "Ncoil < Nr, problem is ill posed"
     @assert Ns > Ncoil^2 "Number of spokes < Ncoil^2, problem is ill posed"
 
@@ -18,7 +17,7 @@ function scGROG(data::AbstractArray{Complex{T}}, trj) where {T}
 
     # 1) Precompute n, m for the trajectory
     trjr = reshape(combinedimsview(trj), Nd, Nr, :)
-    nm = dropdims(diff(trjr[:,1:2,:],dims=2),dims=2)' ./ Δk #nyquist units
+    nm = dropdims(diff(trjr[:,1:2,:],dims=2),dims=2)' .* Nr #nyquist units
     
     # 2) For each spoke, solve Eq3 for Gθ and compute matrix log
     Threads.@threads for ip ∈ axes(data,2)
@@ -57,14 +56,14 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, G, trj, U::Matri
     idx = CartesianIndices(img_shape)
     Ncoil = length(cmaps)
     grid = T.(range(-0.5,0.5, Nr÷2)) # cartesian k-space grid
-    data = reshape(data, :, Nt, Ncoil)
+    data = reshape(data, :, Nt, Ncoil) # make sure data has correct size before gridding
 
     # preallocations
     ig = [Array{Int16}(undef, Nd) for _ = 1:Threads.nthreads()]
     shift = Array{T}(undef, Threads.nthreads())
     Gshift = [Array{Complex{T}}(undef, Ncoil, Ncoil) for _ = 1:Threads.nthreads()]
     data_temp = [Array{Complex{T}}(undef, Ncoil) for _ = 1:Threads.nthreads()]
-    dataU = zeros(Complex{T}, img_shape..., Ncoil, Ncoef)
+    dataU = zeros(Complex{T}, img_shape..., Ncoil, Ncoeff)
     Λ = zeros(Complex{T}, Ncoeff, Ncoeff, img_shape...)
     if density
         D = zeros(Int16, img_shape..., Nt)
@@ -72,16 +71,15 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, G, trj, U::Matri
 
     # gridding backprojection & kernel calculation
     t = @elapsed begin
-        Threads.@threads for it ∈ axes(data,2) # iterate over the whole trajectory
+        Threads.@threads for it ∈ axes(data,2) # iterate over time dimension
             idt = Threads.threadid()
-            for ir ∈ axes(data,1)
+            for ir ∈ axes(data,1) # iterate over the whole trajectory
                 data_temp[idt] .= data[ir,it,:] # copy the coil data
                 for j = Nd:-1:1 # apply GROG kernels in reverse order for consistency with calibration
                     _, ig[idt][j] = findmin(abs.(trj[it][j,ir] .- grid))
-                    shift[idt] = (grid[ig[idt][j]] - trj[it][j,ir]) * (Nr÷2) #nyquist units
-                    Gshift[idt] .= G[j]^shift[idt]
+                    shift[idt] = (grid[ig[idt][j]] - trj[it][j,ir]) * Nr #nyquist units
+                    Gshift[idt] .= G[j]^shift[idt] # this seems to be more stable than combining with next line
                     data_temp[idt] .= Gshift[idt] * data_temp[idt]
-                    ig[idt][j] = Nr÷2 - ig[idt][j] + 1 # flipping seems to give the correct orientation relative to the cmaps
                 end
                 # multiply by basis for backprojection
                 for icoef ∈ axes(U,2)
@@ -101,14 +99,14 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, G, trj, U::Matri
     Λ .= ifftshift(Λ, 3:(3+length(img_shape)-1))
 
     # compute backprojection
-    xbp = zeros(Complex{T}, img_shape..., Ncoef)
+    xbp = zeros(Complex{T}, img_shape..., Ncoeff)
     xbpci = [Array{Complex{T}}(undef, img_shape...) for _ = 1:Threads.nthreads()]
     Threads.@threads for icoef ∈ axes(U,2)
         idt = Threads.threadid()
         for icoil ∈ eachindex(cmaps)
-            xbpci[idt] = ifftshift(dataU[idx,icoil,icoef])
-            fft!(xbpci[idt])
-            xbpci[idt] = fftshift(xbpci[idt])
+            xbpci[idt] .= ifftshift(dataU[idx,icoil,icoef])
+            ifft!(xbpci[idt])
+            xbpci[idt] .= fftshift(xbpci[idt])
             xbp[idx,icoef] .+= conj.(cmaps[icoil]) .* xbpci[idt]
         end
     end
