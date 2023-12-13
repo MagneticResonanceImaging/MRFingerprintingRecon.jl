@@ -5,11 +5,12 @@ using LinearAlgebra
 using IterativeSolvers
 using FFTW
 using NFFT
+using SplitApplyCombine
 using Test
 
 ## set parameters
 T  = Float32
-Nx = 32
+Nx = 32 # smaller resolution for speed
 Nt = 5
 Nc = 2
 Ncyc = 100
@@ -100,6 +101,19 @@ mask = abs.(x[:,:,1]) .> 0
 ## test equivalence of efficient kernel calculation
 for i ∈ CartesianIndices((Nx, Nx))
     @test A_grog_default.prod!.A.Λ[:,:,i] ≈ Λ[:,:,i] rtol = 1e-1
+end
+
+## test GROG kernels for 1st spoke in trajectory
+data = reshape(data, 2Nx, :, Ncoil)
+trjr = reshape(combinedimsview(trj), 2, 2Nx, :)
+nm = dropdims(diff(trjr[:,1:2,:],dims=2),dims=2)' .* 2Nx #nyquist units
+data_temp = Array{Complex{T}}(undef, Ncoil)
+for j = 1:2Nx-1
+    data_temp .= data[j,1,:]
+    for k = 2:-1:1
+        data_temp .= G[k]^nm[k] * data_temp
+    end
+    @test data_temp ≈ data[j+1,1,:] rtol = 5e-1
 end
 
 ##
