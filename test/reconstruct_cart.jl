@@ -12,7 +12,7 @@ Nx = 64
 Nc = 4
 Nt = 100
 Ncyc = 100
-Ncoil = 4
+Ncoil = 9
 
 ## create test image
 x = zeros(Complex{T}, Nx, Nx, Nc)
@@ -20,11 +20,16 @@ x[:,:,1] = transpose(shepp_logan(Nx))
 x[1:end÷2,:,1] .*= exp(1im * π/3)
 
 ## coil maps
-cmaps = zeros(Complex{T}, Nx, Nx, 4)
-cmaps[:,:,1] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷4, Nx÷4),  (Nx,Nx))], 2)
-cmaps[:,:,2] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷4, 3Nx÷4), (Nx,Nx))], 2)
-cmaps[:,:,3] .= phantom(1:Nx, 1:Nx, [gauss2((3Nx÷4,Nx÷4),  (Nx,Nx))], 2)
-cmaps[:,:,4] .= phantom(1:Nx, 1:Nx, [gauss2((3Nx÷4,3Nx÷4), (Nx,Nx))], 2)
+cmaps = zeros(Complex{T}, Nx, Nx, Ncoil)
+cmaps[:,:,1] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷8,  Nx÷8),  (Nx÷1.5,Nx÷1.5))], 2)
+cmaps[:,:,2] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷8,  Nx÷2),  (Nx÷1.5,Nx÷1.5))], 2)
+cmaps[:,:,3] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷8,  7Nx÷8), (Nx÷1.5,Nx÷1.5))], 2)
+cmaps[:,:,4] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷2,  Nx÷8),  (Nx÷1.5,Nx÷1.5))], 2)
+cmaps[:,:,5] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷2,  Nx÷2),  (Nx÷1.5,Nx÷1.5))], 2)
+cmaps[:,:,6] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷2,  7Nx÷8), (Nx÷1.5,Nx÷1.5))], 2)
+cmaps[:,:,7] .= phantom(1:Nx, 1:Nx, [gauss2((7Nx÷8, Nx÷8),  (Nx÷1.5,Nx÷1.5))], 2)
+cmaps[:,:,8] .= phantom(1:Nx, 1:Nx, [gauss2((7Nx÷8, Nx÷2),  (Nx÷1.5,Nx÷1.5))], 2)
+cmaps[:,:,9] .= phantom(1:Nx, 1:Nx, [gauss2((7Nx÷8, 7Nx÷8), (Nx÷1.5,Nx÷1.5))], 2)
 for i ∈ CartesianIndices(@view cmaps[:,:,1])
     cmaps[i,:] ./= norm(cmaps[i,:])
 end
@@ -72,7 +77,7 @@ xr = reshape(xr, Nx, Nx, Nc)
 
 ## test equivalence
 mask = abs.(x[:,:,1]) .> 0
-@test xr[mask,:] ≈ x[mask,:] rtol = 1e-1
+@test xr[mask,:] ≈ x[mask,:] rtol = 1e-3
 
 ##
 # using Plots
