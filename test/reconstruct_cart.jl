@@ -12,7 +12,7 @@ Nx = 64
 Nc = 4
 Nt = 100
 Ncyc = 100
-Ncoils = 4
+Ncoil = 4
 
 ## create test image
 x = zeros(Complex{T}, Nx, Nx, Nc)
@@ -28,7 +28,7 @@ cmaps[:,:,4] .= phantom(1:Nx, 1:Nx, [gauss2((3Nx÷4,3Nx÷4), (Nx,Nx))], 2)
 for i ∈ CartesianIndices(@view cmaps[:,:,1])
     cmaps[i,:] ./= norm(cmaps[i,:])
 end
-cmaps = [cmaps[:,:,ic] for ic=1:Ncoils]
+cmaps = [cmaps[:,:,ic] for ic=1:Ncoil]
 
 ## set up basis functions
 U = randn(Complex{T}, Nt, Nc)
@@ -41,7 +41,7 @@ D = repeat(D, 1, 1, Nt)
 # D = ones(Nx, Nx, Nt)
 data = Array{Complex{T}}(undef, Nx, Nx, Nt)
 xbp = similar(x) .= 0
-for icoil = 1:Ncoils
+for icoil = 1:Ncoil
     Threads.@threads for i ∈ CartesianIndices(@view x[:,:,1])
         data[i,:] .= U * x[i,:] .* cmaps[icoil][i]
     end
@@ -60,7 +60,7 @@ end
 ## construct forward operator
 A = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, D=D)
 
-## test forward operator
+## test forward operator is symmetric
 for i ∈ CartesianIndices((Nx, Nx))
     @test A.prod!.A.Λ[:,:,i]' ≈ A.prod!.A.Λ[:,:,i] rtol = eps(T)
 end
@@ -70,7 +70,7 @@ xr = zeros(Complex{T}, size(vec(x)))
 cg!(xr, A, vec(xbp), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
 
-##
+## test equivalence
 mask = abs.(x[:,:,1]) .> 0
 @test xr[mask,:] ≈ x[mask,:] rtol = 1e-1
 

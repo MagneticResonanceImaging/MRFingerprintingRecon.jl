@@ -11,3 +11,6 @@ end
 @testset "Recon Cartesian" begin
     include("reconstruct_cart.jl")
 end
+@testset "Recon GROG" begin
+    include("reconstruct_grog.jl")
+end
