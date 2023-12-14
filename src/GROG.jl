@@ -43,7 +43,6 @@ end
 function griddedBackProjection(data::AbstractArray{Complex{T}}, G, trj, U::Matrix{Complex{T}}, cmaps=(1,); density = false, verbose = false) where {T}
     # performs GROG gridding, returns backprojection and kernels
     # assumes data is passed with dimensions Nr x NCyc*Nt x Ncoil
-    # takes ~35 minutes for 20 coils, 20 CPUs, 2D
 
     Nr = size(data, 1) # readout length
     Nt = length(trj) # number of time points

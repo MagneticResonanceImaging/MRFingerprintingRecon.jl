@@ -10,7 +10,7 @@ using Test
 
 ## set parameters
 T  = Float32
-Nx = 32 # smaller resolution for speed
+Nx = 64
 Nt = 5
 Nc = 2
 Ncyc = 100
@@ -75,6 +75,9 @@ A_grog_efficient = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, Λ=Λ)
 xg = zeros(Complex{T}, size(vec(x)))
 cg!(xg, A_grog_efficient, vec(xbp_grog), maxiter=20)
 xg = reshape(xg, Nx, Nx, Nc)
+xgd = zeros(Complex{T}, size(vec(x)))
+cg!(xgd, A_grog_default, vec(xbp_grog), maxiter=20)
+xgd = reshape(xgd, Nx, Nx, Nc)
 
 ## NFFT Reconstruction
 xbp_rad = calculateBackProjection(data, trj, U, cmaps)
@@ -95,8 +98,10 @@ xc = ifft(ifftshift(xc, 1:2), 1:2)
 
 ## test recon equivalence
 mask = abs.(x[:,:,1]) .> 0
-@test abs.(xc[mask,:]) ≈ abs.(xr[mask,:]) rtol = 2e-1
+@test abs.(xc[mask,:]) ≈ abs.(xr[mask,:]) rtol = 1e-1
 @test abs.(xc[mask,:]) ≈ abs.(xg[mask,:]) rtol = 2e-1
+@test abs.(xc[mask,:]) ≈ abs.(xgd[mask,:]) rtol = 2e-1
+@test abs.(xg[mask,:]) ≈ abs.(xgd[mask,:]) rtol = 1e-3
 
 ## test equivalence of efficient kernel calculation
 for i ∈ CartesianIndices((Nx, Nx))
@@ -118,4 +123,4 @@ end
 
 ##
 # using Plots
-# plot(heatmap(abs.(cat(xc[:,:,1], xr[:,:,1], xg[:,:,1], dims=2)), aspect_ratio=1), size=(800,400))
+# plot(heatmap(abs.(cat(xc[:,:,1], xr[:,:,1], xg[:,:,1], xgd[:,:,1], dims=2)), aspect_ratio=1), size=(1000,400))
