@@ -82,7 +82,7 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, G, trj, U::Matri
 
                 # multiply by basis for backprojection
                 for icoef ∈ axes(U,2)
-                    dataU[ig[idt][1],ig[idt][2],:,icoef] .+= data_temp[idt] .* conj(U[it,icoef])
+                    dataU[ig[idt]...,:,icoef] .+= data_temp[idt] .* conj(U[it,icoef])
                 end
                 # add to kernel
                 for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
