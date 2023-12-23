@@ -18,7 +18,7 @@ function scGROG(data::AbstractArray{Complex{T}}, trj) where {T}
     # 1) Precompute n, m for the trajectory
     trjr = reshape(combinedimsview(trj), Nd, Nr, :)
     nm = dropdims(diff(trjr[:,1:2,:],dims=2),dims=2)' .* Nr #nyquist units
-    
+
     # 2) For each spoke, solve Eq3 for Gθ and compute matrix log
     Threads.@threads for ip ∈ axes(data,2)
         @views Gθ[Threads.threadid()] .= transpose(data[1:end-1,ip,:] \ data[2:end,ip,:])
@@ -43,6 +43,7 @@ end
 function griddedBackProjection(data::AbstractArray{Complex{T}}, G, trj, U::Matrix{Complex{T}}, cmaps=(1,); density = false, verbose = false) where {T}
     # performs GROG gridding, returns backprojection and kernels
     # assumes data is passed with dimensions Nr x NCyc*Nt x Ncoil
+    lG = [log(Gi) for Gi ∈ G]
 
     Nr = size(data, 1) # readout length
     Nt = length(trj) # number of time points
@@ -59,7 +60,6 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, G, trj, U::Matri
 
     # preallocations
     ig = [Array{Int16}(undef, Nd) for _ = 1:Threads.nthreads()]
-    shift = Array{T}(undef, Threads.nthreads())
     Gshift = [Array{Complex{T}}(undef, Ncoil, Ncoil) for _ = 1:Threads.nthreads()]
     data_temp = [Array{Complex{T}}(undef, Ncoil) for _ = 1:Threads.nthreads()]
     dataU = zeros(Complex{T}, img_shape..., Ncoil, Ncoeff)
@@ -73,16 +73,16 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, G, trj, U::Matri
         Threads.@threads for it ∈ axes(data,2) # iterate over time dimension
             idt = Threads.threadid()
             for ir ∈ axes(data,1) # iterate over the whole trajectory
-                data_temp[idt] .= data[ir,it,:] # copy the coil data
+                Gshift[idt] .= 0
                 for j = Nd:-1:1 # apply GROG kernels in reverse order for consistency with calibration
                     _, ig[idt][j] = findmin(abs.(trj[it][j,ir] .- grid))
-                    shift[idt] = (grid[ig[idt][j]] - trj[it][j,ir]) * Nr #nyquist units
-                    Gshift[idt] .= G[j]^shift[idt] # this seems to be more stable than combining with next line
-                    data_temp[idt] .= Gshift[idt] * data_temp[idt]
+                    Gshift[idt] .+= exp(((grid[ig[idt][j]] - trj[it][j,ir]) * Nr) .* lG[j]) # this seems to be more stable than combining with next line
                 end
+                mul!(data_temp[idt], Gshift[idt], data[ir,it,:])
+
                 # multiply by basis for backprojection
                 for icoef ∈ axes(U,2)
-                    dataU[ig[idt]...,:,icoef] .+= data_temp[idt] .* conj(U[it,icoef])
+                    dataU[ig[idt][1],ig[idt][2],:,icoef] .+= data_temp[idt] .* conj(U[it,icoef])
                 end
                 # add to kernel
                 for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
