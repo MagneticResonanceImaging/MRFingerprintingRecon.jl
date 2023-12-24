@@ -74,7 +74,7 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, G, trj, U::Matri
             for ir ∈ axes(data,1) # iterate over the whole trajectory
                 Gshift[idt] .= 0
                 for j = Nd:-1:1 # apply GROG kernels in reverse order for consistency with calibration
-                    _, ig[idt][j] = findmin(abs.(trj[it][j,ir] .- grid))
+                    _, ig[idt][j] = findmin(abs.(grid .- trj[it][j,ir]))
                     Gshift[idt] .+= exp(((grid[ig[idt][j]] - trj[it][j,ir]) * Nr) .* lG[j]) # this seems to be more stable than combining with next line
                 end
                 mul!(data_temp[idt], Gshift[idt], data[ir,it,:])
