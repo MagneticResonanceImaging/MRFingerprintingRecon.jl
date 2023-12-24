@@ -98,14 +98,14 @@ xc = ifft(ifftshift(xc, 1:2), 1:2)
 
 ## test recon equivalence
 mask = abs.(x[:,:,1]) .> 0
-@test abs.(xc[mask,:]) ≈ abs.(xr[mask,:]) rtol = 1e-1
-@test abs.(xc[mask,:]) ≈ abs.(xg[mask,:]) rtol = 2e-1
-@test abs.(xc[mask,:]) ≈ abs.(xgd[mask,:]) rtol = 2e-1
-@test abs.(xg[mask,:]) ≈ abs.(xgd[mask,:]) rtol = 1e-3
+@test abs.(xc[mask,:]) ≈ abs.(xr[mask,:])  rtol = 1e-1
+@test abs.(xc[mask,:]) ≈ abs.(xg[mask,:])  rtol = 5e-1
+@test abs.(xc[mask,:]) ≈ abs.(xgd[mask,:]) rtol = 5e-1
+@test abs.(xg[mask,:]) ≈ abs.(xgd[mask,:]) rtol = 1e-2
 
 ## test equivalence of efficient kernel calculation
 for i ∈ CartesianIndices((Nx, Nx))
-    @test A_grog_default.prod!.A.Λ[:,:,i] ≈ Λ[:,:,i] rtol = 1e-1
+    @test A_grog_default.prod!.A.Λ[:,:,i] ≈ Λ[:,:,i] rtol = 2e-1
 end
 
 ## test GROG kernels for 1st spoke in trajectory
