@@ -49,7 +49,6 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, G, trj, U::Matri
     @assert Nt == size(U, 1) "Mismatch between trajectory and basis"
     Ncoeff = size(U, 2)
     Nd = size(trj[1],1) # number of dimensions
-    @assert Nd == size(trj[1], 1) "Mismatch between trajectory and image shape"
     # img_shape = size(cmaps[1])
     img_shape = ntuple(_ -> Nr÷2, Nd)
     idx = CartesianIndices(img_shape)
@@ -75,7 +74,7 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, G, trj, U::Matri
             for ir ∈ axes(data,1) # iterate over the whole trajectory
                 data_temp[idt] .= data[ir,it,:] # copy the coil data
                 for j = Nd:-1:1 # apply GROG kernels in reverse order for consistency with calibration
-                    _, ig[idt][j] = findmin(abs.(trj[it][j,ir] .- grid))
+                    _, ig[idt][j] = findmin(abs.(grid .- trj[it][j,ir]))
                     shift[idt] = (grid[ig[idt][j]] - trj[it][j,ir]) * Nr #nyquist units
                     Gshift[idt] .= G[j]^shift[idt] # this seems to be more stable than combining with next line
                     data_temp[idt] .= Gshift[idt] * data_temp[idt]
