@@ -72,19 +72,15 @@ G = scGROG(reshape(data, 2Nx, :, Ncoil), trj)
 xbp_grog, Λ, D = griddedBackProjection(reshape(data, 2Nx, :, Ncoil), G, trj, U, cmaps; density=true)
 A_grog_default = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, D=D)
 A_grog_efficient = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, Λ=Λ)
-xg = zeros(Complex{T}, size(vec(x)))
-cg!(xg, A_grog_efficient, vec(xbp_grog), maxiter=20)
+xg = cg(A_grog_efficient, vec(xbp_grog), maxiter=100)
 xg = reshape(xg, Nx, Nx, Nc)
-xgd = zeros(Complex{T}, size(vec(x)))
-cg!(xgd, A_grog_default, vec(xbp_grog), maxiter=20)
+xgd = cg(A_grog_default, vec(xbp_grog), maxiter=100)
 xgd = reshape(xgd, Nx, Nx, Nc)
 
 ## NFFT Reconstruction
 xbp_rad = calculateBackProjection(data, trj, U, cmaps)
 A_rad = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U; cmaps=cmaps)
-xr = similar(vec(xbp_rad))
-xr .= 0
-cg!(xr, A_rad, vec(xbp_rad), maxiter=20)
+xr = cg(A_rad, vec(xbp_rad), maxiter=100)
 xr = reshape(xr, Nx, Nx, Nc)
 
 ## crop x
@@ -99,8 +95,8 @@ xc = ifft(ifftshift(xc, 1:2), 1:2)
 ## test recon equivalence
 mask = abs.(x[:,:,1]) .> 0
 @test abs.(xc[mask,:]) ≈ abs.(xr[mask,:])  rtol = 1e-1
-@test abs.(xc[mask,:]) ≈ abs.(xg[mask,:])  rtol = 5e-1
-@test abs.(xc[mask,:]) ≈ abs.(xgd[mask,:]) rtol = 5e-1
+@test abs.(xc[mask,:]) ≈ abs.(xg[mask,:])  rtol = 1e-1
+@test abs.(xc[mask,:]) ≈ abs.(xgd[mask,:]) rtol = 1e-1
 @test abs.(xg[mask,:]) ≈ abs.(xgd[mask,:]) rtol = 1e-2
 
 ## test equivalence of efficient kernel calculation
@@ -123,4 +119,5 @@ end
 
 ##
 # using Plots
-# plot(heatmap(abs.(cat(xc[:,:,1], xr[:,:,1], xg[:,:,1], xgd[:,:,1], dims=2)), aspect_ratio=1), size=(1000,400))
+# plot(heatmap(abs.(cat(xc[:,:,1], xr[:,:,1], xg[:,:,1], xgd[:,:,1], dims=2)), aspect_ratio=1), size=(1000,400), clim=(0,1.5))
+# plot(heatmap(abs.(xg[:,:,1] ./ xr[:,:,1]), aspect_ratio=1), size=(1000,400), clim=(0.75,1.25))
