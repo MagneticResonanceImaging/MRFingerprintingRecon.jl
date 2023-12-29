@@ -8,6 +8,7 @@ using NFFTTools
 using MRICoilSensitivities
 using LinearOperators
 using SplitApplyCombine
+using ExponentialUtilities
 
 export FFTNormalOpBasisFunc, FFTNormalOpBasisFuncLO, scGROG, griddedBackProjection
 export NFFTNormalOpBasisFunc, NFFTNormalOpBasisFuncLO, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA

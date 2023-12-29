@@ -38,7 +38,7 @@ end
 cmaps = [cmaps[:,:,ic] for ic=1:Ncoil]
 
 ## set up basis functions
-U = randn(Complex{T}, Nt, 2)
+U = randn(Complex{T}, Nt, Nc)
 U,_,_ = svd(U)
 
 ## set up trajectory
@@ -69,7 +69,7 @@ end
 G = scGROG(reshape(data, 2Nx, :, Ncoil), trj)
 
 ## GROG Reconstruction
-xbp_grog, Λ, D = griddedBackProjection(reshape(data, 2Nx, :, Ncoil), G, trj, U, cmaps; density=true)
+xbp_grog, Λ, D = griddedBackProjection(reshape(copy(data), 2Nx, :, Ncoil), G, deepcopy(trj), U, cmaps; density=true)
 A_grog_default = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, D=D)
 A_grog_efficient = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, Λ=Λ)
 xg = cg(A_grog_efficient, vec(xbp_grog), maxiter=100)
@@ -101,7 +101,7 @@ mask = abs.(x[:,:,1]) .> 0
 
 ## test equivalence of efficient kernel calculation
 for i ∈ CartesianIndices((Nx, Nx))
-    @test A_grog_default.prod!.A.Λ[:,:,i] ≈ Λ[:,:,i] rtol = 2e-1
+    @test A_grog_default.prod!.A.Λ[:,:,i] ≈ Λ[:,:,i] rtol = 1e-1
 end
 
 ## test GROG kernels for 1st spoke in trajectory

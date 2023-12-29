@@ -48,52 +48,50 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, G, trj, U::Matri
     Nt = length(trj) # number of time points
     @assert Nt == size(U, 1) "Mismatch between trajectory and basis"
     Ncoeff = size(U, 2)
-    Nd = size(trj[1],1) # number of dimensions
 
     idx = CartesianIndices(shape)
     Ncoil = length(cmaps)
     data = reshape(data, :, Nt, Ncoil) # make sure data has correct size before gridding
 
     # preallocations
-    ig = [Array{Int16}(undef, Nd) for _ = 1:Threads.nthreads()]
-    Gshift = [Array{Complex{T}}(undef, Ncoil, Ncoil) for _ = 1:Threads.nthreads()]
-    data_temp = [Array{Complex{T}}(undef, Ncoil) for _ = 1:Threads.nthreads()]
     dataU = zeros(Complex{T}, shape..., Ncoil, Ncoeff)
     Λ = zeros(Complex{T}, Ncoeff, Ncoeff, shape...)
     if density
         D = zeros(Int16, shape..., Nt)
     end
 
+    method = ExpMethodHigham2005()
+    cache   = [ExponentialUtilities.alloc_mem(lG[1], method) for _ ∈ 1:Threads.nthreads()]
+    lGcache = [similar(lG[1]) for _ ∈ 1:Threads.nthreads()]
+
     # gridding backprojection & kernel calculation
     t = @elapsed begin
-        Threads.@threads for it ∈ axes(data,2) # iterate over time dimension
+        Threads.@threads for i ∈ CartesianIndices(@view data[:,:,1])
             idt = Threads.threadid()
-            for ir ∈ axes(data,1) # iterate over the whole trajectory
-                Gshift[idt] .= 0
-                for i in axes(Gshift[idt], 1)
-                    Gshift[idt][i,i] = 1
-                end
+            for j ∈ eachindex(shape)
+                trj_i = trj[i[2]][j,i[1]] * shape[j] + 1/2
+                ig = round(trj_i)
+                shift = ig - trj_i
+                trj[i[2]][j,i[1]] = ig + shape[j] ÷ 2
 
-                for j ∈ eachindex(shape)
-                    trj_j = trj[it][j,ir] * shape[j] + 1/2
-                    ig[idt][j] = round(Int16, trj_j)
-                    shift = ig[idt][j] - trj_j
-                    Gshift[idt] *= exp(shift * lG[j])
-                end
-                mul!(data_temp[idt], Gshift[idt], data[ir,it,:])
-                ig[idt] .+= shape[1] ÷ 2
+                lGcache[idt] .= shift .* lG[j]
+                @views data[i,:] = exponential!(lGcache[idt], method, cache[idt]) * data[i,:]
+            end
+        end
 
-                # multiply by basis for backprojection
-                for icoef ∈ axes(U,2)
-                    dataU[ig[idt]...,:,icoef] .+= data_temp[idt] .* conj(U[it,icoef])
-                end
-                # add to kernel
-                for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
-                    Λ[ic[1],ic[2],ig[idt]...] += conj.(U[it,ic[1]]) * U[it,ic[2]]
-                end
-                if density
-                    D[ig[idt]...,it] += 1
-                end
+        for i ∈ CartesianIndices(@view data[:,:,1])
+            ig = CartesianIndex(ntuple(j -> Int(trj[i[2]][j,i[1]]), length(shape)))
+
+            # multiply by basis for backprojection
+            for icoef ∈ axes(U,2)
+                @views dataU[ig,:,icoef] .+= data[i[1],i[2],:] .* conj(U[i[2],icoef])
+            end
+            # add to kernel
+            for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
+                Λ[ic[1],ic[2],ig] += conj.(U[i[2],ic[1]]) * U[i[2],ic[2]]
+            end
+            if density
+                D[ig,i[2]] += 1
             end
         end
     end
@@ -106,9 +104,9 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, G, trj, U::Matri
     Threads.@threads for icoef ∈ axes(U,2)
         idt = Threads.threadid()
         for icoil ∈ eachindex(cmaps)
-            xbpci[idt] .= ifftshift(dataU[idx,icoil,icoef])
+            @views ifftshift!(xbpci[idt], dataU[idx,icoil,icoef])
             ifft!(xbpci[idt])
-            xbpci[idt] .= fftshift(xbpci[idt])
+            xbpci[idt] = fftshift(xbpci[idt])
             xbp[idx,icoef] .+= conj.(cmaps[icoil]) .* xbpci[idt]
         end
     end
