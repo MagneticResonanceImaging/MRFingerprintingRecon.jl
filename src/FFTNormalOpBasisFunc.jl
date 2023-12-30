@@ -48,7 +48,6 @@ end
 
 function LinearAlgebra.mul!(x::Vector{T}, S::FFTNormalOpBasisFunc, b, α, β) where {T}
     idx = CartesianIndices(S.shape)
-    Ncoils = length(S.cmaps)
 
     b = reshape(b, S.shape..., S.Ncoeff)
     if β == 0
@@ -61,11 +60,10 @@ function LinearAlgebra.mul!(x::Vector{T}, S::FFTNormalOpBasisFunc, b, α, β) wh
     bthreads = BLAS.get_num_threads()
     try
         BLAS.set_num_threads(1)
-        for icoil ∈ 1:Ncoils
+        for cmap ∈ S.cmaps
             Threads.@threads for i ∈ 1:S.Ncoeff # multiply by C and F
                 S.kL1[idx, i] .= zero(T)
-                S.kL2[idx, i] .= zero(T)
-                @views S.kL1[idx, i] .= S.cmaps[icoil] .* b[idx, i]                
+                @views S.kL1[idx, i] .= cmap .* b[idx, i]
                 @views S.fftplan * S.kL1[idx, i]
             end
             Threads.@threads for i ∈ idx # multiply kernel
@@ -73,7 +71,7 @@ function LinearAlgebra.mul!(x::Vector{T}, S::FFTNormalOpBasisFunc, b, α, β) wh
             end
             Threads.@threads for i ∈ 1:S.Ncoeff # multiply by C' and F'
                 @views S.ifftplan * S.kL2[idx, i]
-                @views xr[idx,i] .+= α .* conj.(S.cmaps[icoil]) .* S.kL2[idx,i]
+                @views xr[idx,i] .+= α .* conj.(cmap) .* S.kL2[idx,i]
             end
         end
     finally
