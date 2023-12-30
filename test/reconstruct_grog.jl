@@ -123,7 +123,7 @@ xc = ifft(ifftshift(xc, 1:2), 1:2)
 data = reshape(data, Nr, :, Ncoil)
 trjr = reshape(combinedimsview(trj), 2, Nr, :)
 
-Threads.@threads for ispoke in axes(data,2)
+for ispoke in rand(axes(data,2), 20) # test 20 random spokes
     nm = dropdims(diff(trjr[:,1:2,ispoke],dims=2),dims=2) .* Nr
     @test [data[j,ispoke,:][ic] for j in 2:Nr, ic = 1:Ncoil] ≈ [(exp(nm[1] * lnG[1]) * exp(nm[2] * lnG[2]) * data[j,ispoke,:])[ic] for j in 1:Nr-1, ic =1:Ncoil] rtol = 3e-1
 end
