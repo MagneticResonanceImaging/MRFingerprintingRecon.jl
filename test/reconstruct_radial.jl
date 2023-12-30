@@ -21,6 +21,7 @@ x[1:end÷2,:,1] .*= exp(1im * π/3)
 x[:,:,2] = shepp_logan(Nx)
 
 ## coil maps
+Ncoil = 9
 cmaps = ones(Complex{T}, Nx, Nx, Ncoil)
 [cmaps[i,:,2] .*= exp( 1im * π * i/Nx) for i ∈ axes(cmaps,1)]
 [cmaps[i,:,3] .*= exp(-1im * π * i/Nx) for i ∈ axes(cmaps,1)]
