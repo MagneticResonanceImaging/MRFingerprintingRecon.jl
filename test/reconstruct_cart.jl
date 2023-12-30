@@ -11,25 +11,25 @@ T  = Float32
 Nx = 64
 Nc = 4
 Nt = 100
-Ncyc = 100
 Ncoil = 9
 
 ## create test image
 x = zeros(Complex{T}, Nx, Nx, Nc)
 x[:,:,1] = transpose(shepp_logan(Nx))
 x[1:end÷2,:,1] .*= exp(1im * π/3)
+x[:,:,2] = shepp_logan(Nx)
 
 ## coil maps
-cmaps = zeros(Complex{T}, Nx, Nx, Ncoil)
-cmaps[:,:,1] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷8,  Nx÷8),  (Nx÷1.5,Nx÷1.5))], 2)
-cmaps[:,:,2] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷8,  Nx÷2),  (Nx÷1.5,Nx÷1.5))], 2)
-cmaps[:,:,3] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷8,  7Nx÷8), (Nx÷1.5,Nx÷1.5))], 2)
-cmaps[:,:,4] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷2,  Nx÷8),  (Nx÷1.5,Nx÷1.5))], 2)
-cmaps[:,:,5] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷2,  Nx÷2),  (Nx÷1.5,Nx÷1.5))], 2)
-cmaps[:,:,6] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷2,  7Nx÷8), (Nx÷1.5,Nx÷1.5))], 2)
-cmaps[:,:,7] .= phantom(1:Nx, 1:Nx, [gauss2((7Nx÷8, Nx÷8),  (Nx÷1.5,Nx÷1.5))], 2)
-cmaps[:,:,8] .= phantom(1:Nx, 1:Nx, [gauss2((7Nx÷8, Nx÷2),  (Nx÷1.5,Nx÷1.5))], 2)
-cmaps[:,:,9] .= phantom(1:Nx, 1:Nx, [gauss2((7Nx÷8, 7Nx÷8), (Nx÷1.5,Nx÷1.5))], 2)
+cmaps = ones(Complex{T}, Nx, Nx, Ncoil)
+[cmaps[i,:,2] .*= exp( 1im * π * i/Nx) for i ∈ axes(cmaps,1)]
+[cmaps[i,:,3] .*= exp(-1im * π * i/Nx) for i ∈ axes(cmaps,1)]
+[cmaps[:,i,4] .*= exp( 1im * π * i/Nx) for i ∈ axes(cmaps,2)]
+[cmaps[:,i,5] .*= exp(-1im * π * i/Nx) for i ∈ axes(cmaps,2)]
+[cmaps[i,:,6] .*= exp( 2im * π * i/Nx) for i ∈ axes(cmaps,1)]
+[cmaps[i,:,7] .*= exp(-2im * π * i/Nx) for i ∈ axes(cmaps,1)]
+[cmaps[:,i,8] .*= exp( 2im * π * i/Nx) for i ∈ axes(cmaps,2)]
+[cmaps[:,i,9] .*= exp(-2im * π * i/Nx) for i ∈ axes(cmaps,2)]
+
 for i ∈ CartesianIndices(@view cmaps[:,:,1])
     cmaps[i,:] ./= norm(cmaps[i,:])
 end
@@ -40,9 +40,9 @@ U = randn(Complex{T}, Nt, Nc)
 U,_,_ = svd(U)
 
 ## simulate data and backprojection
-D = phantom(1:Nx, 1:Nx, [gauss2((Nx÷2,Nx÷2), (Nx,Nx))], 2)
-D = repeat(D, 1, 1, Nt)
-# D = rand(Nx, Nx, Nt) .< 0.5
+# D = phantom(1:Nx, 1:Nx, [gauss2((Nx÷2,Nx÷2), (Nx,Nx))], 2)
+# D = repeat(D, 1, 1, Nt)
+D = rand(Nx, Nx, Nt) .< 0.1
 # D = ones(Nx, Nx, Nt)
 data = Array{Complex{T}}(undef, Nx, Nx, Nt)
 xbp = similar(x) .= 0
@@ -81,8 +81,6 @@ mask = abs.(x[:,:,1]) .> 0
 
 ##
 # using Plots
-# plot(
-#     heatmap(real.(cat(x[:,:,1], xr[:,:,1], dims=2)), aspect_ratio=1),
-#     heatmap(imag.(cat(x[:,:,1], xr[:,:,1], dims=2)), aspect_ratio=1),
-#     size=(800,800), layout=(2,1)
-# )
+# plotlyjs(bg = RGBA(31/255,36/255,36/255,1.0), ticks=:native); #hide
+# heatmap(abs.(cat(reshape(x, Nx, :), reshape(xr, Nx, :), dims=1)), clim=(0.75, 1.25), size=(1200,600))
+# heatmap(angle.(cat(reshape(x, Nx, :), reshape(xr, Nx, :), dims=1)), size=(1200,600))
