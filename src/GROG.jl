@@ -60,49 +60,47 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, lnG, trj, U::Mat
     lGcache = [similar(lnG[1]) for _ ∈ 1:Threads.nthreads()]
 
     # gridding backprojection & kernel calculation
-    t = @elapsed begin
-        Threads.@threads for i ∈ CartesianIndices(@view data[:, :, 1])
-            idt = Threads.threadid()
-            for j ∈ length(img_shape):-1:1
-                trj_i = trj[i[2]][j, i[1]] * img_shape[j] + 1 / 2
-                k_idx = round(trj_i)
-                shift = (k_idx - trj_i) * Nr/img_shape[j]
-                trj[i[2]][j, i[1]] = k_idx + img_shape[j] ÷ 2
+    t = @elapsed Threads.@threads for i ∈ CartesianIndices(@view data[:, :, 1])
+        idt = Threads.threadid()
+        for j ∈ length(img_shape):-1:1
+            trj_i = trj[i[2]][j, i[1]] * img_shape[j] + 1 / 2
+            k_idx = round(trj_i)
+            shift = (k_idx - trj_i) * Nr / img_shape[j]
+            trj[i[2]][j, i[1]] = k_idx + img_shape[j] ÷ 2
 
-                lGcache[idt] .= shift .* lnG[j]
-                @views data[i, :] = exponential!(lGcache[idt], exp_method, cache[idt]) * data[i, :]
-            end
-        end
-
-        for i ∈ CartesianIndices(@view data[:, :, 1])
-            k_idx = CartesianIndex(ntuple(j -> Int(trj[i[2]][j, i[1]]), length(img_shape)))
-
-            # multiply by basis for backprojection
-            for icoef ∈ axes(U, 2)
-                @views dataU[k_idx, :, icoef] .+= data[i[1], i[2], :] .* conj(U[i[2], icoef])
-            end
-            # add to kernel
-            for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
-                Λ[ic[1], ic[2], k_idx] += conj.(U[i[2], ic[1]]) * U[i[2], ic[2]]
-            end
-            if density
-                D[k_idx, i[2]] += 1
-            end
+            lGcache[idt] .= shift .* lnG[j]
+            @views data[i, :] = exponential!(lGcache[idt], exp_method, cache[idt]) * data[i, :]
         end
     end
-    verbose && println("Gridding time: t = $t s")
-    flush(stdout)
-    Λ .= ifftshift(Λ, 3:(3+length(img_shape)-1))
+    verbose && println("Gridding time: t = $t s"); flush(stdout)
+
+    t = @elapsed for i ∈ CartesianIndices(@view data[:, :, 1])
+        k_idx = ntuple(j -> mod1(Int(trj[i[2]][j, i[1]]) - img_shape[j]÷2, img_shape[j]), length(img_shape)) # incorporates ifftshift
+        k_idx = CartesianIndex(k_idx)
+
+        # multiply by basis for backprojection
+        for icoef ∈ axes(U, 2)
+            @views dataU[k_idx, :, icoef] .+= data[i[1], i[2], :] .* conj(U[i[2], icoef])
+        end
+        # add to kernel
+        for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
+            Λ[ic[1], ic[2], k_idx] += conj.(U[i[2], ic[1]]) * U[i[2], ic[2]]
+        end
+        if density
+            k_idx_D = CartesianIndex(ntuple(j -> Int(trj[i[2]][j, i[1]]), length(img_shape)))
+            D[k_idx_D, i[2]] += 1
+        end
+    end
+    verbose && println("Kernel-building time: t = $t s"); flush(stdout)
 
     # compute backprojection
     xbp = zeros(Complex{T}, img_shape..., Ncoeff)
-    xbpci = [Array{Complex{T}}(undef, img_shape...) for _ = 1:Threads.nthreads()]
+    xbpci = [Array{Complex{T}}(undef, img_shape) for _ = 1:Threads.nthreads()]
     Threads.@threads for icoef ∈ axes(U, 2)
         idt = Threads.threadid()
         for icoil ∈ eachindex(cmaps)
-            @views ifftshift!(xbpci[idt], dataU[idx, icoil, icoef])
-            ifft!(xbpci[idt])
-            xbpci[idt] = fftshift(xbpci[idt])
+            @views ifft!(dataU[idx, icoil, icoef])
+            @views fftshift!(xbpci[idt], dataU[idx, icoil, icoef])
             xbp[idx, icoef] .+= conj.(cmaps[icoil]) .* xbpci[idt]
         end
     end
