@@ -48,18 +48,11 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, lnG, trj, U::Mat
     Ncoil = length(cmaps)
     data = reshape(data, :, Nt, Ncoil) # make sure data has correct size before gridding
 
-    # preallocations
-    dataU = zeros(Complex{T}, img_shape..., Ncoil, Ncoeff)
-    Λ = zeros(Complex{T}, Ncoeff, Ncoeff, img_shape...)
-    if density
-        D = zeros(Int16, img_shape..., Nt)
-    end
-
     exp_method = ExpMethodHigham2005()
     cache = [ExponentialUtilities.alloc_mem(lnG[1], exp_method) for _ ∈ 1:Threads.nthreads()]
     lGcache = [similar(lnG[1]) for _ ∈ 1:Threads.nthreads()]
 
-    # gridding backprojection & kernel calculation
+    # gridding
     t = @elapsed Threads.@threads for i ∈ CartesianIndices(@view data[:, :, 1])
         idt = Threads.threadid()
         for j ∈ length(img_shape):-1:1
@@ -72,26 +65,33 @@ function griddedBackProjection(data::AbstractArray{Complex{T}}, lnG, trj, U::Mat
             @views data[i, :] = exponential!(lGcache[idt], exp_method, cache[idt]) * data[i, :]
         end
     end
-    verbose && println("Gridding time: t = $t s"); flush(stdout)
+    verbose && println("Gridding: t = $t s"); flush(stdout)
+
+    # backprojection & kernel calculation
+    dataU = zeros(Complex{T}, img_shape..., Ncoil, Ncoeff)
+    Λ = zeros(Complex{T}, Ncoeff, Ncoeff, img_shape...)
+    if density
+        D = zeros(Int16, img_shape..., Nt)
+    end
 
     t = @elapsed for i ∈ CartesianIndices(@view data[:, :, 1])
         k_idx = ntuple(j -> mod1(Int(trj[i[2]][j, i[1]]) - img_shape[j]÷2, img_shape[j]), length(img_shape)) # incorporates ifftshift
         k_idx = CartesianIndex(k_idx)
 
         # multiply by basis for backprojection
-        for icoef ∈ axes(U, 2)
-            @views dataU[k_idx, :, icoef] .+= data[i[1], i[2], :] .* conj(U[i[2], icoef])
+        for icoef ∈ axes(U, 2), icoil ∈ axes(data, 3)
+            @views dataU[k_idx, icoil, icoef] += data[i[1], i[2], icoil] * conj(U[i[2], icoef])
         end
         # add to kernel
         for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
-            Λ[ic[1], ic[2], k_idx] += conj.(U[i[2], ic[1]]) * U[i[2], ic[2]]
+            Λ[ic[1], ic[2], k_idx] += conj(U[i[2], ic[1]]) * U[i[2], ic[2]]
         end
         if density
             k_idx_D = CartesianIndex(ntuple(j -> Int(trj[i[2]][j, i[1]]), length(img_shape)))
             D[k_idx_D, i[2]] += 1
         end
     end
-    verbose && println("Kernel-building time: t = $t s"); flush(stdout)
+    verbose && println("Kernel calculation & back-projection time: t = $t s"); flush(stdout)
 
     # compute backprojection
     xbp = zeros(Complex{T}, img_shape..., Ncoeff)
