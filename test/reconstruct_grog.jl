@@ -14,7 +14,7 @@ Nx = 64
 Nr = 2Nx
 Nc = 4
 Nt = 100
-Ncyc = 500
+Ncyc = 200
 Ncoil = 9
 
 ## create test image
@@ -81,7 +81,7 @@ end
 lnG = scGROG(reshape(data, Nr, :, Ncoil), trj)
 
 ## GROG Reconstruction
-xbp_grog, Λ, D = griddedBackProjection(reshape(copy(data), Nr, :, Ncoil), lnG, deepcopy(trj), U, cmaps; density=true)
+xbp_grog, Λ, D = griddedBackProjection(reshape(copy(data), Nr, :, Ncoil), lnG, deepcopy(trj), U, cmaps; density=true, verbose=true)
 
 A_grog_efficient = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, Λ=Λ)
 xg = cg(A_grog_efficient, vec(xbp_grog), maxiter=20)
