@@ -66,8 +66,11 @@ end
 A = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, D=D)
 
 ## test forward operator is symmetric
+Λ = zeros(Complex{T}, Nc, Nc, Nx^2)
+Λ[:,:,A.prod!.A.kmask_indcs] .= A.prod!.A.Λ
+Λ = reshape(Λ, Nc, Nc, Nx, Nx)
 for i ∈ CartesianIndices((Nx, Nx))
-    @test A.prod!.A.Λ[:,:,i]' ≈ A.prod!.A.Λ[:,:,i] rtol = eps(T)
+    @test Λ[:,:,i]' ≈ Λ[:,:,i]
 end
 
 ## reconstruct
