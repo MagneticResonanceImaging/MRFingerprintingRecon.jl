@@ -83,11 +83,11 @@ lnG = scGROG(reshape(data, Nr, :, Ncoil), trj)
 ## GROG Reconstruction
 xbp_grog, Λ, D = griddedBackProjection(reshape(copy(data), Nr, :, Ncoil), lnG, deepcopy(trj), U, cmaps; density=true, verbose=true)
 
-A_grog_efficient = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, Λ=Λ)
+A_grog_efficient = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, Λ=Λ, verbose=true)
 xg = cg(A_grog_efficient, vec(xbp_grog), maxiter=20)
 xg = reshape(xg, Nx, Nx, Nc)
 
-A_grog_default = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, D=D)
+A_grog_default = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, D=D, verbose=true)
 xgd = cg(A_grog_default, vec(xbp_grog), maxiter=20)
 xgd = reshape(xgd, Nx, Nx, Nc)
 
@@ -117,7 +117,7 @@ xc = ifft(ifftshift(xc, 1:2), 1:2)
 @test xg ≈ xgd rtol = 1e-2
 
 ## test equivalence of efficient kernel calculation
-@test A_grog_default.prod!.A.Λ ≈ Λ
+@test A_grog_default.prod!.A.Λ ≈ A_grog_efficient.prod!.A.Λ
 
 ## test GROG kernels for 1st spoke in trajectory
 data = reshape(data, Nr, :, Ncoil)
