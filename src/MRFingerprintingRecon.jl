@@ -10,7 +10,7 @@ using LinearOperators
 using SplitApplyCombine
 using ExponentialUtilities
 
-export FFTNormalOpBasisFunc, FFTNormalOpBasisFuncLO, scGROG, griddedBackProjection
+export FFTNormalOpBasis, grog_griddata!, calculateBackProjection_gridded
 export NFFTNormalOpBasisFunc, NFFTNormalOpBasisFuncLO, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA
 
 function __init__()

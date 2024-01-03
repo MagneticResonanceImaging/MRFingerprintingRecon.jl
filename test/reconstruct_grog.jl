@@ -77,31 +77,16 @@ for icoil ∈ 1:Ncoil
     end
 end
 
-## self-calibrating radial GROG
-lnG = scGROG(reshape(data, Nr, :, Ncoil), trj)
+## test GROG kernels for random spokes in trajectory
+lnG = MRFingerprintingRecon.grog_calculatekernel(data, trj, Nr)
+data_r = reshape(data, Nr, :, Ncoil)
+trj_r = reshape(combinedimsview(trj), 2, Nr, :)
+for ispoke in rand(axes(data_r,2), 20) # test 20 random spokes
+    nm = dropdims(diff(trj_r[:,1:2,ispoke],dims=2),dims=2) .* Nr
+    @test [data_r[j,ispoke,:][ic] for j in 2:Nr, ic = 1:Ncoil] ≈ [(exp(nm[1] * lnG[1]) * exp(nm[2] * lnG[2]) * data_r[j,ispoke,:])[ic] for j in 1:Nr-1, ic =1:Ncoil] rtol = 3e-1
+end
 
-## GROG Reconstruction
-xbp_grog, Λ, D = griddedBackProjection(reshape(copy(data), Nr, :, Ncoil), lnG, deepcopy(trj), U, cmaps; density=true, verbose=true)
-
-A_grog_efficient = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, Λ=Λ, verbose=true)
-xg = cg(A_grog_efficient, vec(xbp_grog), maxiter=20)
-xg = reshape(xg, Nx, Nx, Nc)
-
-A_grog_default = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, D=D, verbose=true)
-xgd = cg(A_grog_default, vec(xbp_grog), maxiter=20)
-xgd = reshape(xgd, Nx, Nx, Nc)
-
-## Fix irrelevant phase slope
-[xg[i,j,:]  .*= -exp(1im * π * (i + j)/Nx) for i = 1:Nx, j = 1:Nx]
-[xgd[i,j,:] .*= -exp(1im * π * (i + j)/Nx) for i = 1:Nx, j = 1:Nx]
-
-## NFFT Reconstruction
-xbp_rad = calculateBackProjection(data, trj, U, cmaps)
-A_rad = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U; cmaps=cmaps)
-xr = cg(A_rad, vec(xbp_rad), maxiter=20)
-xr = reshape(xr, Nx, Nx, Nc)
-
-## crop x
+## Ground truth reconstruction by cropping k-space
 xc = fftshift(fft(x, 1:2), 1:2)
 for i ∈ CartesianIndices(xc)
     if (i[1] - Nx/2)^2 + (i[2] - Nx/2)^2 > (Nx/2)^2
@@ -110,25 +95,28 @@ for i ∈ CartesianIndices(xc)
 end
 xc = ifft(ifftshift(xc, 1:2), 1:2)
 
+## NFFT Reconstruction
+xbp_rad = calculateBackProjection(data, trj, U, cmaps)
+A_rad = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U; cmaps=cmaps)
+xr = cg(A_rad, vec(xbp_rad), maxiter=20)
+xr = reshape(xr, Nx, Nx, Nc)
+
+## GROG Reconstruction
+grog_griddata!(data, trj, Nr, (Nx,Nx))
+xbp_grog = calculateBackProjection_gridded(data, trj, U, cmaps)
+A_grog = FFTNormalOpBasis((Nx,Nx), U, trj; cmaps)
+xg = cg(A_grog, vec(xbp_grog), maxiter=20)
+xg = reshape(xg, Nx, Nx, Nc)
+
+## Fix irrelevant phase slope
+[xg[i,j,:]  .*= -exp(1im * π * (i + j - 2)/Nx) for i = 1:Nx, j = 1:Nx]
+
 ## test recon equivalence
-@test xc ≈ xr  rtol = 1e-1
-@test xc ≈ xg  rtol = 2e-1
-@test xc ≈ xgd rtol = 2e-1
-@test xg ≈ xgd rtol = 1e-2
-
-## test equivalence of efficient kernel calculation
-@test A_grog_default.prod!.A.Λ ≈ A_grog_efficient.prod!.A.Λ
-
-## test GROG kernels for 1st spoke in trajectory
-data = reshape(data, Nr, :, Ncoil)
-trjr = reshape(combinedimsview(trj), 2, Nr, :)
-
-for ispoke in rand(axes(data,2), 20) # test 20 random spokes
-    nm = dropdims(diff(trjr[:,1:2,ispoke],dims=2),dims=2) .* Nr
-    @test [data[j,ispoke,:][ic] for j in 2:Nr, ic = 1:Ncoil] ≈ [(exp(nm[1] * lnG[1]) * exp(nm[2] * lnG[2]) * data[j,ispoke,:])[ic] for j in 1:Nr-1, ic =1:Ncoil] rtol = 3e-1
-end
+@test xc ≈ xr  rtol = 5e-2
+@test xc ≈ xg  rtol = 5e-2
 
 ##
 # using Plots
-# heatmap(abs.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), reshape(xg, Nx, :), reshape(xgd, Nx, :), dims=1)), clim=(0.75, 1.25), size=(1100,800))
-# heatmap(angle.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), reshape(xg, Nx, :), reshape(xgd, Nx, :), dims=1)), clim=(0.75, 1.25), size=(1100,800))
+# heatmap(abs.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), reshape(xg, Nx, :), dims=1)), clim=(0.75, 1.25), size=(1100,750))
+# heatmap(angle.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), reshape(xg, Nx, :); dims=1)), clim=(-0.1, 1.1), size=(1100,750))
+# heatmap(angle.(reshape(xr, Nx, :)) .- angle.(reshape(xg, Nx, :)), clim=(-0.05, 0.05), size=(1100,250), c=:bluesreds)
