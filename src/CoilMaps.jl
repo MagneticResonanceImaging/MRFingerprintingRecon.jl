@@ -38,7 +38,7 @@ function calcCoilMaps(data::AbstractArray{Complex{T},3}, trj::AbstractVector{<:A
     Ndims = length(img_shape)
     imdims = ntuple(i->i, Ndims)
 
-    xbp = calcFilteredBackProjection(data, trj, U, img_shape, Ncoils, density_compensation=density_compensation, verbose = verbose)
+    xbp = calcFilteredBackProjection(data, trj, U, img_shape, Ncoils; density_compensation, verbose)
 
     img_idx = CartesianIndices(img_shape)
     kbp = fftshift(xbp, imdims)
