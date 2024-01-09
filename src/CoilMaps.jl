@@ -1,8 +1,4 @@
-function calcCoilMaps(data::AbstractArray{Complex{T},3}, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractMatrix{Complex{T}}, img_shape::NTuple{N,Int}; density_compensation::Union{Symbol, <:AbstractVector{<:AbstractVector{T}}}=:radial_3D, kernel_size = ntuple(_->6, N), calib_size =  ntuple(_->24, N), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose = false) where {N,T}
-    Ncoils = size(data,3)
-    Ndims = length(img_shape)
-    imdims = ntuple(i->i, Ndims)
-
+function calcFilteredBackProjection(data::AbstractArray{Complex{T},3}, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractMatrix{Complex{T}}, img_shape::NTuple{N,Int}, Ncoils::Int; density_compensation::Union{Symbol, <:AbstractVector{<:AbstractVector{T}}}=:radial_3D, verbose = false) where {N,T}
     p = plan_nfft(reduce(hcat,trj), img_shape; precompute=TENSOR, blocking = true, fftflags = FFTW.MEASURE)
     xbp = Array{Complex{T}}(undef, img_shape..., Ncoils)
 
@@ -33,7 +29,18 @@ function calcCoilMaps(data::AbstractArray{Complex{T},3}, trj::AbstractVector{<:A
         @views mul!(xbp[img_idx,icoil], adjoint(p), vec(dataU))
     end
     verbose && println("BP for coils maps: $t s")
+    return xbp
+end
 
+
+function calcCoilMaps(data::AbstractArray{Complex{T},3}, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractMatrix{Complex{T}}, img_shape::NTuple{N,Int}; density_compensation::Union{Symbol, <:AbstractVector{<:AbstractVector{T}}}=:radial_3D, kernel_size = ntuple(_->6, N), calib_size =  ntuple(_->24, N), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose = false) where {N,T}
+    Ncoils = size(data,3)
+    Ndims = length(img_shape)
+    imdims = ntuple(i->i, Ndims)
+
+    xbp = calcFilteredBackProjection(data, trj, U, img_shape, Ncoils; density_compensation, verbose)
+
+    img_idx = CartesianIndices(img_shape)
     kbp = fftshift(xbp, imdims)
     fft!(kbp, imdims)
     kbp = fftshift(kbp, imdims)
