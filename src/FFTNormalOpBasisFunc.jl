@@ -1,22 +1,38 @@
-function calculateKernelBasis(img_shape, D::AbstractArray{G}, U::Matrix{Complex{T}}; verbose = false) where {G,T}
+function calculateKernelBasis(img_shape, trj, U)
+    Ncoeff = size(U, 2)
+    Nt = length(trj) # number of time points
+    @assert Nt == size(U, 1) "Mismatch between trajectory and basis"
 
-    Ncoeff = size(U,2)
-    Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, img_shape...)
-    t = @elapsed begin
-        Threads.@threads for i ∈ CartesianIndices(img_shape) # takes 0.5s for 2D
-            Λ[:,:,i] .= U' * (D[i,:] .* U) #U' * diagm(D) * U
+    Λ = zeros(eltype(U), Ncoeff, Ncoeff, img_shape...)
+
+    for it ∈ eachindex(trj), ix ∈ axes(trj[it], 2)
+        k_idx = ntuple(j -> mod1(Int(trj[it][j, ix]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
+        k_idx = CartesianIndex(k_idx)
+
+        for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
+            Λ[ic[1], ic[2], k_idx] += conj(U[it, ic[1]]) * U[it, ic[2]]
         end
-        Λ .= ifftshift(Λ, 3:(3+length(img_shape)-1)) #could fftshift D first
     end
-    verbose && println("Kernel calculation: t = $t s"); flush(stdout)
+    return Λ
+end
+
+function calculateKernelBasis(D, U)
+    Ncoeff = size(U, 2)
+    img_shape = size(D)[1:end-1]
+    Λ = Array{eltype(U)}(undef, Ncoeff, Ncoeff, img_shape...)
+
+    D .= ifftshift(D, 1:length(img_shape))
+    Threads.@threads for i ∈ CartesianIndices(img_shape)
+        Λ[:, :, i] .= U' * (D[i, :] .* U) #U' * diagm(D) * U
+    end
 
     return Λ
 end
 
 ## ##########################################################################
-# FFTNormalOpBasisFunc
+# FFTNormalOpBasis
 #############################################################################
-struct FFTNormalOpBasisFunc{S,T,N,E,F,G}
+struct _FFTNormalOpBasis{S,T,N,E,F,G}
     shape::S
     Ncoeff::Int
     fftplan::E
@@ -28,31 +44,45 @@ struct FFTNormalOpBasisFunc{S,T,N,E,F,G}
     cmaps::G
 end
 
-function FFTNormalOpBasisFunc(
-    img_shape,
-    U::Matrix{Complex{T}};
-    cmaps = (1,),
-    verbose = false,
-    D::AbstractArray{G} = ones(Int8, img_shape..., size(U,1)),
-    Λ = calculateKernelBasis(img_shape, D, U; verbose = verbose),
-    ) where {G,T}
-
-    Ncoeff = size(U, 2)
-    kL1 = Array{Complex{T}}(undef, img_shape..., Ncoeff)
-    kL2 = similar(kL1)
-
-    @views kmask = (Λ[1,1,CartesianIndices(img_shape)] .!= 0)
-    kmask_indcs = findall(vec(kmask))
-    Λ = reshape(Λ, Ncoeff, Ncoeff, :)
-    Λ = Λ[:,:,kmask_indcs]
-
-    ktmp = @view kL1[CartesianIndices(img_shape),1]
-    fftplan = plan_fft!( ktmp; flags = FFTW.MEASURE, num_threads=round(Int, Threads.nthreads()/Ncoeff))
-    ifftplan = plan_ifft!(ktmp; flags = FFTW.MEASURE, num_threads=round(Int, Threads.nthreads()/Ncoeff))
-    return FFTNormalOpBasisFunc(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps)
+function FFTNormalOpBasis(img_shape, trj, U; cmaps=(1,))
+    Λ = calculateKernelBasis(img_shape, trj, U)
+    return FFTNormalOpBasis(Λ; cmaps)
 end
 
-function LinearAlgebra.mul!(x::Vector{T}, S::FFTNormalOpBasisFunc, b, α, β) where {T}
+function FFTNormalOpBasis(D, U; cmaps=(1,))
+    Λ = calculateKernelBasis(D, U)
+    return FFTNormalOpBasis(Λ; cmaps)
+end
+
+function FFTNormalOpBasis(Λ; cmaps=(1,))
+    Ncoeff = size(Λ, 1)
+    img_shape = size(Λ)[3:end]
+    kL1 = Array{eltype(Λ)}(undef, img_shape..., Ncoeff)
+    kL2 = similar(kL1)
+
+    @views kmask = (Λ[1, 1, CartesianIndices(img_shape)] .!= 0)
+    kmask_indcs = findall(vec(kmask))
+    Λ = reshape(Λ, Ncoeff, Ncoeff, :)
+    Λ = Λ[:, :, kmask_indcs]
+
+    ktmp = @view kL1[CartesianIndices(img_shape), 1]
+    fftplan = plan_fft!(ktmp; flags=FFTW.MEASURE, num_threads=round(Int, Threads.nthreads() / Ncoeff))
+    ifftplan = plan_ifft!(ktmp; flags=FFTW.MEASURE, num_threads=round(Int, Threads.nthreads() / Ncoeff))
+    A = _FFTNormalOpBasis(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps)
+
+    return LinearOperator(
+        eltype(Λ),
+        prod(A.shape) * A.Ncoeff,
+        prod(A.shape) * A.Ncoeff,
+        true,
+        true,
+        (res, x, α, β) -> mul!(res, A, x, α, β),
+        nothing,
+        (res, x, α, β) -> mul!(res, A, x, α, β),
+    )
+end
+
+function LinearAlgebra.mul!(x::Vector{T}, S::_FFTNormalOpBasis, b, α, β) where {T}
     idx = CartesianIndices(S.shape)
 
     b = reshape(b, S.shape..., S.Ncoeff)
@@ -83,46 +113,11 @@ function LinearAlgebra.mul!(x::Vector{T}, S::FFTNormalOpBasisFunc, b, α, β) wh
 
             Threads.@threads for i ∈ 1:S.Ncoeff # multiply by C' and F'
                 @views S.ifftplan * S.kL2[idx, i]
-                @views xr[idx,i] .+= α .* conj.(cmap) .* S.kL2[idx,i]
+                @views xr[idx, i] .+= α .* conj.(cmap) .* S.kL2[idx, i]
             end
         end
     finally
         BLAS.set_num_threads(bthreads)
     end
     return x
-end
-
-Base.:*(S::FFTNormalOpBasisFunc, b::AbstractVector) = mul!(similar(b), S, b)
-Base.size(S::FFTNormalOpBasisFunc) = S.shape
-Base.size(S::FFTNormalOpBasisFunc, dim) = S.shape[dim]
-Base.eltype(::Type{FFTNormalOpBasisFunc{S,T,N,E,F,G}}) where {S,T,N,E,F,G} = T
-
-
-## ##########################################################################
-# LinearOperator of FFTNormalOpBasisFunc
-#############################################################################
-function FFTNormalOpBasisFuncLO(A::FFTNormalOpBasisFunc{S,T,N,E,F,G}) where {S,T,N,E,F,G}
-    return LinearOperator(
-        Complex{T},
-        prod(A.shape) * A.Ncoeff,
-        prod(A.shape) * A.Ncoeff,
-        true,
-        true,
-        (res, x, α, β) -> mul!(res, A, x, α, β),
-        nothing,
-        (res, x, α, β) -> mul!(res, A, x, α, β),
-    )
-end
-
-function FFTNormalOpBasisFuncLO(
-    img_shape,
-    U::Matrix{Complex{T}};
-    cmaps = (1,),
-    verbose = false,
-    D::AbstractArray{G} = ones(Int8, img_shape..., size(U,1)),
-    Λ = calculateKernelBasis(img_shape, D, U; verbose = verbose),
-    ) where {G,T}
-
-    S = FFTNormalOpBasisFunc(img_shape, U; cmaps = cmaps, D=D, Λ = Λ)
-    return FFTNormalOpBasisFuncLO(S)
 end

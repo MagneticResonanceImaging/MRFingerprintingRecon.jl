@@ -1,18 +1,17 @@
-function scGROG(data::AbstractArray{Complex{T}}, trj) where {T}
-    # self-calibrating radial GROG
-    # doi: 10.1002/mrm.21565
+function grog_calculatekernel(data, trj, Nr)
+    # self-calibrating radial GROG (http://doi.org/10.1002/mrm.21565)
 
-    # data should be passed with dimensions Nr x Ns x Ncoil
-    Nr = size(data, 1) #number of readout points
-    Ns = size(data, 2) # number of spokes across whole trajectory
     Ncoil = size(data, 3)
+    data = reshape(data, Nr, :, Ncoil)
+    Ns = size(data, 2) # number of spokes across whole trajectory
     Nd = size(trj[1], 1) # number of dimensions
+
     @assert Nr > Ncoil "Ncoil < Nr, problem is ill posed"
     @assert Ns > Ncoil^2 "Number of spokes < Ncoil^2, problem is ill posed"
 
     # preallocations
-    lnG = Array{Complex{T}}(undef, Nd, Ncoil, Ncoil) #matrix of GROG operators
-    vθ = Array{Complex{T}}(undef, Ns, Ncoil, Ncoil)
+    lnG = Array{eltype(data)}(undef, Nd, Ncoil, Ncoil) #matrix of GROG operators
+    vθ = Array{eltype(data)}(undef, Ns, Ncoil, Ncoil)
 
     # 1) Precompute n, m for the trajectory
     trjr = reshape(combinedimsview(trj), Nd, Nr, :)
@@ -34,80 +33,62 @@ function scGROG(data::AbstractArray{Complex{T}}, trj) where {T}
     return lnG
 end
 
-function griddedBackProjection(data::AbstractArray{Complex{T}}, lnG, trj, U::Matrix{Complex{T}}, cmaps; density=false, verbose=false) where {T}
-    # performs GROG gridding, returns backprojection and kernels
-    # assumes data is passed with dimensions Nr x NCyc*Nt x Ncoil
+function grog_griddata!(data, trj, Nr, img_shape)
+    lnG = grog_calculatekernel(data, trj, Nr)
 
-    img_shape = size(cmaps[1])
-    Nr = size(data, 1) #number of readout points
+    Ncoil = size(data, 3)
+
     Nt = length(trj) # number of time points
-    @assert Nt == size(U, 1) "Mismatch between trajectory and basis"
-    Ncoeff = size(U, 2)
-
-    idx = CartesianIndices(img_shape)
-    Ncoil = length(cmaps)
     data = reshape(data, :, Nt, Ncoil) # make sure data has correct size before gridding
 
     exp_method = ExpMethodHigham2005()
     cache = [ExponentialUtilities.alloc_mem(lnG[1], exp_method) for _ ∈ 1:Threads.nthreads()]
     lGcache = [similar(lnG[1]) for _ ∈ 1:Threads.nthreads()]
 
-    # gridding
-    t = @elapsed Threads.@threads for i ∈ CartesianIndices(@view data[:, :, 1])
-        idt = Threads.threadid()
-        for j ∈ length(img_shape):-1:1
+    Threads.@threads for i ∈ CartesianIndices(@view data[:, :, 1])
+        idt = Threads.threadid() # TODO: fix data race bug
+        for j ∈ eachindex(img_shape)
             trj_i = trj[i[2]][j, i[1]] * img_shape[j] + 1 / 2
             k_idx = round(trj_i)
             shift = (k_idx - trj_i) * Nr / img_shape[j]
+
+            # overwrite trj with rounded grid point index
             trj[i[2]][j, i[1]] = k_idx + img_shape[j] ÷ 2
 
+            # overwrite data with gridded data
             lGcache[idt] .= shift .* lnG[j]
             @views data[i, :] = exponential!(lGcache[idt], exp_method, cache[idt]) * data[i, :]
         end
     end
-    verbose && println("Gridding: t = $t s"); flush(stdout)
+end
 
-    # backprojection & kernel calculation
-    dataU = zeros(Complex{T}, img_shape..., Ncoil, Ncoeff)
-    Λ = zeros(Complex{T}, Ncoeff, Ncoeff, img_shape...)
-    if density
-        D = zeros(Int16, img_shape..., Nt)
-    end
+function calculateBackProjection_gridded(data, trj, U, cmaps)
+    Ncoil = length(cmaps)
+    Ncoeff = size(U, 2)
+    img_shape = size(cmaps[1])
+    img_idx = CartesianIndices(img_shape)
 
-    t = @elapsed for i ∈ CartesianIndices(@view data[:, :, 1])
-        k_idx = ntuple(j -> mod1(Int(trj[i[2]][j, i[1]]) - img_shape[j]÷2, img_shape[j]), length(img_shape)) # incorporates ifftshift
-        k_idx = CartesianIndex(k_idx)
+    Nt = length(trj)
+    @assert Nt == size(U, 1) "Mismatch between trajectory and basis"
+    data = reshape(data, :, Nt, Ncoil)
 
-        # multiply by basis for backprojection
-        for icoef ∈ axes(U, 2), icoil ∈ axes(data, 3)
-            @views dataU[k_idx, icoil, icoef] += data[i[1], i[2], icoil] * conj(U[i[2], icoef])
-        end
-        # add to kernel
-        for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
-            Λ[ic[1], ic[2], k_idx] += conj(U[i[2], ic[1]]) * U[i[2], ic[2]]
-        end
-        if density
-            k_idx_D = CartesianIndex(ntuple(j -> Int(trj[i[2]][j, i[1]]), length(img_shape)))
-            D[k_idx_D, i[2]] += 1
-        end
-    end
-    verbose && println("Kernel calculation & back-projection time: t = $t s"); flush(stdout)
+    dataU = similar(data, img_shape..., Ncoeff)
+    xbp = zeros(eltype(data), img_shape..., Ncoeff)
 
-    # compute backprojection
-    xbp = zeros(Complex{T}, img_shape..., Ncoeff)
-    xbpci = [Array{Complex{T}}(undef, img_shape) for _ = 1:Threads.nthreads()]
     Threads.@threads for icoef ∈ axes(U, 2)
-        idt = Threads.threadid()
-        for icoil ∈ eachindex(cmaps)
-            @views ifft!(dataU[idx, icoil, icoef])
-            @views fftshift!(xbpci[idt], dataU[idx, icoil, icoef])
-            xbp[idx, icoef] .+= conj.(cmaps[icoil]) .* xbpci[idt]
+        for icoil ∈ axes(data, 3)
+            dataU[img_idx, icoef] .= 0
+
+            for i ∈ CartesianIndices(@view data[:, :, 1])
+                k_idx = ntuple(j -> mod1(Int(trj[i[2]][j, i[1]]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
+                k_idx = CartesianIndex(k_idx)
+
+                @views dataU[k_idx, icoef] += data[i[1], i[2], icoil] * conj(U[i[2], icoef])
+            end
+
+            @views ifft!(dataU[img_idx, icoef])
+            @views xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* fftshift(dataU[img_idx, icoef])
         end
     end
-
-    if density
-        return xbp, Λ, D
-    else
-        return xbp, Λ
-    end
+    return xbp
 end

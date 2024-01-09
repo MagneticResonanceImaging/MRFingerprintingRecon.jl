@@ -52,9 +52,7 @@ for icoil = 1:Ncoil
     end
     data .= ifftshift(data, (1,2))
     fft!(data, (1,2))
-    data .= fftshift(data, (1,2))
-    data .*= D
-    data .= ifftshift(data, (1,2))
+    data .*= ifftshift(D, (1,2))
     ifft!(data, (1,2))
     data .= fftshift(data, (1,2))
     Threads.@threads for i ∈ CartesianIndices(@view x[:,:,1])
@@ -63,7 +61,7 @@ for icoil = 1:Ncoil
 end
 
 ## construct forward operator
-A = FFTNormalOpBasisFuncLO((Nx,Nx), U; cmaps=cmaps, D=D)
+A = FFTNormalOpBasis(D, U; cmaps)
 
 ## test forward operator is symmetric
 Λ = zeros(Complex{T}, Nc, Nc, Nx^2)
