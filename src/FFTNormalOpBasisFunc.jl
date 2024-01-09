@@ -21,10 +21,10 @@ function calculateKernelBasis(D, U)
     img_shape = size(D)[1:end-1]
     Λ = Array{eltype(U)}(undef, Ncoeff, Ncoeff, img_shape...)
 
+    D .= ifftshift(D, 1:length(img_shape))
     Threads.@threads for i ∈ CartesianIndices(img_shape)
         Λ[:, :, i] .= U' * (D[i, :] .* U) #U' * diagm(D) * U
     end
-    Λ .= ifftshift(Λ, 3:(3+length(img_shape)-1)) #could fftshift D first
 
     return Λ
 end
@@ -44,7 +44,7 @@ struct _FFTNormalOpBasis{S,T,N,E,F,G}
     cmaps::G
 end
 
-function FFTNormalOpBasis(img_shape, U, trj; cmaps=(1,))
+function FFTNormalOpBasis(img_shape, trj, U; cmaps=(1,))
     Λ = calculateKernelBasis(img_shape, trj, U)
     return FFTNormalOpBasis(Λ; cmaps)
 end

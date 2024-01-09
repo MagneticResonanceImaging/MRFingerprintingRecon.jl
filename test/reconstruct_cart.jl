@@ -52,9 +52,7 @@ for icoil = 1:Ncoil
     end
     data .= ifftshift(data, (1,2))
     fft!(data, (1,2))
-    data .= fftshift(data, (1,2))
-    data .*= D
-    data .= ifftshift(data, (1,2))
+    data .*= ifftshift(D, (1,2))
     ifft!(data, (1,2))
     data .= fftshift(data, (1,2))
     Threads.@threads for i ∈ CartesianIndices(@view x[:,:,1])

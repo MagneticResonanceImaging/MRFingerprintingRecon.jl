@@ -104,12 +104,12 @@ xr = reshape(xr, Nx, Nx, Nc)
 ## GROG Reconstruction
 grog_griddata!(data, trj, Nr, (Nx,Nx))
 xbp_grog = calculateBackProjection_gridded(data, trj, U, cmaps)
-A_grog = FFTNormalOpBasis((Nx,Nx), U, trj; cmaps)
+A_grog = FFTNormalOpBasis((Nx,Nx), trj, U; cmaps)
 xg = cg(A_grog, vec(xbp_grog), maxiter=20)
 xg = reshape(xg, Nx, Nx, Nc)
 
 ## Fix irrelevant phase slope
-[xg[i,j,:]  .*= -exp(1im * π * (i + j - 2)/Nx) for i = 1:Nx, j = 1:Nx]
+[xg[i,j,:] .*= -exp(1im * π * (i + j - 2)/Nx) for i = 1:Nx, j = 1:Nx]
 
 ## test recon equivalence
 @test xc ≈ xr  rtol = 5e-2
