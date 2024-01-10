@@ -1,7 +1,7 @@
 name = "MRFingerprintingRecon"
 uuid = "f4798e02-a7e0-47f5-a571-12dd775704d3"
 authors = ["Jakob Asslaender <jakob.asslaender@nyumc.org>"]
-version = "0.5.6-DEV"
+version = "0.6.1-DEV"
 
 [deps]
 ExponentialUtilities = "d4d017d3-3776-5f7e-afef-a10c40355c18"

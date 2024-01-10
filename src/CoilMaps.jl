@@ -53,7 +53,6 @@ function calcCoilMaps(data::AbstractArray{Complex{T},3}, trj::AbstractVector{<:A
     end
     verbose && println("espirit: $t s")
 
-    cmaps = [cmaps[img_idx,ic,1] for ic=1:Ncoils]
-    xbp   = [  xbp[img_idx,ic  ] for ic=1:Ncoils]
-    return cmaps, xbp
+    cmaps = [cmaps[img_idx,ic,1] for ic=1:Ncoils]    
+    return cmaps
 end
