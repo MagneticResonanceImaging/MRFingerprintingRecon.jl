@@ -1,32 +1,59 @@
-function calcFilteredBackProjection(data::AbstractArray{Complex{T},3}, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractMatrix{Complex{T}}, img_shape::NTuple{N,Int}, Ncoils::Int; density_compensation::Union{Symbol, <:AbstractVector{<:AbstractVector{T}}}=:radial_3D, verbose = false) where {N,T}
+function applyDensityCompensation!(dataU::AbstractArray{Complex{T}}, trj::Matrix{T}; density_compensation::Union{Symbol, <:AbstractVector{<:AbstractVector{T}}}=:radial_3D) where {T}
+    if density_compensation == :radial_3D
+            dataU .*= transpose(sum(abs2, trj,dims=1))
+    elseif density_compensation == :radial_2D
+            dataU .*= transpose(sqrt.(sum(abs2, trj,dims=1)))
+    elseif density_compensation == :none
+        # do nothing here
+    elseif isa(density_compensation, Symbol)
+        error("`density_compensation` can only be `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractVector{<:AbstractVector{T}}`")
+    else
+        @simd for i ∈ CartesianIndices(dataU)
+            dataU .*= density_compensation
+        end
+    end
+end
+
+function calcFilteredBackProjection(data::AbstractArray{Complex{T},3}, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractMatrix{Complex{T}}, img_shape::NTuple{N,Int}; density_compensation::Union{Symbol, <:AbstractVector{<:AbstractVector{T}}}=:radial_3D, verbose = false) where {N,T}
     p = plan_nfft(reduce(hcat,trj), img_shape; precompute=TENSOR, blocking = true, fftflags = FFTW.MEASURE)
+    Ncoils = size(data,3)
     xbp = Array{Complex{T}}(undef, img_shape..., Ncoils)
 
     dataU = similar(@view data[:,:,1]) # size = Ncycles*Nr x Nt
     img_idx = CartesianIndices(img_shape)
     t = @elapsed for icoil ∈ axes(data,3)
-        if density_compensation == :radial_3D
-            @simd for i ∈ CartesianIndices(dataU)
-                dataU[i] = data[i,icoil] * conj(U[i[2],1]) * sum(abs2, @view trj[i[2]][:,i[1]])
-            end
-        elseif density_compensation == :radial_2D
-            @simd for i ∈ CartesianIndices(dataU)
-                dataU[i] = data[i,icoil] * conj(U[i[2],1]) * sqrt(sum(abs2, @view trj[i[2]][:,i[1]]))
-            end
-        elseif density_compensation == :none
-            # no density compensation; premultiply data with inverse of sampling density before calling function
-            @simd for i ∈ CartesianIndices(dataU)
-                dataU[i] = data[i,icoil] * conj(U[i[2],1])
-            end
-        elseif isa(density_compensation, Symbol)
-            error("`density_compensation` can only be `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractVector{<:AbstractVector{T}}`")
-        else
-            @simd for i ∈ CartesianIndices(dataU)
-                dataU[i] = data[i,icoil] * conj(U[i[2],1]) * density_compensation[i[2]][i[1]]
+        dataU = data[:,:,icoil] .* U[:,1]'
+        for it in axes(data,2)
+            if typeof(density_compensation) <:AbstractVector
+                @views applyDensityCompensation!(dataU[:,it],trj[it]; density_compensation = density_compensation[it])
+            else
+                @views applyDensityCompensation!(dataU[:,it],trj[it]; density_compensation)
             end
         end
-
         @views mul!(xbp[img_idx,icoil], adjoint(p), vec(dataU))
+    end
+    verbose && println("BP for coils maps: $t s")
+    return xbp
+end
+
+
+function calcFilteredBackProjection(data::AbstractArray{Complex{T}}, trj::Matrix{T}, img_shape::NTuple{N,Int}; density_compensation::Union{Symbol, <:AbstractVector{<:AbstractVector{T}}}=:radial_3D, verbose = false) where {N,T}
+    p = plan_nfft(trj, img_shape; precompute=TENSOR, blocking = true, fftflags = FFTW.MEASURE)
+    Ncoils = size(data,2)
+
+    xbp = Array{Complex{T}}(undef, img_shape..., Ncoils)
+
+    img_idx = CartesianIndices(img_shape)
+    t = @elapsed for icoil ∈ axes(data,2)
+        data_temp = data[:,icoil] # size = Ncycles*Nr
+
+        if typeof(density_compensation) <:AbstractVector
+            @views applyDensityCompensation!(data_temp,trj; density_compensation = density_compensation[it])
+        else
+            @views applyDensityCompensation!(data_temp,trj; density_compensation)
+        end
+
+        @views mul!(xbp[img_idx,icoil], adjoint(p), vec(data_temp))
     end
     verbose && println("BP for coils maps: $t s")
     return xbp
@@ -38,7 +65,7 @@ function calcCoilMaps(data::AbstractArray{Complex{T},3}, trj::AbstractVector{<:A
     Ndims = length(img_shape)
     imdims = ntuple(i->i, Ndims)
 
-    xbp = calcFilteredBackProjection(data, trj, U, img_shape, Ncoils; density_compensation, verbose)
+    xbp = calcFilteredBackProjection(data, trj, U, img_shape; density_compensation, verbose)
 
     img_idx = CartesianIndices(img_shape)
     kbp = fftshift(xbp, imdims)
