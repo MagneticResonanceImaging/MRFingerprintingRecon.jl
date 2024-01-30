@@ -1,4 +1,19 @@
-function calculateBackProjection(data::AbstractArray{T}, trj, U, cmaps; verbose = false) where {T}
+
+function calculateBackProjection(data::AbstractArray{T}, trj, img_shape::NTuple{N,Int}; U=ones(T, 1, 1), density_compensation=:radial_3D, verbose=false) where {N,T}
+    cmaps = [ones(T, img_shape)]
+    xbp = calculateBackProjection(data, trj, cmaps; U, density_compensation, verbose)
+    return xbp
+end
+
+function calculateBackProjection(data::AbstractArray{T}, trj, cmaps::AbstractVector{<:AbstractArray}; U=ones(T, 1, 1), density_compensation=:radial_3D, verbose=false) where T
+    if typeof(trj) <: AbstractMatrix
+        trj = [trj]
+    end
+
+    if ndims(data) == 2
+        data = reshape(data, size(data, 1), 1, size(data, 2))
+    end
+
     test_dimension(data, trj, U, cmaps)
 
     _, Ncoef = size(U)
@@ -8,19 +23,37 @@ function calculateBackProjection(data::AbstractArray{T}, trj, U, cmaps; verbose 
     xbp = zeros(T, img_shape..., Ncoef)
     xtmp = Array{T}(undef, img_shape)
 
-    dataU = similar(@view data[:,:,1]) # size = Ncycles*Nr x Nt
+    data_temp = similar(@view data[:,:,1]) # size = Ncycles*Nr x Nt
     img_idx = CartesianIndices(img_shape)
     for icoef ∈ axes(U,2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
-            @simd for i ∈ CartesianIndices(dataU)
-                @inbounds dataU[i] = data[i,icoil] * conj(U[i[2],icoef])
+            @simd for i ∈ CartesianIndices(data_temp)
+                @inbounds data_temp[i] = data[i,icoil] * conj(U[i[2],icoef])
             end
-            mul!(xtmp, adjoint(p), vec(dataU))
+            applyDensityCompensation!(data_temp, trj; density_compensation)
+
+            mul!(xtmp, adjoint(p), vec(data_temp))
             xbp[img_idx,icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
         verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
     end
     return xbp
+end
+
+function applyDensityCompensation!(data, trj; density_compensation=:radial_3D)
+    for it in axes(data, 2)
+        if density_compensation == :radial_3D
+            data[:, it] .*= transpose(sum(abs2, trj[it], dims=1))
+        elseif density_compensation == :radial_2D
+            data[:, it] .*= transpose(sqrt.(sum(abs2, trj[it], dims=1)))
+        elseif density_compensation == :none
+            # do nothing here
+        elseif isa(density_compensation, AbstractVector{<:AbstractVector})
+            data[:, it] .*= density_compensation[it]
+        else
+            error("`density_compensation` can only be `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractVector{<:AbstractVector}`")
+        end
+    end
 end
 
 function test_dimension(data, trj, U, cmaps)
