@@ -1,11 +1,40 @@
+function calculateBackProjection(data::AbstractArray{T}, trj, img_shape::NTuple{N,Int}; U = N==3 ? I(size(data,2)) : I(1), density_compensation=:none, verbose=false) where {N,T}
+    if typeof(trj) <: AbstractMatrix
+        trj = [trj]
+    end
 
-function calculateBackProjection(data::AbstractArray{T}, trj, img_shape::NTuple{N,Int}; U=ones(T, 1, 1), density_compensation=:radial_3D, verbose=false) where {N,T}
-    cmaps = [ones(T, img_shape)]
-    xbp = calculateBackProjection(data, trj, cmaps; U, density_compensation, verbose)
+    if ndims(data) == 2
+        data = reshape(data, size(data, 1), 1, size(data, 2))
+    end
+    Ncoils = size(data, 3)
+    Ncoef = size(U,2)
+
+    p = plan_nfft(reduce(hcat, trj), img_shape; precompute=TENSOR, blocking=true, fftflags=FFTW.MEASURE)
+    xbp = Array{T}(undef, img_shape..., Ncoef, Ncoils)
+
+    data_temp = similar(@view data[:, :, 1]) # size = Ncycles*Nr x Nt
+    img_idx = CartesianIndices(img_shape)
+    verbose && println("calculating backprojection..."); flush(stdout)
+    for icoef ∈ axes(U,2)
+        t = @elapsed for icoil ∈ axes(data, 3)
+            @simd for i ∈ CartesianIndices(data_temp)
+                @inbounds data_temp[i] = data[i,icoil] * conj(U[i[2],icoef])
+            end
+            applyDensityCompensation!(data_temp, trj; density_compensation)
+            @views mul!(xbp[img_idx, icoef, icoil], adjoint(p), vec(data_temp))
+        end
+        verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
+    end
     return xbp
 end
 
-function calculateBackProjection(data::AbstractArray{T}, trj, cmaps::AbstractVector{<:AbstractArray}; U=ones(T, 1, 1), density_compensation=:radial_3D, verbose=false) where T
+function calculateBackProjection(data::AbstractArray{T}, trj, U, cmaps::AbstractVector{<:AbstractArray{T}}; density_compensation=:none, verbose=false) where T
+    @warn "calculateBackProjection(data, trj, U, cmaps) has been deprecated – call calculateBackProjection(data, trj, cmaps; U=U) with U as a keyword argument instead." maxlog=1
+    return calculateBackProjection(data, trj, cmaps; U, density_compensation, verbose)
+end
+
+
+function calculateBackProjection(data::AbstractArray{T,N}, trj, cmaps::AbstractVector{<:AbstractArray{T}}; U = N==3 ? I(size(data,2)) : I(1), density_compensation=:none, verbose=false) where {N,T}
     if typeof(trj) <: AbstractMatrix
         trj = [trj]
     end
@@ -16,7 +45,7 @@ function calculateBackProjection(data::AbstractArray{T}, trj, cmaps::AbstractVec
 
     test_dimension(data, trj, U, cmaps)
 
-    _, Ncoef = size(U)
+    Ncoef = size(U,2)
     img_shape = size(cmaps[1])
 
     p = plan_nfft(reduce(hcat,trj), img_shape; precompute=TENSOR, blocking = true, fftflags = FFTW.MEASURE)
@@ -25,6 +54,7 @@ function calculateBackProjection(data::AbstractArray{T}, trj, cmaps::AbstractVec
 
     data_temp = similar(@view data[:,:,1]) # size = Ncycles*Nr x Nt
     img_idx = CartesianIndices(img_shape)
+    verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U,2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
             @simd for i ∈ CartesianIndices(data_temp)
@@ -57,9 +87,9 @@ function applyDensityCompensation!(data, trj; density_compensation=:radial_3D)
 end
 
 function test_dimension(data, trj, U, cmaps)
-    Nt, _ = size(U)
-    img_shape = size(cmaps[1])
-    Ncoils = length(cmaps)
+    Nt = size(U,1)
+    img_shape = size(cmaps)[1:end-1]
+    Ncoils = size(cmaps)[end]
 
     Nt != size(data, 2) && ArgumentError(
         "The second dimension of data ($(size(data, 2))) and the first one of U ($Nt) do not match. Both should be number of time points.",

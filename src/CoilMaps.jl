@@ -4,6 +4,7 @@ function calcCoilMaps(data::AbstractArray{Complex{T},3}, trj::AbstractVector{<:A
     imdims = ntuple(i -> i, Ndims)
 
     xbp = calculateBackProjection(data, trj, img_shape; U=U[:,1], density_compensation, verbose)
+    xbp = dropdims(xbp, dims=ndims(xbp)-1)
 
     img_idx = CartesianIndices(img_shape)
     kbp = fftshift(xbp, imdims)
