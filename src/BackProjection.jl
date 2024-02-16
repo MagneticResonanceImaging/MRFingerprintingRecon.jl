@@ -28,12 +28,6 @@ function calculateBackProjection(data::AbstractArray{T}, trj, img_shape::NTuple{
     return xbp
 end
 
-function calculateBackProjection(data::AbstractArray{T}, trj, U, cmaps::AbstractVector{<:AbstractArray{T}}; density_compensation=:none, verbose=false) where T
-    @warn "calculateBackProjection(data, trj, U, cmaps) has been deprecated – call calculateBackProjection(data, trj, cmaps; U=U) with U as a keyword argument instead." maxlog=1
-    return calculateBackProjection(data, trj, cmaps; U, density_compensation, verbose)
-end
-
-
 function calculateBackProjection(data::AbstractArray{T,N}, trj, cmaps::AbstractVector{<:AbstractArray{T}}; U = N==3 ? I(size(data,2)) : I(1), density_compensation=:none, verbose=false) where {N,T}
     if typeof(trj) <: AbstractMatrix
         trj = [trj]
