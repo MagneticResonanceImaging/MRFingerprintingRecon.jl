@@ -21,5 +21,6 @@ include("NFFTNormalOpBasisFunc.jl")
 include("CoilMaps.jl")
 include("BackProjection.jl")
 include("Trajectories.jl")
+include("deprecated.jl")
 
 end # module
