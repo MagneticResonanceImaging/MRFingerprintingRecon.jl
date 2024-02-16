@@ -44,7 +44,9 @@ for it ∈ axes(data,2)
 end
 
 ## BackProjection
-b = vec(calculateBackProjection(data, trj, U, [ones(T, Nx,Nx)], verbose = true))
+b = vec(calculateBackProjection(data, trj, (Nx, Nx); U, verbose = true))
+bcoil = vec(calculateBackProjection(data, trj, [ones(Complex{T}, Nx,Nx)]; U, verbose = true))
+@test bcoil ≈ b
 
 ## construct forward operator
 A = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U; verbose = true)
