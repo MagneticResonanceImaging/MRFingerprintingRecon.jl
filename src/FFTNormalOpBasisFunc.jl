@@ -30,9 +30,9 @@ function calculateKernelBasis(D, U)
 end
 
 ## ##########################################################################
-# FFTNormalOpBasis
+# FFTNormalOp
 #############################################################################
-struct _FFTNormalOpBasis{S,T,N,E,F,G}
+struct _FFTNormalOp{S,T,N,E,F,G}
     shape::S
     Ncoeff::Int
     fftplan::E
@@ -44,17 +44,17 @@ struct _FFTNormalOpBasis{S,T,N,E,F,G}
     cmaps::G
 end
 
-function FFTNormalOpBasis(img_shape, trj, U; cmaps=(1,))
+function FFTNormalOp(img_shape, trj, U; cmaps=(1,))
     Λ = calculateKernelBasis(img_shape, trj, U)
-    return FFTNormalOpBasis(Λ; cmaps)
+    return FFTNormalOp(Λ; cmaps)
 end
 
-function FFTNormalOpBasis(D, U; cmaps=(1,))
+function FFTNormalOp(D, U; cmaps=(1,))
     Λ = calculateKernelBasis(D, U)
-    return FFTNormalOpBasis(Λ; cmaps)
+    return FFTNormalOp(Λ; cmaps)
 end
 
-function FFTNormalOpBasis(Λ; cmaps=(1,))
+function FFTNormalOp(Λ; cmaps=(1,))
     Ncoeff = size(Λ, 1)
     img_shape = size(Λ)[3:end]
     kL1 = Array{eltype(Λ)}(undef, img_shape..., Ncoeff)
@@ -68,7 +68,7 @@ function FFTNormalOpBasis(Λ; cmaps=(1,))
     ktmp = @view kL1[CartesianIndices(img_shape), 1]
     fftplan = plan_fft!(ktmp; flags=FFTW.MEASURE, num_threads=round(Int, Threads.nthreads() / Ncoeff))
     ifftplan = plan_ifft!(ktmp; flags=FFTW.MEASURE, num_threads=round(Int, Threads.nthreads() / Ncoeff))
-    A = _FFTNormalOpBasis(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps)
+    A = _FFTNormalOp(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps)
 
     return LinearOperator(
         eltype(Λ),
@@ -82,7 +82,7 @@ function FFTNormalOpBasis(Λ; cmaps=(1,))
     )
 end
 
-function LinearAlgebra.mul!(x::Vector{T}, S::_FFTNormalOpBasis, b, α, β) where {T}
+function LinearAlgebra.mul!(x::Vector{T}, S::_FFTNormalOp, b, α, β) where {T}
     idx = CartesianIndices(S.shape)
 
     b = reshape(b, S.shape..., S.Ncoeff)

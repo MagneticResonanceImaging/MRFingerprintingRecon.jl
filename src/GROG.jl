@@ -1,5 +1,5 @@
 function grog_calculatekernel(data, trj, Nr)
-    # self-calibrating radial GROG (http://doi.org/10.1002/mrm.21565)
+    # self-calibrating radial GROG (https://doi.org/10.1002/mrm.21565)
 
     Ncoil = size(data, 3)
     data = reshape(data, Nr, :, Ncoil)
@@ -11,11 +11,11 @@ function grog_calculatekernel(data, trj, Nr)
 
     # preallocations
     lnG = Array{eltype(data)}(undef, Nd, Ncoil, Ncoil) #matrix of GROG operators
-    vθ = Array{eltype(data)}(undef, Ns, Ncoil, Ncoil)
+    vθ  = Array{eltype(data)}(undef, Ns, Ncoil, Ncoil)
 
     # 1) Precompute n, m for the trajectory
     trjr = reshape(combinedimsview(trj), Nd, Nr, :)
-    nm = dropdims(diff(trjr[:, 1:2, :], dims=2), dims=2)' .* Nr # units of sampling rate
+    nm = transpose(dropdims(diff(trjr[:, 1:2, :], dims=2), dims=2)) .* Nr # units of sampling rate
 
     # 2) For each spoke, solve Eq3 for Gθ and compute matrix log
     Threads.@threads for ip ∈ axes(data, 2)
