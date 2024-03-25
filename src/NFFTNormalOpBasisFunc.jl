@@ -61,7 +61,7 @@ function NFFTNormalOpBasisFunc(
     img_shape,
     trj::AbstractVector{<:AbstractMatrix{T}},
     U::AbstractMatrix{Tc};
-    cmaps = (1,),
+    cmaps=[ones(T, img_shape)],
     verbose = false,
     Λ_kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose = verbose),
     num_fft_threads = round(Int, Threads.nthreads()/size(U, 2))
@@ -153,13 +153,13 @@ function NFFTNormalOpBasisFuncLO(
     img_shape,
     trj::AbstractVector{<:AbstractMatrix{T}},
     U::AbstractMatrix{Tc};
-    cmaps = (1,),
+    cmaps=[ones(T, img_shape)],
     verbose = false,
     Λ_kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose = verbose),
     num_fft_threads = round(Int, Threads.nthreads()/size(U, 2))
     ) where {T, Tc <: Union{T, Complex{T}}}
 
-    S = NFFTNormalOpBasisFunc(img_shape, trj, U; cmaps = cmaps, Λ_kmask_indcs = Λ_kmask_indcs, num_fft_threads = num_fft_threads)
+    S = NFFTNormalOpBasisFunc(img_shape, trj, U; cmaps, Λ_kmask_indcs, num_fft_threads)
     return NFFTNormalOpBasisFuncLO(S)
 end
 
