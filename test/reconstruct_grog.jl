@@ -96,7 +96,7 @@ end
 xc = ifft(ifftshift(xc, 1:2), 1:2)
 
 ## NFFT Reconstruction
-xbp_rad = calculateBackProjection(data, trj, U, cmaps)
+xbp_rad = calculateBackProjection(data, trj, cmaps; U=U)
 A_rad = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U; cmaps=cmaps)
 xr = cg(A_rad, vec(xbp_rad), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
