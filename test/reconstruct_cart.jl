@@ -61,7 +61,7 @@ for icoil = 1:Ncoil
 end
 
 ## construct forward operator
-A = FFTNormalOpBasis(D, U; cmaps)
+A = FFTNormalOp(D, U; cmaps)
 
 ## test forward operator is symmetric
 Λ = zeros(Complex{T}, Nc, Nc, Nx^2)
