@@ -116,7 +116,7 @@ xg = reshape(xg, Nx, Nx, Nc)
 @test xc ≈ xg  rtol = 5e-2
 
 ##
-using Plots
-heatmap(abs.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), reshape(xg, Nx, :), dims=1)), clim=(0.75, 1.25), size=(1100,750))
-heatmap(angle.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), reshape(xg, Nx, :); dims=1)), clim=(-0.1, 1.1), size=(1100,750))
-heatmap(angle.(reshape(xr, Nx, :)) .- angle.(reshape(xg, Nx, :)), clim=(-0.05, 0.05), size=(1100,250), c=:bluesreds)
+# using Plots
+# heatmap(abs.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), reshape(xg, Nx, :), dims=1)), clim=(0.75, 1.25), size=(1100,750))
+# heatmap(angle.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), reshape(xg, Nx, :); dims=1)), clim=(-0.1, 1.1), size=(1100,750))
+# heatmap(angle.(reshape(xr, Nx, :)) .- angle.(reshape(xg, Nx, :)), clim=(-0.05, 0.05), size=(1100,250), c=:bluesreds)
