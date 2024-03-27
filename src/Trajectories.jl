@@ -53,6 +53,14 @@ function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), 
 end
 
 function calculateGoldenMeans()
+
+    # Calculate 3D golden means, See:
+    #   Chan, R.W., Ramsay, E.A., Cunningham, C.H. and Plewes, D.B. (2009),
+    #   Temporal stability of adaptive 3D radial MRI using multidimensional golden means.
+    #    Magn. Reson. Med., 61: 354-363.
+    #   https://doi.org/10.1002/mrm.21837
+    # for more information
+
     M = [0 1 0; 0 0 1; 1 0 1]
     v = eigvecs(M)
     gm1 = real(v[1, 3] / v[3, 3])
