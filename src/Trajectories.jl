@@ -29,7 +29,7 @@ function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), 
                 ki[3, ir, ic] =  ctheta[ic, it]                * (kr[ir] + delay[3])
             end
             k[it] = reshape(ki, 3, :)
-            @. k[it] = max(min(k[it], 0.5), -0.5) # avoid NFFT.jl to throw erros. This should alter only very few points
+            @. k[it] = max(min(k[it], 0.5), -0.5) # avoid NFFT.jl to throw errors. This should alter only very few points
         end
     else
         sthetaRot = sin(thetaRot)
@@ -46,7 +46,7 @@ function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), 
                 ki[3, ir, ic] =  (cthetaRot * ctheta[ic, it] - sthetaRot * cphi[ic, it] * stheta[ic, it])                                                                   * (kr[ir] + delay[3])
             end
             k[it] = reshape(ki, 3, :)
-            @. k[it] = max(min(k[it], 0.5), -0.5) # avoid NFFT.jl to throw erros. This should alter only very few points
+            @. k[it] = max(min(k[it], 0.5), -0.5) # avoid NFFT.jl to throw errors. This should alter only very few points
         end
     end
     return k
