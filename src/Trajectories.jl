@@ -6,7 +6,7 @@ function kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), 
     theta = reshape(theta, Nt, Ncyc)
     phi = reshape(phi, Nt, Ncyc)
 
-    return kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = thetaRot, delay = delay, T = T)
+    return kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay, T = T)
 end
 
 # delay is in (HF, AP, LR)
