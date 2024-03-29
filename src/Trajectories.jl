@@ -9,6 +9,32 @@ function kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), 
     return kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay, T = T)
 end
 
+
+function goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), N = 1, T = Float32)
+
+    # Golden ratio based 2D trajectory
+    #
+    # Winkelmann S, Schaeffter T, Koehler T, Eggers H, Doessel O.
+    # An optimal radial profile order based on the Golden Ratio
+    # for time-resolved MRI. IEEE TMI 26:68--76 (2007)
+
+    # Wundrak S, Paul J, Ulrici J, Hell E, Geibel MA, Bernhardt P, Rottbauer W, Rasche V.
+    # Golden ratio sparse MRI using tiny golden angles.
+    # Magn Reson Med 75:2372-2378 (2016)
+    #
+    #   N := number of tiny angle
+
+    τ = (sqrt(5) + 1) / 2
+
+    theta = 0 * (0:(Ncyc*Nt-1)) .+ π/2 # 2D only
+    theta = reshape(theta, Nt, Ncyc)
+
+    phi = (0:(Ncyc*Nt-1)) * π / (τ + N - 1) # FIXME: Float32 results in minor differences for very long repetition trains
+    phi = reshape(phi, Nt, Ncyc)
+
+    return kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay, T = T)
+end
+
 # delay is in (HF, AP, LR)
 function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
     Ncyc, Nt = size(theta)
