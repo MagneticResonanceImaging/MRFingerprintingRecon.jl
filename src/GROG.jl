@@ -48,7 +48,7 @@ function grog_griddata!(data, trj, Nr, img_shape)
     Threads.@threads for i ∈ CartesianIndices(@view data[:, :, 1])
         idt = Threads.threadid() # TODO: fix data race bug
         for j ∈ eachindex(img_shape)
-            trj_i = trj[i[2]][j, i[1]] * img_shape[j] + 1 / 2
+            trj_i = trj[i[2]][j, i[1]] * img_shape[j] + 1 / 2 # +1/2 to avoid stepping outside of FFT definition ∈ (-img_shape[j]/2+1, img_shape[j]/2)
             k_idx = round(trj_i)
             shift = (k_idx - trj_i) * Nr / img_shape[j]
 
