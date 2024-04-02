@@ -1,3 +1,53 @@
+function cartesian(Nx, Ny, Nz, Nt; T = Float32)
+
+    # Cartesian Sampling Trajectory
+    #
+    # Set Nx, Ny, or Nz to 1 if dimension should not be sampled
+
+    # Define sampling on each axis
+    kx = collect(((-Nx+1)/2:(Nx-1)/2) / Nx)
+    ky = collect(((-Ny+1)/2:(Ny-1)/2) / Ny)
+    kz = collect(((-Nz+1)/2:(Nz-1)/2) / Nz)
+
+    k = Vector{Matrix{T}}(undef, Nt)
+
+    for it ∈ eachindex(k)
+
+        ki = Array{T,4}(undef, 3, Nx, Ny, Nz)
+
+        @batch for x ∈ 1:Nx, y ∈ 1:Ny, z ∈ 1:Nz
+
+            ki[1, x, y, z] = kx[x]
+            ki[2, x, y, z] = ky[y]
+            ki[3, x, y, z] = kz[z]
+        end
+
+        k[it] = reshape(ki, 3, :)
+    end
+
+    return k
+end
+
+function cartesian_in_usr(Nx, Ny, Nz, Nt; T = Float32)
+
+    # Cartesian Sampling Trajectory
+    #
+    # Output traj in units of sampling rate
+
+    trj = cartesian(Nx, Ny, Nz, Nt; T = T)
+
+    for it ∈ eachindex(trj)
+
+        @views mul!(trj[it][1,:], trj[it][1,:], Nx)
+        @views mul!(trj[it][2,:], trj[it][2,:], Ny)
+        @views mul!(trj[it][3,:], trj[it][3,:], Nz)
+
+        trj[it] = ceil.(Int, trj[it])
+    end
+
+    return trj
+end
+
 function kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
     gm1, gm2 = calculateGoldenMeans()
     theta = acos.(mod.((0:(Ncyc*Nt-1)) * gm1, 1))
