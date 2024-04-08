@@ -33,8 +33,9 @@ function grog_calculatekernel(data, trj, Nr)
     return lnG
 end
 
-function grog_griddata!(data, trj, Nr, img_shape)
-    lnG = grog_calculatekernel(data, trj, Nr)
+function grog_grid_only!(data, trj, lnG, Nr, img_shape)
+
+    # Function to perform only gridding with GROG based on precomputed operators lnG
 
     Ncoil = size(data, 3)
 
@@ -60,6 +61,15 @@ function grog_griddata!(data, trj, Nr, img_shape)
             @views data[i, :] = exponential!(lGcache[idt], exp_method, cache[idt]) * data[i, :]
         end
     end
+end
+
+function grog_griddata!(data, trj, Nr, img_shape)
+
+    # Function to perform only GROG calibration and gridding of data
+
+    lnG = grog_calculatekernel(data, trj, Nr)
+
+    grog_grid_only!(data, trj, lnG, Nr, img_shape)
 end
 
 function calculateBackProjection_gridded(data, trj, U, cmaps)
