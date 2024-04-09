@@ -18,4 +18,5 @@ end
 @testset "GROG" begin
     include("grog_spoke_shift.jl")
     include("grog_grid_backproj.jl")
+    include("grog_precalc_shift.jl")
 end

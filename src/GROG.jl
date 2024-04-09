@@ -2,6 +2,12 @@ function grog_calculatekernel(data, trj, Nr)
     # self-calibrating radial GROG (https://doi.org/10.1002/mrm.21565)
 
     Ncoil = size(data, 3)
+    Nrep = size(data, 4)
+
+    if (1 != Nrep) # Avoid error during reshape joining Nrep and Nt
+        data = permutedims(data, (1,2,4,3))
+    end
+
     data = reshape(data, Nr, :, Ncoil)
     Ns = size(data, 2) # number of spokes across whole trajectory
     Nd = size(trj[1], 1) # number of dimensions
@@ -35,32 +41,45 @@ end
 
 function grog_grid_only!(data, trj, lnG, Nr, img_shape)
 
-    # Function to perform only gridding with GROG based on precomputed operators lnG
+    # Function to perform gridding with GROG based on precomputed GROG operators lnG
+    # Dims:
+    #       data:   [samples, spokes, timesteps, coils, repetitions of sampling pattern]
+    #       trj:    [timesteps, repetitions][dims, samples]
+    #       lnG:    [dims][Ncoils, Ncoils]
+    #
+    # Assumption:
+    #       Sampling pattern repeats in repetitions dimension! -> Reuse of calculated GROG shifts!
 
     Ncoil = size(data, 3)
+    Nrep = size(data, 4)
 
-    Nt = length(trj) # number of time points
-    data = reshape(data, :, Nt, Ncoil) # make sure data has correct size before gridding
+    trj2 = trj[:, 1]
+
+    Nt = length(trj2) # number of time points
+    data = reshape(data, :, Nt, Ncoil, Nrep) # make sure data has correct size before gridding
 
     exp_method = ExpMethodHigham2005()
     cache = [ExponentialUtilities.alloc_mem(lnG[1], exp_method) for _ ∈ 1:Threads.nthreads()]
     lGcache = [similar(lnG[1]) for _ ∈ 1:Threads.nthreads()]
 
-    Threads.@threads for i ∈ CartesianIndices(@view data[:, :, 1])
+    Threads.@threads for i ∈ CartesianIndices(@view data[:, :, 1, 1])
         idt = Threads.threadid() # TODO: fix data race bug
         for j ∈ eachindex(img_shape)
-            trj_i = trj[i[2]][j, i[1]] * img_shape[j] + 1 / 2 # +1/2 to avoid stepping outside of FFT definition ∈ (-img_shape[j]/2+1, img_shape[j]/2)
+            trj_i = trj2[i[2]][j, i[1]] * img_shape[j] + 1 / 2 # +1/2 to avoid stepping outside of FFT definition ∈ (-img_shape[j]/2+1, img_shape[j]/2)
             k_idx = round(trj_i)
             shift = (k_idx - trj_i) * Nr / img_shape[j]
 
-            # overwrite trj with rounded grid point index
-            trj[i[2]][j, i[1]] = k_idx + img_shape[j] ÷ 2
+            # store rounded grid point index
+            trj2[i[2]][j, i[1]] = k_idx + img_shape[j] ÷ 2
 
             # overwrite data with gridded data
             lGcache[idt] .= shift .* lnG[j]
-            @views data[i, :] = exponential!(lGcache[idt], exp_method, cache[idt]) * data[i, :]
+            @views data[i, :, :] =  exponential!(lGcache[idt], exp_method, cache[idt]) * data[i, :, :]
         end
     end
+
+    # overwrite trj with rounded grid point index.
+    trj = repeat(trj2, outer = [1, Nrep])
 end
 
 function grog_griddata!(data, trj, Nr, img_shape)
