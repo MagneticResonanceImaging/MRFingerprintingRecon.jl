@@ -1,56 +1,31 @@
-function calculateKernelBasis(img_shape, trj, U)
-    Ncoeff = size(U, 2)
-    Nt = length(trj) # number of time points
-    @assert Nt == size(U, 1) "Mismatch between trajectory and basis"
-
-    Λ = zeros(eltype(U), Ncoeff, Ncoeff, img_shape...)
-
-    for it ∈ eachindex(trj), ix ∈ axes(trj[it], 2)
-        k_idx = ntuple(j -> mod1(Int(trj[it][j, ix]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
-        k_idx = CartesianIndex(k_idx)
-
-        for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
-            Λ[ic[1], ic[2], k_idx] += conj(U[it, ic[1]]) * U[it, ic[2]]
-        end
-    end
-    return Λ
-end
-
-function calculateKernelBasis(D, U)
-    Ncoeff = size(U, 2)
-    img_shape = size(D)[1:end-1]
-    Λ = Array{eltype(U)}(undef, Ncoeff, Ncoeff, img_shape...)
-
-    D .= ifftshift(D, 1:length(img_shape))
-    Threads.@threads for i ∈ CartesianIndices(img_shape)
-        Λ[:, :, i] .= U' * (D[i, :] .* U) #U' * diagm(D) * U
-    end
-
-    return Λ
-end
-
 ## ##########################################################################
 # FFTNormalOp
 #############################################################################
-struct _FFTNormalOp{S,T,N,E,F,G}
-    shape::S
-    Ncoeff::Int
-    fftplan::E
-    ifftplan::F
-    Λ::Array{Complex{T},3}
-    kmask_indcs::Vector{Int}
-    kL1::Array{Complex{T},N}
-    kL2::Array{Complex{T},N}
-    cmaps::G
-end
+
+"""
+    FFTNormalOp(img_shape, trj, U; cmaps)
+    FFTNormalOp(M, U; cmaps)
+    FFTNormalOp(Λ; cmaps)
+
+Create normal operator of FFT operator.
+Differentiate between functions exploiting a pre-calculated kernel basis `Λ` and the functions which calculate Λ based on a passed trajectory `trj` or mask `M`.
+
+# Arguments
+- `img_shape::Tuple{Int}`: Image dimensions
+- `traj::Vector{Matrix{Float32}}`: Trajectory
+- `U::Matrix{ComplexF32}`: Basis coefficients of subspace
+- `cmaps::Matrix{ComplexF32}`: Coil sensitivities
+- `M::Vector{Matrix{Float32}}`: Mask
+- `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
+"""
 
 function FFTNormalOp(img_shape, trj, U; cmaps=(1,))
     Λ = calculateKernelBasis(img_shape, trj, U)
     return FFTNormalOp(Λ; cmaps)
 end
 
-function FFTNormalOp(D, U; cmaps=(1,))
-    Λ = calculateKernelBasis(D, U)
+function FFTNormalOp(M, U; cmaps=(1,))
+    Λ = calculateKernelBasis(M, U)
     return FFTNormalOp(Λ; cmaps)
 end
 
@@ -80,6 +55,53 @@ function FFTNormalOp(Λ; cmaps=(1,))
         nothing,
         (res, x, α, β) -> mul!(res, A, x, α, β),
     )
+end
+
+## ##########################################################################
+# Internal use
+#############################################################################
+
+struct _FFTNormalOp{S,T,N,E,F,G}
+    shape::S
+    Ncoeff::Int
+    fftplan::E
+    ifftplan::F
+    Λ::Array{Complex{T},3}
+    kmask_indcs::Vector{Int}
+    kL1::Array{Complex{T},N}
+    kL2::Array{Complex{T},N}
+    cmaps::G
+end
+
+function calculateKernelBasis(img_shape, trj, U)
+    Ncoeff = size(U, 2)
+    Nt = length(trj) # number of time points
+    @assert Nt == size(U, 1) "Mismatch between trajectory and basis"
+
+    Λ = zeros(eltype(U), Ncoeff, Ncoeff, img_shape...)
+
+    for it ∈ eachindex(trj), ix ∈ axes(trj[it], 2)
+        k_idx = ntuple(j -> mod1(Int(trj[it][j, ix]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
+        k_idx = CartesianIndex(k_idx)
+
+        for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
+            Λ[ic[1], ic[2], k_idx] += conj(U[it, ic[1]]) * U[it, ic[2]]
+        end
+    end
+    return Λ
+end
+
+function calculateKernelBasis(M, U)
+    Ncoeff = size(U, 2)
+    img_shape = size(M)[1:end-1]
+    Λ = Array{eltype(U)}(undef, Ncoeff, Ncoeff, img_shape...)
+
+    M .= ifftshift(M, 1:length(img_shape))
+    Threads.@threads for i ∈ CartesianIndices(img_shape)
+        Λ[:, :, i] .= U' * (M[i, :] .* U) #U' * diagm(D) * U
+    end
+
+    return Λ
 end
 
 function LinearAlgebra.mul!(x::Vector{T}, S::_FFTNormalOp, b, α, β) where {T}
