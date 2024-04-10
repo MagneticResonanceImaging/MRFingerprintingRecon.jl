@@ -11,7 +11,7 @@ using SplitApplyCombine
 using ExponentialUtilities
 
 export FFTNormalOp, grog_griddata!, calculateBackProjection_gridded
-export NFFTNormalOpBasisFunc, NFFTNormalOpBasisFuncLO, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA, calcFilteredBackProjection
+export NFFTNormalOp, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA, calcFilteredBackProjection
 
 function __init__()
     if Threads.nthreads() > 1

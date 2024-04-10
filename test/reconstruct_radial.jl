@@ -70,7 +70,7 @@ end
 b = calculateBackProjection(data, trj, cmaps; U=U)
 
 ## construct forward operator
-A = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U, cmaps=cmaps)
+A = NFFTNormalOp((Nx,Nx), trj, U, cmaps=cmaps)
 
 ## test forward operator
 λ = zeros(Complex{T}, Nc, Nc, 2Nx*2Nx)
