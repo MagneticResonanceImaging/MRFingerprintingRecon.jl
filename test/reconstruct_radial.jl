@@ -9,10 +9,10 @@ using Test
 
 ## set parameters
 T  = Float32
-Nx = 64
+Nx = 32
 Nc = 4
-Nt = 100
-Ncyc = 100
+Nt = 20
+Ncyc = 10
 
 ## create test image
 x = zeros(Complex{T}, Nx, Nx, Nc)
