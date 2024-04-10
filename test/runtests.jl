@@ -11,12 +11,10 @@ end
 @testset "Recon Cartesian" begin
     include("reconstruct_cart.jl")
 end
-@testset "Recon GROG" begin
-    include("reconstruct_grog.jl")
-end
 
 @testset "GROG" begin
     include("grog_spoke_shift.jl")
     include("grog_grid_backproj.jl")
     include("grog_precalc_shift.jl")
+    include("reconstruct_grog.jl")
 end
