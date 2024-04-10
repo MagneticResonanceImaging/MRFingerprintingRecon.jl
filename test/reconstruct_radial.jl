@@ -67,7 +67,7 @@ for icoil ∈ 1:Ncoil
 end
 
 ## BackProjection
-b = calculateBackProjection(data, trj, U, cmaps)
+b = calculateBackProjection(data, trj, cmaps; U=U)
 
 ## construct forward operator
 A = NFFTNormalOpBasisFuncLO((Nx,Nx), trj, U, cmaps=cmaps)
