@@ -1,5 +1,16 @@
+"""
+    grog_calculatekernel(data, trj, Nr)
+
+Perform GROG kernel calibration based on whole radial trajectory and passed data.
+Calibration follows the work on self-calibrating radial GROG (https://doi.org/10.1002/mrm.21565).
+
+# Arguments
+- `data::Matrix{ComplexF32}`: Basis coefficients of subspace
+- `traj::Vector{Matrix{Float32}}`: Trajectory
+- `Nr::Int`: Number of samples per read out
+"""
+
 function grog_calculatekernel(data, trj, Nr)
-    # self-calibrating radial GROG (https://doi.org/10.1002/mrm.21565)
 
     Ncoil = size(data, 3)
     Nrep = size(data, 4)
@@ -39,16 +50,28 @@ function grog_calculatekernel(data, trj, Nr)
     return lnG
 end
 
-function grog_grid_only!(data, trj, lnG, Nr, img_shape)
+"""
+    grog_grid_only!(data, trj, lnG, Nr, img_shape)
 
-    # Function to perform gridding with GROG based on precomputed GROG operators lnG
-    # Dims:
-    #       data:   [samples, spokes, timesteps, coils, repetitions of sampling pattern]
-    #       trj:    [timesteps, repetitions][dims, samples]
-    #       lnG:    [dims][Ncoils, Ncoils]
-    #
-    # Assumption:
-    #       Sampling pattern repeats in repetitions dimension! -> Reuse of calculated GROG shifts!
+Perform gridding of data based on pre-calculated GROG kernel.
+
+# Arguments
+- `data::Matrix{ComplexF32}`: Basis coefficients of subspace
+- `traj::Vector{Matrix{Float32}}`: Trajectory
+- `lnG::Vector{Matrix{Float32}}`: Natural logarithm of GROG kernel in all dimensions
+- `Nr::Int`: Number of samples per read out
+- `img_shape::Tuple{Int}`: Image dimensions
+
+# Dimensions:
+- `data`:   [samples, spokes, timesteps, coils, repetitions of sampling pattern]
+- `trj`:    [timesteps, repetitions][dims, samples]
+- `lnG`:    [dims][Ncoils, Ncoils]
+
+# Further:
+- Ensure sampling pattern repeats in repetitions dimension!
+"""
+
+function grog_grid_only!(data, trj, lnG, Nr, img_shape)
 
     Ncoil = size(data, 3)
     Nrep = size(data, 4)
@@ -82,14 +105,36 @@ function grog_grid_only!(data, trj, lnG, Nr, img_shape)
     trj = repeat(trj2, outer = [1, Nrep])
 end
 
-function grog_griddata!(data, trj, Nr, img_shape)
+"""
+    grog_griddata!(data, trj, Nr, img_shape)
 
-    # Function to perform only GROG calibration and gridding of data
+Perform GROG kernel calibration and gridding of data in-place.
+
+# Arguments
+- `data::Matrix{ComplexF32}`: Basis coefficients of subspace
+- `traj::Vector{Matrix{Float32}}`: Trajectory
+- `Nr::Int`: Number of samples per read out
+- `img_shape::Tuple{Int}`: Image dimensions
+"""
+
+function grog_griddata!(data, trj, Nr, img_shape)
 
     lnG = grog_calculatekernel(data, trj, Nr)
 
     grog_grid_only!(data, trj, lnG, Nr, img_shape)
 end
+
+"""
+    calculateBackProjection_gridded(data, trj, U, cmaps)
+
+Calculate gridded backprojection
+
+# Arguments
+- `data::Matrix{ComplexF32}`: Basis coefficients of subspace
+- `trj::Vector{Matrix{Float32}}`: Trajectory
+- `U::Matrix{ComplexF32}`: Basis coefficients of subspace
+- `cmaps::Matrix{ComplexF32}`: Coil sensitivities
+"""
 
 function calculateBackProjection_gridded(data, trj, U, cmaps)
     Ncoil = length(cmaps)
