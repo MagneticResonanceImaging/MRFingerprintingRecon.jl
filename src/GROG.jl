@@ -15,7 +15,7 @@ function grog_calculatekernel(data, trj, Nr)
     Ncoil = size(data, 3)
     Nrep = size(data, 4)
 
-    if (1 != Nrep) # Avoid error during reshape joining Nrep and Nt
+    if (1 != Nrep) # Avoid error during reshape that joins rep and t dim
         data = permutedims(data, (1,2,4,3))
     end
 
@@ -33,6 +33,7 @@ function grog_calculatekernel(data, trj, Nr)
     # 1) Precompute n, m for the trajectory
     trjr = reshape(combinedimsview(trj), Nd, Nr, :)
     nm = transpose(dropdims(diff(trjr[:, 1:2, :], dims=2), dims=2)) .* Nr # units of sampling rate
+    nm = repeat(nm, outer = [Nrep]) # Stack trj in time if sampling repeats
 
     # 2) For each spoke, solve Eq3 for Gθ and compute matrix log
     Threads.@threads for ip ∈ axes(data, 2)
@@ -76,9 +77,7 @@ function grog_grid_only!(data, trj, lnG, Nr, img_shape)
     Ncoil = size(data, 3)
     Nrep = size(data, 4)
 
-    trj2 = trj[:, 1]
-
-    Nt = length(trj2) # number of time points
+    Nt = length(trj) # number of time points
     data = reshape(data, :, Nt, Ncoil, Nrep) # make sure data has correct size before gridding
 
     exp_method = ExpMethodHigham2005()
@@ -88,21 +87,18 @@ function grog_grid_only!(data, trj, lnG, Nr, img_shape)
     Threads.@threads for i ∈ CartesianIndices(@view data[:, :, 1, 1])
         idt = Threads.threadid() # TODO: fix data race bug
         for j ∈ eachindex(img_shape)
-            trj_i = trj2[i[2]][j, i[1]] * img_shape[j] + 1 / 2 # +1/2 to avoid stepping outside of FFT definition ∈ (-img_shape[j]/2+1, img_shape[j]/2)
+            trj_i = trj[i[2]][j, i[1]] * img_shape[j] + 1 / 2 # +1/2 to avoid stepping outside of FFT definition ∈ (-img_shape[j]/2+1, img_shape[j]/2)
             k_idx = round(trj_i)
             shift = (k_idx - trj_i) * Nr / img_shape[j]
 
             # store rounded grid point index
-            trj2[i[2]][j, i[1]] = k_idx + img_shape[j] ÷ 2
+            trj[i[2]][j, i[1]] = k_idx + img_shape[j] ÷ 2
 
-            # overwrite data with gridded data
+            # overwrite trj with rounded grid point index.
             lGcache[idt] .= shift .* lnG[j]
             @views data[i, :, :] =  exponential!(lGcache[idt], exp_method, cache[idt]) * data[i, :, :]
         end
     end
-
-    # overwrite trj with rounded grid point index.
-    trj = repeat(trj2, outer = [1, Nrep])
 end
 
 """
@@ -134,6 +130,10 @@ Calculate gridded backprojection
 - `trj::Vector{Matrix{Float32}}`: Trajectory
 - `U::Matrix{ComplexF32}`: Basis coefficients of subspace
 - `cmaps::Matrix{ComplexF32}`: Coil sensitivities
+
+# Note
+In case of repeated sampling (Nrep > 1), a joint basis reconstruction is required.
+Therefore, the basis needs to have a temporal dimension of Nt⋅Nrep with Nt as time dimension defined by the trajectory.
 """
 
 function calculateBackProjection_gridded(data, trj, U, cmaps)
@@ -143,8 +143,15 @@ function calculateBackProjection_gridded(data, trj, U, cmaps)
     img_idx = CartesianIndices(img_shape)
 
     Nt = length(trj)
-    @assert Nt == size(U, 1) "Mismatch between trajectory and basis"
-    data = reshape(data, :, Nt, Ncoil)
+    Nrep = size(data, 4)
+
+    if (1 != Nrep) # Avoid error during reshape that joins rep and t dim
+        data = permutedims(data, (1,2,4,3))
+        @assert Nt*Nrep == size(U, 1) "Mismatch between data and basis"
+    else
+        @assert Nt == size(U, 1) "Mismatch between trajectory and basis"
+    end
+    data = reshape(data, :, Nt*Nrep, Ncoil)
 
     dataU = similar(data, img_shape..., Ncoeff)
     xbp = zeros(eltype(data), img_shape..., Ncoeff)
@@ -153,8 +160,9 @@ function calculateBackProjection_gridded(data, trj, U, cmaps)
         for icoil ∈ axes(data, 3)
             dataU[img_idx, icoef] .= 0
 
-            for i ∈ CartesianIndices(@view data[:, :, 1])
-                k_idx = ntuple(j -> mod1(Int(trj[i[2]][j, i[1]]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
+            for i ∈ CartesianIndices(@view data[:, :, 1, 1])
+                t_idx = mod(i[2] + Nt - 1, Nt) + 1 # "mod" to incorporate repeated sampling pattern, "mod(i[2]+Nt-1,Nt)+1" to compensate for one indexing
+                k_idx = ntuple(j -> mod1(Int(trj[t_idx][j, i[1]]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
                 k_idx = CartesianIndex(k_idx)
 
                 @views dataU[k_idx, icoef] += data[i[1], i[2], icoil] * conj(U[i[2], icoef])

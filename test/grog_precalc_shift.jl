@@ -57,49 +57,55 @@ for icoil ∈ 1:Ncoil
 end
 
 # Create repeating pattern
-trj2 = repeat(deepcopy(trj), outer = [1, Nrep])
-
 data2 = repeat(deepcopy(data), outer = [1, 1, 1, Nrep])
 
 
-## Calibrate GROG kernel
+## #####################################
+# Test Calibration of GROG kernel
+########################################
+
 lnG = MRFingerprintingRecon.grog_calculatekernel(data, trj, Nr)
-lnG2 = MRFingerprintingRecon.grog_calculatekernel(data2, trj2, Nr)
+lnG2 = MRFingerprintingRecon.grog_calculatekernel(data2, trj, Nr)
 
 @test lnG ≈ lnG2 rtol = 1e-6
 
 
-## Gridding of each sample with non repeating trajectory (Reference)
-MRFingerprintingRecon.grog_grid_only!(data, trj, lnG, Nr, (Nx,Nx))
+## #####################################
+# Test Gridding with GROG kernel
+########################################
+trj1 =  deepcopy(trj)
 
-## Exploit Precalculated Shifts
-data3 = deepcopy(data2)
-trj3 = deepcopy(trj2)
-MRFingerprintingRecon.grog_grid_only!(data3, trj3, lnG2, Nr, (Nx,Nx))
+# Gridding of each sample with non repeating trajectory (Reference)
+MRFingerprintingRecon.grog_grid_only!(data, trj1, lnG, Nr, (Nx,Nx))
 
-## Gridding of each sample with individual shift estimation
-data4 = deepcopy(data2)
-trj4 = deepcopy(trj2)
+# Exploit Precalculated Shifts
+MRFingerprintingRecon.grog_grid_only!(data2, trj, lnG2, Nr, (Nx,Nx))
 
-# Join time and repetition dimension to calculate shifts individually
-data4 = permutedims(data4, (1,2,4,3))
-data4 = reshape(data4, Nr, :, Ncoil)
-trj4 = reshape(combinedimsview(trj4), Nd, Nr, :)
-trj4 = [trj4[:,:,t] for t=1:Nrep*Nt]
-
-MRFingerprintingRecon.grog_grid_only!(data4, trj4, lnG2, Nr, (Nx,Nx))
-
-# Undo formatting for comparison with data3 and trj3
-data4 = reshape(data4, Nr, Nt, Nrep, Ncoil)
-data4 = permutedims(data4, (1,2,4,3))
-trj4 = reshape(combinedimsview(trj4), Nd, Nr, Nt, Nrep)
-trj4 = [trj4[:,:,t,r] for t=1:Nt, r=1:Nrep]
+# Compare gridding with and without repeating pattern
+@test data ≈ data2[:,:,:,1] rtol = 1e-6
+@test data ≈ data2[:,:,:,3] rtol = 1e-6
 
 
-## Compare gridding with and without repeating pattern
-@test combinedimsview(trj) ≈ combinedimsview(trj3)[:,:,:,1] rtol = 1e-6
-@test data ≈ data3[:,:,:,1] rtol = 1e-6
+## #####################################
+# Test Gridded Reconstruction with and without Repeating Pattern
+########################################
 
-## Compare gridding of repeating pattern with and without exploitation of repeating patterns
-@test trj3 ≈ trj4 rtol = 1e-6
-@test data3 ≈ data4 rtol = 1e-6
+U = ones(ComplexF32, size(data)[2], 1)
+
+# Reconstruction without repeating pattern
+A_grog = FFTNormalOp((Nx,Nx), trj, U; cmaps)
+x1 = calculateBackProjection_gridded(data, trj, U, cmaps)
+xg1 = cg(A_grog, vec(x1), maxiter=20)
+xg1 = reshape(xg1, Nx, Nx)
+
+# Reconstruction with repeating pattern
+U2 = repeat(U, outer=[Nrep]) # For joint subspace reconstruction
+A_grog = FFTNormalOp((Nx,Nx), trj, U2; cmaps)
+x2 = calculateBackProjection_gridded(data2, trj, U2, cmaps)
+xg2 = cg(A_grog, vec(x2), maxiter=20)
+xg2 = reshape(xg2, Nx, Nx)
+
+@test xg1 ≈ xg2 rtol = 5e-3
+
+# using Plots
+# heatmap(abs.(cat(reshape(xg1, Nx, :), reshape(xg2, Nx, :), dims=1)), clim=(0.75, 1.25))
