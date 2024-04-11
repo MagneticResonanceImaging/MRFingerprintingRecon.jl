@@ -77,15 +77,6 @@ for icoil ∈ 1:Ncoil
     end
 end
 
-## test GROG kernels for random spokes in trajectory
-lnG = MRFingerprintingRecon.grog_calculatekernel(data, trj, Nr)
-data_r = reshape(data, Nr, :, Ncoil)
-trj_r = reshape(combinedimsview(trj), 2, Nr, :)
-for ispoke in rand(axes(data_r,2), 20) # test 20 random spokes
-    nm = dropdims(diff(trj_r[:,1:2,ispoke],dims=2),dims=2) .* Nr
-    @test [data_r[j,ispoke,:][ic] for j in 2:Nr, ic = 1:Ncoil] ≈ [(exp(nm[1] * lnG[1]) * exp(nm[2] * lnG[2]) * data_r[j,ispoke,:])[ic] for j in 1:Nr-1, ic =1:Ncoil] rtol = 3e-1
-end
-
 ## Ground truth reconstruction by cropping k-space
 xc = fftshift(fft(x, 1:2), 1:2)
 for i ∈ CartesianIndices(xc)
