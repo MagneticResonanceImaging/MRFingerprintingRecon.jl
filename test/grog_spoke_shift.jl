@@ -8,6 +8,9 @@ using NFFT
 using SplitApplyCombine
 using Test
 
+using Random
+Random.seed!(42)
+
 ##
 T  = Float32
 Nx = 32
@@ -65,7 +68,7 @@ data_r = reshape(data, Nr, :, Ncoil)
 
 trj_r = reshape(combinedimsview(trj), 2, Nr, :)
 
-for ispoke ∈ 1:20 # test first 20 spokes
+for ispoke ∈ rand(axes(data_r, 2), 42) # test randomly 42 spokes
 
     # Distance matrix θn
     nm = dropdims(diff(trj_r[:,1:2,ispoke],dims=2),dims=2) .* Nr
