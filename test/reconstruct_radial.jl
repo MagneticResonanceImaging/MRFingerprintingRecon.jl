@@ -7,6 +7,9 @@ using FFTW
 using NFFT
 using Test
 
+using Random
+Random.seed!(42)
+
 ## set parameters
 T  = Float32
 Nx = 32
