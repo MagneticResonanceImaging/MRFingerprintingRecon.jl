@@ -25,6 +25,7 @@ function grog_calculatekernel(data, trj, Nr)
 
     @assert Nr > Ncoil "Ncoil < Nr, problem is ill posed"
     @assert Ns > Ncoil^2 "Number of spokes < Ncoil^2, problem is ill posed"
+    @assert isinteger(Ns / (Nrep * length(trj))) "Mismatch between trajectory and data"
 
     # preallocations
     lnG = Array{eltype(data)}(undef, Nd, Ncoil, Ncoil) #matrix of GROG operators
