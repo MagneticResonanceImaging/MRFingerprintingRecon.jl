@@ -23,8 +23,8 @@ function grog_calculatekernel(data, trj, Nr)
     Ns = size(data, 2) # number of spokes across whole trajectory
     Nd = size(trj[1], 1) # number of dimensions
 
-    @assert Nr > Ncoil "Ncoil < Nr, problem is ill posed"
-    @assert Ns > Ncoil^2 "Number of spokes < Ncoil^2, problem is ill posed"
+    Nr < Ncoil && @warn "Ncoil < Nr, problem is ill posed"
+    Ns < Ncoil^2 && @warn "Number of spokes < Ncoil^2, problem is ill posed"
     @assert isinteger(Ns / (Nrep * length(trj))) "Mismatch between trajectory and data"
 
     # preallocations
