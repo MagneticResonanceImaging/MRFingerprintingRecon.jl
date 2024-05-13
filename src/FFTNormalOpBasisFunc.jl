@@ -31,7 +31,7 @@ end
 function FFTNormalOp(Λ; cmaps=(1,))
     Ncoeff = size(Λ, 1)
     img_shape = size(Λ)[3:end]
-    kL1 = Array{eltype(Λ)}(undef, img_shape..., Ncoeff)
+    kL1 = similar(Λ, eltype(Λ), (img_shape..., Ncoeff))
     kL2 = similar(kL1)
 
     @views kmask = (Λ[1, 1, CartesianIndices(img_shape)] .!= 0)
@@ -101,7 +101,7 @@ end
 function calculateKernelBasis(M, U)
     Ncoeff = size(U, 2)
     img_shape = size(M)[1:end-1]
-    Λ = Array{eltype(U)}(undef, Ncoeff, Ncoeff, img_shape...)
+    Λ = similar(U, eltype(U), (Ncoeff, Ncoeff, img_shape...))
 
     M .= ifftshift(M, 1:length(img_shape))
     Threads.@threads for i ∈ CartesianIndices(img_shape)

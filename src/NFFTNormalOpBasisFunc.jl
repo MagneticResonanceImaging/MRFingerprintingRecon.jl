@@ -47,7 +47,7 @@ function NFFTNormalOp(
 
     Ncoeff = size(Λ, 1)
     img_shape_os = 2 .* img_shape
-    kL1 = Array{Complex{T}}(undef, img_shape_os..., Ncoeff)
+    kL1 = similar(Λ, eltype(Λ), (img_shape_os..., Ncoeff))
     kL2 = similar(kL1)
 
     ktmp = @view kL1[CartesianIndices(img_shape_os),1]
@@ -103,11 +103,11 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
     Nt = size(U,1)
     Nk = size(trj[1],2)
 
-    λ  = Array{Complex{T}}(undef, img_shape_os)
+    λ  = similar(U, eltype(U), (img_shape_os))
     λ2 = similar(λ)
     λ3 = similar(λ)
-    Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
-    S  = Array{Complex{T}}(undef, Nk, Nt)
+    Λ = similar(U, eltype(U), (Ncoeff, Ncoeff, length(kmask_indcs)))
+    S = similar(U, eltype(U), (Nk, Nt))
 
     fftplan  = plan_fft(λ; flags = FFTW.MEASURE, num_threads=Threads.nthreads())
     nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = TENSOR, blocking = true, fftflags = FFTW.MEASURE, m=5, σ=2)
