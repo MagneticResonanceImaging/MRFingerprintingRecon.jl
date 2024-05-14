@@ -93,7 +93,7 @@ xr = cg(A_rad, vec(xbp_rad), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
 
 ## GROG Reconstruction
-grog_griddata!(data, trj, Nr, (Nx,Nx))
+radial_grog!(data, trj, Nr, (Nx,Nx))
 xbp_grog = calculateBackProjection_gridded(data, trj, U, cmaps)
 A_grog = FFTNormalOp((Nx,Nx), trj, U; cmaps)
 xg = cg(A_grog, vec(xbp_grog), maxiter=20)

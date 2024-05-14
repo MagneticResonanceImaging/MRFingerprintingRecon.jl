@@ -19,7 +19,7 @@ Nt = 100
 Ncoil = 9
 
 ## Create trajectory
-trj = MRFingerprintingRecon.goldenratio(Nr, 1, Nt; N=1)
+trj = MRFingerprintingRecon.traj_2d_radial_goldenratio(Nr, 1, Nt; N=1)
 trj = [trj[i][1:2,:] for i ∈ eachindex(trj)] # only 2D traj, here
 
 ## Create phantom geometry
@@ -62,7 +62,7 @@ end
 
 ## Test GROG kernels for some spokes in golden ratio based trajectory
 
-lnG = MRFingerprintingRecon.grog_calculatekernel(data, trj, Nr)
+lnG = MRFingerprintingRecon.grog_calib(data, trj, Nr)
 
 data_r = reshape(data, Nr, :, Ncoil)
 

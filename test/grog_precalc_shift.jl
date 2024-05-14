@@ -18,7 +18,7 @@ Nrep = 3
 Nd = 2
 
 ## Create trajectory
-trj = MRFingerprintingRecon.goldenratio(Nr, 1, Nt; N=1)
+trj = MRFingerprintingRecon.traj_2d_radial_goldenratio(Nr, 1, Nt; N=1)
 trj = [trj[i][1:Nd,:] for i ∈ eachindex(trj)] # only 2D traj, here
 
 ## Create phantom geometry
@@ -64,8 +64,8 @@ data2 = repeat(deepcopy(data), outer = [1, 1, 1, Nrep])
 # Test Calibration of GROG kernel
 ########################################
 
-lnG = MRFingerprintingRecon.grog_calculatekernel(data, trj, Nr)
-lnG2 = MRFingerprintingRecon.grog_calculatekernel(data2, trj, Nr)
+lnG = MRFingerprintingRecon.grog_calib(data, trj, Nr)
+lnG2 = MRFingerprintingRecon.grog_calib(data2, trj, Nr)
 
 @test lnG ≈ lnG2 rtol = 1e-6
 
@@ -76,10 +76,10 @@ lnG2 = MRFingerprintingRecon.grog_calculatekernel(data2, trj, Nr)
 trj1 =  deepcopy(trj)
 
 # Gridding of each sample with non repeating trajectory (Reference)
-MRFingerprintingRecon.grog_grid_only!(data, trj1, lnG, Nr, (Nx,Nx))
+MRFingerprintingRecon.grog_gridding!(data, trj1, lnG, Nr, (Nx,Nx))
 
 # Exploit Precalculated Shifts
-MRFingerprintingRecon.grog_grid_only!(data2, trj, lnG2, Nr, (Nx,Nx))
+MRFingerprintingRecon.grog_gridding!(data2, trj, lnG2, Nr, (Nx,Nx))
 
 # Compare gridding with and without repeating pattern
 @test data ≈ data2[:,:,:,1] rtol = 1e-6

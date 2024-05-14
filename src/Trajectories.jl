@@ -1,4 +1,4 @@
-function cartesian(Nx, Ny, Nz, Nt; T = Float32)
+function traj_2d_cartesian(Nx, Ny, Nz, Nt; T = Float32)
 
     # Cartesian Sampling Trajectory
     #
@@ -60,7 +60,7 @@ function kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), 
 end
 
 
-function goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), N = 1, T = Float32)
+function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), N = 1, T = Float32)
 
     # Golden ratio based 2D trajectory
     #

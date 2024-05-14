@@ -1,5 +1,5 @@
 """
-    grog_calculatekernel(data, trj, Nr)
+	grog_calib(data, trj, Nr)
 
 Perform GROG kernel calibration based on whole radial trajectory and passed data.
 Calibration follows the work on self-calibrating radial GROG (https://doi.org/10.1002/mrm.21565).
@@ -10,7 +10,7 @@ Calibration follows the work on self-calibrating radial GROG (https://doi.org/10
 - `Nr::Int`: Number of samples per read out
 """
 
-function grog_calculatekernel(data, trj, Nr)
+function grog_calib(data, trj, Nr)
 
     Ncoil = size(data, 3)
     Nrep = size(data, 4)
@@ -53,7 +53,7 @@ function grog_calculatekernel(data, trj, Nr)
 end
 
 """
-    grog_grid_only!(data, trj, lnG, Nr, img_shape)
+	grog_gridding!(data, trj, lnG, Nr, img_shape)
 
 Perform gridding of data based on pre-calculated GROG kernel.
 
@@ -73,7 +73,7 @@ Perform gridding of data based on pre-calculated GROG kernel.
 - Ensure sampling pattern repeats in repetitions dimension!
 """
 
-function grog_grid_only!(data, trj, lnG, Nr, img_shape)
+function grog_gridding!(data, trj, lnG, Nr, img_shape)
 
     Ncoil = size(data, 3)
     Nrep = size(data, 4)
@@ -103,7 +103,7 @@ function grog_grid_only!(data, trj, lnG, Nr, img_shape)
 end
 
 """
-    grog_griddata!(data, trj, Nr, img_shape)
+    radial_grog!(data, trj, Nr, img_shape)
 
 Perform GROG kernel calibration and gridding of data in-place.
 
@@ -114,9 +114,9 @@ Perform GROG kernel calibration and gridding of data in-place.
 - `img_shape::Tuple{Int}`: Image dimensions
 """
 
-function grog_griddata!(data, trj, Nr, img_shape)
+function radial_grog!(data, trj, Nr, img_shape)
 
-    lnG = grog_calculatekernel(data, trj, Nr)
+    lnG = grog_calib(data, trj, Nr)
 
-    grog_grid_only!(data, trj, lnG, Nr, img_shape)
+    grog_gridding!(data, trj, lnG, Nr, img_shape)
 end
