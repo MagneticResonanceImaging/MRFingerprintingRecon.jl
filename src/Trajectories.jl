@@ -3,7 +3,7 @@
     traj_2d_cartesian(Nx, Ny, Nz, Nt; T = Int32)
 
 Function to calculate a 2D cartesian trajectory.
-The ouput is relative with samples ∈ [-1:1].
+The ouput is relative with samples ∈ [-1/2:1/2].
 
 # Arguments
 - `Nx::Int`: Number of frequency encoded samples per read out
