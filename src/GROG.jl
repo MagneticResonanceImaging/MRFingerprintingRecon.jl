@@ -1,5 +1,5 @@
 """
-	grog_calib(data, trj, Nr)
+    grog_calib(data, trj, Nr)
 
 Perform GROG kernel calibration based on whole radial trajectory and passed data.
 Calibration follows the work on self-calibrating radial GROG (https://doi.org/10.1002/mrm.21565).
@@ -9,7 +9,6 @@ Calibration follows the work on self-calibrating radial GROG (https://doi.org/10
 - `traj::Vector{Matrix{Float32}}`: Trajectory
 - `Nr::Int`: Number of samples per read out
 """
-
 function grog_calib(data, trj, Nr)
 
     Ncoil = size(data, 3)
@@ -53,7 +52,7 @@ function grog_calib(data, trj, Nr)
 end
 
 """
-	grog_gridding!(data, trj, lnG, Nr, img_shape)
+    grog_gridding!(data, trj, lnG, Nr, img_shape)
 
 Perform gridding of data based on pre-calculated GROG kernel.
 
@@ -72,7 +71,6 @@ Perform gridding of data based on pre-calculated GROG kernel.
 # Further:
 - Ensure sampling pattern repeats in repetitions dimension!
 """
-
 function grog_gridding!(data, trj, lnG, Nr, img_shape)
 
     Ncoil = size(data, 3)
@@ -113,7 +111,6 @@ Perform GROG kernel calibration and gridding of data in-place.
 - `Nr::Int`: Number of samples per read out
 - `img_shape::Tuple{Int}`: Image dimensions
 """
-
 function radial_grog!(data, trj, Nr, img_shape)
 
     lnG = grog_calib(data, trj, Nr)

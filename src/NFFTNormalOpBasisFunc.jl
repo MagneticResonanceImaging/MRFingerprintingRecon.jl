@@ -19,7 +19,6 @@ Differentiate between functions exploiting a pre-calculated Toeplitz kernel basi
 - `verbose::Boolean`: Verbose level
 - `num_fft_threads::Int`: Number of threads for FFT
 """
-
 function NFFTNormalOp(
     img_shape,
     trj::AbstractVector{<:AbstractMatrix{T}},

@@ -14,7 +14,6 @@ Calculate backprojection
 - `cmaps::::AbstractVector{<:AbstractArray{T}}`: Coil sensitivities
 
 """
-
 function calculateBackProjection(data::AbstractArray{T}, trj, img_shape::NTuple{N,Int}; U = N==3 ? I(size(data,2)) : I(1), density_compensation=:none, verbose=false) where {N,T}
     if typeof(trj) <: AbstractMatrix
         trj = [trj]
@@ -96,7 +95,6 @@ Calculate gridded backprojection
 In case of repeated sampling (Nrep > 1), a joint basis reconstruction is required.
 Therefore, the basis needs to have a temporal dimension of Nt⋅Nrep with Nt as time dimension defined by the trajectory.
 """
-
 function calculateBackProjection_gridded(data, trj, U, cmaps)
     Ncoil = length(cmaps)
     Ncoeff = size(U, 2)

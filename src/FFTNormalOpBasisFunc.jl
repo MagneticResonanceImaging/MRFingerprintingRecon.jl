@@ -18,7 +18,6 @@ Differentiate between functions exploiting a pre-calculated kernel basis `Λ` an
 - `M::Vector{Matrix{Float32}}`: Mask
 - `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
 """
-
 function FFTNormalOp(img_shape, trj, U; cmaps=(1,))
     Λ = calculateKernelBasis(img_shape, trj, U)
     return FFTNormalOp(Λ; cmaps)

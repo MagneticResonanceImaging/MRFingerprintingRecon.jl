@@ -1,10 +1,19 @@
+"""
+    traj_2d_cartesian(Nx, Ny, Nz, Nt; T = Float32)
+    traj_2d_cartesian(Nx, Ny, Nz, Nt; T = Int32)
+
+Function to calculate a 2D cartesian trajectory.
+The ouput is relative with samples ∈ [-1:1].
+
+# Arguments
+- `Nx::Int`: Number of frequency encoded samples per read out
+- `Ny::Int`: Number of phase encoding lines
+- `Nz::Int`: Number of phase encoding lines (third dimension)
+- `Nt::Int`: Number of times the sampling pattern is repeated
+- `T::Type`: Type defining the output units of the trajectory
+"""
 function traj_2d_cartesian(Nx, Ny, Nz, Nt; T = Float32)
 
-    # Cartesian Sampling Trajectory
-    #
-    # Set Nx, Ny, or Nz to 1 if dimension should not be sampled
-
-    # Define sampling on each axis
     kx = collect(((-Nx+1)/2:(Nx-1)/2) / Nx)
     ky = collect(((-Ny+1)/2:(Ny-1)/2) / Ny)
     kz = collect(((-Nz+1)/2:(Nz-1)/2) / Nz)
@@ -28,13 +37,21 @@ function traj_2d_cartesian(Nx, Ny, Nz, Nt; T = Float32)
     return k
 end
 
-function cartesian_in_usr(Nx, Ny, Nz, Nt; T = Float32)
+"""
+    traj_2d_cartesian_sr(Nx, Ny, Nz, Nt; T = Int32)
 
-    # Cartesian Sampling Trajectory
-    #
-    # Output traj in units of sampling rate
+Function to calculate a 2D cartesian trajectory with ouput in units of sampling rate: samples ∈ [-N+1:N].
 
-    trj = cartesian(Nx, Ny, Nz, Nt; T = T)
+# Arguments
+- `Nx::Int`: Number of frequency encoded samples per read out
+- `Ny::Int`: Number of phase encoding lines
+- `Nz::Int`: Number of phase encoding lines (third dimension)
+- `Nt::Int`: Number of times the sampling pattern is repeated
+- `T::Type`: Type defining the output units of the trajectory
+"""
+function traj_2d_cartesian_sr(Nx, Ny, Nz, Nt; T = Int32)
+
+    trj = traj_2d_cartesian(Nx, Ny, Nz, Nt; T = Float32)
 
     for it ∈ eachindex(trj)
 
@@ -42,12 +59,29 @@ function cartesian_in_usr(Nx, Ny, Nz, Nt; T = Float32)
         @views mul!(trj[it][2,:], trj[it][2,:], Ny)
         @views mul!(trj[it][3,:], trj[it][3,:], Nz)
 
-        trj[it] = ceil.(Int, trj[it])
+        trj[it] = ceil.(T, trj[it])
     end
 
     return trj
 end
 
+"""
+    kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
+
+Function to calculate  golden means [1] based kooshball trajectory.
+
+# Arguments
+- `Nr::Int`: Number of read out samples
+- `Ncyc::Int`: Number of cycles
+- `Nt::Int`: Number of time steps in the trajectory
+- `thetaRot::Float`: Fixed rotation angle along theta
+- `phiRot::Float`: Fixed rotation angle along phi
+- `delay::Tuple{Float, Float, Float}`: Gradient delays in (HF, AP, LR)
+- `T::Type`: Type defining the output units of the trajectory
+
+# References
+[1] Chan, R.W., Ramsay, E.A., Cunningham, C.H. and Plewes, D.B. (2009), Temporal stability of adaptive 3D radial MRI using multidimensional golden means. Magn. Reson. Med., 61: 354-363. https://doi.org/10.1002/mrm.21837
+"""
 function kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
     gm1, gm2 = calculateGoldenMeans()
     theta = acos.(mod.((0:(Ncyc*Nt-1)) * gm1, 1))
@@ -59,20 +93,27 @@ function kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), 
     return kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay, T = T)
 end
 
+"""
+    traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), N = 1, T = Float32)
 
+Function to calculate 2D golden ratio based trajectory [1].
+By modifying `N` also tiny golden angles [2] are supported.
+
+# Arguments
+- `Nr::Int`: Number of read out samples
+- `Ncyc::Int`: Number of cycles
+- `Nt::Int`: Number of time steps in the trajectory
+- `thetaRot::Float`: Fixed rotation angle along theta
+- `phiRot::Float`: Fixed rotation angle along phi
+- `delay::Tuple{Float, Float, Float}`: Gradient delays in (HF, AP, LR)
+- `N::Int`: Number of tiny golden angle
+- `T::Type`: Type defining the output units of the trajectory
+
+# References
+[1] Winkelmann S, Schaeffter T, Koehler T, Eggers H, Doessel O. An optimal radial profile order based on the Golden Ratio for time-resolved MRI. IEEE TMI 26:68--76 (2007)
+[2] Wundrak S, Paul J, Ulrici J, Hell E, Geibel MA, Bernhardt P, Rottbauer W, Rasche V. Golden ratio sparse MRI using tiny golden angles. Magn Reson Med 75:2372-2378 (2016)
+"""
 function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), N = 1, T = Float32)
-
-    # Golden ratio based 2D trajectory
-    #
-    # Winkelmann S, Schaeffter T, Koehler T, Eggers H, Doessel O.
-    # An optimal radial profile order based on the Golden Ratio
-    # for time-resolved MRI. IEEE TMI 26:68--76 (2007)
-
-    # Wundrak S, Paul J, Ulrici J, Hell E, Geibel MA, Bernhardt P, Rottbauer W, Rasche V.
-    # Golden ratio sparse MRI using tiny golden angles.
-    # Magn Reson Med 75:2372-2378 (2016)
-    #
-    #   N := number of tiny angle
 
     τ = (sqrt(5) + 1) / 2
 
@@ -85,7 +126,20 @@ function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, dela
     return kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay, T = T)
 end
 
-# delay is in (HF, AP, LR)
+"""
+    kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
+
+Function to calculate kooshball trajectory.
+
+# Arguments
+- `Nr::Int`: Number of read out samples
+- `theta::Array{Float,2}`: Array with dimensions: `Ncyc, Nt` defining the angles `theta` for each cycle and timestep.
+- `phi::Array{Float,2}`: Array with dimensions: `Ncyc, Nt` defining the angles `phi` for each cycle and timestep.
+- `thetaRot::Float`: Fixed rotation angle along theta
+- `phiRot::Float`: Fixed rotation angle along phi
+- `delay::Tuple{Float, Float, Float}`: Gradient delays in (HF, AP, LR)
+- `T::Type`: Type defining the output units of the trajectory
+"""
 function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
     Ncyc, Nt = size(theta)
 
@@ -128,14 +182,19 @@ function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), 
     return k
 end
 
-function calculateGoldenMeans()
+## ############################################
+# Helper Functions
+###############################################
 
-    # Calculate 3D golden means, See:
-    #   Chan, R.W., Ramsay, E.A., Cunningham, C.H. and Plewes, D.B. (2009),
-    #   Temporal stability of adaptive 3D radial MRI using multidimensional golden means.
-    #    Magn. Reson. Med., 61: 354-363.
-    #   https://doi.org/10.1002/mrm.21837
-    # for more information
+"""
+    calculateGoldenMeans()
+
+Function to calculate 3D golden means [1].
+
+# References
+[1] Chan, R.W., Ramsay, E.A., Cunningham, C.H. and Plewes, D.B. (2009), Temporal stability of adaptive 3D radial MRI using multidimensional golden means. Magn. Reson. Med., 61: 354-363. https://doi.org/10.1002/mrm.21837
+"""
+function calculateGoldenMeans()
 
     M = [0 1 0; 0 0 1; 1 0 1]
     v = eigvecs(M)
