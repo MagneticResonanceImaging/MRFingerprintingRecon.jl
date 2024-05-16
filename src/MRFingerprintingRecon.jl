@@ -9,6 +9,9 @@ using MRICoilSensitivities
 using LinearOperators
 using SplitApplyCombine
 using ExponentialUtilities
+using GPUArrays
+using JLArrays
+using CUDA
 
 export FFTNormalOp, radial_grog!, calculateBackProjection_gridded
 export NFFTNormalOp, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA, calcFilteredBackProjection
