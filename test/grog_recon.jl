@@ -51,12 +51,12 @@ cmaps = [cmaps[:,:,ic] for ic=1:Ncoil]
 
 ## set up trajectory
 α_g = 2π / (1+√5)
-phi = α_g * (0:Nt*Ncyc-1)
-theta = 0 * (1:Nt*Ncyc) .+ pi/2
+phi = Float32.(α_g * (0:Nt*Ncyc-1))
+theta = Float32.(0 * (1:Nt*Ncyc) .+ pi/2)
 phi = reshape(phi, Ncyc, Nt)
 theta = reshape(theta, Ncyc, Nt)
 
-trj = kooshball(Nr, theta, phi; T = T)
+trj = kooshball(Nr, theta, phi)
 trj = [trj[i][1:2,:] for i ∈ eachindex(trj)]
 
 ## set up basis functions
