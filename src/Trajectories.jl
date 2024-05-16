@@ -1,22 +1,22 @@
 """
-    traj_2d_cartesian(Nx, Ny, Nz, Nt; T = Float32)
-    traj_2d_cartesian(Nx, Ny, Nz, Nt; T = Int32)
+    traj_2d_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float32)
 
-Function to calculate a 2D cartesian trajectory.
-The ouput is relative with samples ∈ [-1/2:1/2].
+Function to calculate a 2D cartesian trajectory in units of sampling rate ∈ {x | -N/2+1 ≤ x ≤ N/2 and x ∈ Z}.
+With `samplingRate_units = false` the ouput is relative with samples ∈ [-1/2:1/2].
 
 # Arguments
 - `Nx::Int`: Number of frequency encoded samples per read out
 - `Ny::Int`: Number of phase encoding lines
 - `Nz::Int`: Number of phase encoding lines (third dimension)
 - `Nt::Int`: Number of times the sampling pattern is repeated
+- `samplingRate_units::Boolean`: Parameter setting the output units to sampling rate
 - `T::Type`: Type defining the output units of the trajectory
 """
-function traj_2d_cartesian(Nx, Ny, Nz, Nt; T = Float32)
+function traj_2d_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float32)
 
-    kx = collect(((-Nx+1)/2:(Nx-1)/2) / Nx)
-    ky = collect(((-Ny+1)/2:(Ny-1)/2) / Ny)
-    kz = collect(((-Nz+1)/2:(Nz-1)/2) / Nz)
+    kx = collect(((-Nx+1)/2:(Nx-1)/2) / (samplingRate_units ? 1 : Nx))
+    ky = collect(((-Ny+1)/2:(Ny-1)/2) / (samplingRate_units ? 1 : Ny))
+    kz = collect(((-Nz+1)/2:(Nz-1)/2) / (samplingRate_units ? 1 : Nz))
 
     k = Vector{Matrix{T}}(undef, Nt)
 
@@ -32,37 +32,13 @@ function traj_2d_cartesian(Nx, Ny, Nz, Nt; T = Float32)
         end
 
         k[it] = reshape(ki, 3, :)
+
+        if samplingRate_units
+            k[it] = round.(k[it] .+ 0.5) # ceil operation on arrays
+        end
     end
 
     return k
-end
-
-"""
-    traj_2d_cartesian_sr(Nx, Ny, Nz, Nt; T = Int32)
-
-Function to calculate a 2D cartesian trajectory with ouput in units of sampling rate: samples ∈ [-N+1:N].
-
-# Arguments
-- `Nx::Int`: Number of frequency encoded samples per read out
-- `Ny::Int`: Number of phase encoding lines
-- `Nz::Int`: Number of phase encoding lines (third dimension)
-- `Nt::Int`: Number of times the sampling pattern is repeated
-- `T::Type`: Type defining the output units of the trajectory
-"""
-function traj_2d_cartesian_sr(Nx, Ny, Nz, Nt; T = Int32)
-
-    trj = traj_2d_cartesian(Nx, Ny, Nz, Nt; T = Float32)
-
-    for it ∈ eachindex(trj)
-
-        @views mul!(trj[it][1,:], trj[it][1,:], Nx)
-        @views mul!(trj[it][2,:], trj[it][2,:], Ny)
-        @views mul!(trj[it][3,:], trj[it][3,:], Nz)
-
-        trj[it] = ceil.(T, trj[it])
-    end
-
-    return trj
 end
 
 """

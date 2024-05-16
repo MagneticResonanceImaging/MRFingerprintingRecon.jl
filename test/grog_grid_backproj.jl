@@ -16,7 +16,7 @@ Nt = 1
 Ncoil = 9
 
 ## Create trajectory
-trj = MRFingerprintingRecon.traj_2d_cartesian(Nx, Nx, 1, Nt)
+trj = MRFingerprintingRecon.traj_2d_cartesian(Nx, Nx, 1, Nt; samplingRate_units=false) # unitless for plan_nfft()
 trj = [trj[i][1:2,:] for i ∈ eachindex(trj)] # only 2D traj here
 
 
