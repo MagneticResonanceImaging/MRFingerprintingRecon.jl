@@ -18,17 +18,17 @@ Differentiate between functions exploiting a pre-calculated kernel basis `Λ` an
 - `M::Vector{Matrix{Float32}}`: Mask
 - `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
 """
-function FFTNormalOp(img_shape, trj, U; cmaps=(1,))
+function FFTNormalOp(img_shape, trj, U; cmaps=(1,), num_fft_threads = round(Int, Threads.nthreads()/size(U, 2)))
     Λ = calculateKernelBasis(img_shape, trj, U)
-    return FFTNormalOp(Λ; cmaps)
+    return FFTNormalOp(Λ; cmaps, num_fft_threads)
 end
 
-function FFTNormalOp(M, U; cmaps=(1,))
+function FFTNormalOp(M, U; cmaps=(1,), num_fft_threads = round(Int, Threads.nthreads()/size(U, 2)))
     Λ = calculateKernelBasis(M, U)
-    return FFTNormalOp(Λ; cmaps)
+    return FFTNormalOp(Λ; cmaps, num_fft_threads )
 end
 
-function FFTNormalOp(Λ; cmaps=(1,))
+function FFTNormalOp(Λ; cmaps=(1,), num_fft_threads = round(Int, Threads.nthreads()/size(Λ, 1)))
     Ncoeff = size(Λ, 1)
     img_shape = size(Λ)[3:end]
     kL1 = Array{eltype(Λ)}(undef, img_shape..., Ncoeff)
@@ -40,8 +40,8 @@ function FFTNormalOp(Λ; cmaps=(1,))
     Λ = Λ[:, :, kmask_indcs]
 
     ktmp = @view kL1[CartesianIndices(img_shape), 1]
-    fftplan = plan_fft!(ktmp; flags=FFTW.MEASURE, num_threads=round(Int, Threads.nthreads() / Ncoeff))
-    ifftplan = plan_ifft!(ktmp; flags=FFTW.MEASURE, num_threads=round(Int, Threads.nthreads() / Ncoeff))
+    fftplan = plan_fft!(ktmp; flags=FFTW.MEASURE, num_threads=num_fft_threads)
+    ifftplan = plan_ifft!(ktmp; flags=FFTW.MEASURE, num_threads=num_fft_threads)
     A = _FFTNormalOp(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps)
 
     return LinearOperator(
@@ -111,7 +111,7 @@ function calculateKernelBasis(M, U)
     return Λ
 end
 
-function LinearAlgebra.mul!(x::Vector{T}, S::_FFTNormalOp, b, α, β) where {T}
+function LinearAlgebra.mul!(x::AbstractVector{T}, S::_FFTNormalOp, b, α, β) where {T}
     idx = CartesianIndices(S.shape)
 
     b = reshape(b, S.shape..., S.Ncoeff)
