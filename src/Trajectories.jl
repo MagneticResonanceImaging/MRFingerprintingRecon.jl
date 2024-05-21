@@ -58,7 +58,7 @@ Function to calculate  golden means [1] based kooshball trajectory.
 # References
 [1] Chan, R.W., Ramsay, E.A., Cunningham, C.H. and Plewes, D.B. (2009), Temporal stability of adaptive 3D radial MRI using multidimensional golden means. Magn. Reson. Med., 61: 354-363. https://doi.org/10.1002/mrm.21837
 """
-function kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
+function kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0))
     gm1, gm2 = calculateGoldenMeans()
     theta = acos.(mod.((0:(Ncyc*Nt-1)) * gm1, 1))
     phi = (0:(Ncyc*Nt-1)) * 2π * gm2
@@ -66,7 +66,7 @@ function kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), 
     theta = reshape(theta, Nt, Ncyc)
     phi = reshape(phi, Nt, Ncyc)
 
-    return kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay, T = T)
+    return kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay)
 end
 
 """
@@ -89,7 +89,7 @@ By modifying `N` also tiny golden angles [2] are supported.
 [1] Winkelmann S, Schaeffter T, Koehler T, Eggers H, Doessel O. An optimal radial profile order based on the Golden Ratio for time-resolved MRI. IEEE TMI 26:68--76 (2007)
 [2] Wundrak S, Paul J, Ulrici J, Hell E, Geibel MA, Bernhardt P, Rottbauer W, Rasche V. Golden ratio sparse MRI using tiny golden angles. Magn Reson Med 75:2372-2378 (2016)
 """
-function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), N = 1, T = Float32)
+function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), N = 1)
 
     τ = (sqrt(5) + 1) / 2
 
@@ -99,11 +99,11 @@ function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, dela
     phi = (0:(Ncyc*Nt-1)) * π / (τ + N - 1) # FIXME: Float32 results in minor differences for very long repetition trains
     phi = reshape(phi, Nt, Ncyc)
 
-    return kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay, T = T)
+    return kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay)
 end
 
 """
-    kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
+    kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0))
 
 Function to calculate kooshball trajectory.
 
@@ -114,9 +114,11 @@ Function to calculate kooshball trajectory.
 - `thetaRot::Float`: Fixed rotation angle along theta
 - `phiRot::Float`: Fixed rotation angle along phi
 - `delay::Tuple{Float, Float, Float}`: Gradient delays in (HF, AP, LR)
-- `T::Type`: Type defining the output units of the trajectory
 """
-function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
+function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0))
+
+    @assert (eltype(theta) == eltype(phi)) "Mismatch between input types of `theta` and `phi`"
+
     Ncyc, Nt = size(theta)
 
     kr = collect(((-Nr+1)/2:(Nr-1)/2) / Nr)
@@ -125,10 +127,10 @@ function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), 
     sphi = sin.(phi)
     cphi = cos.(phi)
 
-    k = Vector{Matrix{T}}(undef, Nt)
+    k = Vector{Matrix{eltype(theta)}}(undef, Nt)
     if thetaRot == 0 && phiRot == 0
         for it ∈ eachindex(k)
-            ki = Array{T,3}(undef, 3, Nr, Ncyc)
+            ki = Array{eltype(theta),3}(undef, 3, Nr, Ncyc)
             @batch for ic = 1:Ncyc, ir ∈ 1:Nr
                 ki[1, ir, ic] = -stheta[ic, it] * cphi[ic, it] * (kr[ir] + delay[1])
                 ki[2, ir, ic] =  stheta[ic, it] * sphi[ic, it] * (kr[ir] + delay[2])
@@ -143,9 +145,9 @@ function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), 
         sphiRot   = sin(phiRot)
         cphiRot   = cos(phiRot)
 
-        k = Vector{Matrix{T}}(undef, Nt)
+        k = Vector{Matrix{eltype(theta)}}(undef, Nt)
         for it ∈ eachindex(k)
-            ki = Array{T,3}(undef, 3, Nr, Ncyc)
+            ki = Array{eltype(theta),3}(undef, 3, Nr, Ncyc)
             @batch for ic = 1:Ncyc, ir ∈ 1:Nr
                 ki[1, ir, ic] = -(cphiRot * cphi[ic, it] * cthetaRot * stheta[ic, it] - sphiRot *  sphi[ic, it] * stheta[ic, it] + cphiRot * ctheta[ic, it] * sthetaRot)    * (kr[ir] + delay[1])
                 ki[2, ir, ic] =  (cphiRot * sphi[ic, it]             * stheta[ic, it] + sphiRot * (cphi[ic, it] * cthetaRot * stheta[ic, it] + ctheta[ic, it] * sthetaRot)) * (kr[ir] + delay[2])
