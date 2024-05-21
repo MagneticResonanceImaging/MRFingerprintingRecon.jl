@@ -1,3 +1,19 @@
+"""
+    calculateBackProjection(data, trj, img_shape; U, density_compensation, verbose)
+    calculateBackProjection(data, trj, cmaps; U, density_compensation, verbose)
+
+Calculate backprojection
+
+# Arguments
+- `data::AbstractArray{T}`: Basis coefficients of subspace
+- `trj::Vector{Matrix{Float32}}`: Trajectory
+- `img_shape::NTuple{N,Int}`: Shape of image
+- `U::Matrix{ComplexF32}`: Basis coefficients of subspace
+- `density_compensation`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractVector{<:AbstractVector}``
+- `verbose::Boolean`: Verbosity level
+- `cmaps::::AbstractVector{<:AbstractArray{T}}`: Coil sensitivities
+
+"""
 function calculateBackProjection(data::AbstractArray{T}, trj, img_shape::NTuple{N,Int}; U = N==3 ? I(size(data,2)) : I(1), density_compensation=:none, verbose=false) where {N,T}
     if typeof(trj) <: AbstractMatrix
         trj = [trj]
@@ -63,6 +79,64 @@ function calculateBackProjection(data::AbstractArray{T,N}, trj, cmaps::AbstractV
     end
     return xbp
 end
+
+"""
+    calculateBackProjection_gridded(data, trj, U, cmaps)
+
+Calculate gridded backprojection
+
+# Arguments
+- `data::Matrix{ComplexF32}`: Basis coefficients of subspace
+- `trj::Vector{Matrix{Float32}}`: Trajectory
+- `U::Matrix{ComplexF32}`: Basis coefficients of subspace
+- `cmaps::Matrix{ComplexF32}`: Coil sensitivities
+
+# Note
+In case of repeated sampling (Nrep > 1), a joint basis reconstruction is required.
+Therefore, the basis needs to have a temporal dimension of Nt⋅Nrep with Nt as time dimension defined by the trajectory.
+"""
+function calculateBackProjection_gridded(data, trj, U, cmaps)
+    Ncoil = length(cmaps)
+    Ncoeff = size(U, 2)
+    img_shape = size(cmaps[1])
+    img_idx = CartesianIndices(img_shape)
+
+    Nt = length(trj)
+    Nrep = size(data, 4)
+
+    if (1 != Nrep) # Avoid error during reshape that joins rep and t dim
+        data = permutedims(data, (1,2,4,3))
+        @assert Nt*Nrep == size(U, 1) "Mismatch between data and basis"
+    else
+        @assert Nt == size(U, 1) "Mismatch between trajectory and basis"
+    end
+    data = reshape(data, :, Nt*Nrep, Ncoil)
+
+    dataU = similar(data, img_shape..., Ncoeff)
+    xbp = zeros(eltype(data), img_shape..., Ncoeff)
+
+    Threads.@threads for icoef ∈ axes(U, 2)
+        for icoil ∈ axes(data, 3)
+            dataU[img_idx, icoef] .= 0
+
+            for i ∈ CartesianIndices(@view data[:, :, 1, 1])
+                t_idx = mod(i[2] + Nt - 1, Nt) + 1 # "mod" to incorporate repeated sampling pattern, "mod(i[2]+Nt-1,Nt)+1" to compensate for one indexing
+                k_idx = ntuple(j -> mod1(Int(trj[t_idx][j, i[1]]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
+                k_idx = CartesianIndex(k_idx)
+
+                @views dataU[k_idx, icoef] += data[i[1], i[2], icoil] * conj(U[i[2], icoef])
+            end
+
+            @views ifft!(dataU[img_idx, icoef])
+            @views xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* fftshift(dataU[img_idx, icoef])
+        end
+    end
+    return xbp
+end
+
+## ##########################################################################
+# Internal use
+#############################################################################
 
 function applyDensityCompensation!(data, trj; density_compensation=:radial_3D)
     for it in axes(data, 2)

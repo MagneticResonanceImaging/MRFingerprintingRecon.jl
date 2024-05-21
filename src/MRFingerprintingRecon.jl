@@ -7,8 +7,11 @@ using NFFT
 using NFFTTools
 using MRICoilSensitivities
 using LinearOperators
+using SplitApplyCombine
+using ExponentialUtilities
 
-export NFFTNormalOpBasisFunc, NFFTNormalOpBasisFuncLO, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA, calcFilteredBackProjection
+export FFTNormalOp, radial_grog!, calculateBackProjection_gridded
+export NFFTNormalOp, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA, calcFilteredBackProjection
 
 function __init__()
     if Threads.nthreads() > 1
@@ -17,6 +20,8 @@ function __init__()
     FFTW.set_num_threads(Threads.nthreads())
 end
 
+include("GROG.jl")
+include("FFTNormalOpBasisFunc.jl")
 include("NFFTNormalOpBasisFunc.jl")
 include("CoilMaps.jl")
 include("BackProjection.jl")

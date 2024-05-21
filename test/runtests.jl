@@ -5,6 +5,16 @@ using Test
 #     include("cmaps.jl")
 # end
 
-@testset "Reconstruct" begin
-    include("reconstruct.jl")
+@testset "Recon Radial" begin
+    include("reconstruct_radial.jl")
+end
+@testset "Recon Cartesian" begin
+    include("reconstruct_cart.jl")
+end
+
+@testset "GROG" begin
+    include("grog_spoke_shift.jl")
+    include("grog_grid_backproj.jl")
+    include("grog_precalc_shift.jl")
+    include("grog_recon.jl")
 end
