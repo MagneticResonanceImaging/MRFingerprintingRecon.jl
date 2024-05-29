@@ -101,13 +101,14 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
 
     Ncoeff = size(U, 2)
     Nt = size(U,1)
-    Nk = size(trj[1],2)
 
     λ  = Array{Complex{T}}(undef, img_shape_os)
     λ2 = similar(λ)
     λ3 = similar(λ)
     Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
-    S  = Array{Complex{T}}(undef, Nk, Nt)
+    
+    trj_l = [size(trj[it],2) for it in eachindex(trj)]
+    S  = Vector{Complex{T}}(undef, sum(trj_l))
 
     fftplan  = plan_fft(λ; flags = FFTW.MEASURE, num_threads=Threads.nthreads())
     nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = TENSOR, blocking = true, fftflags = FFTW.MEASURE, m=5, σ=2)
@@ -116,7 +117,9 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
                 @simd for it ∈ axes(U,1)
-                    @inbounds S[:,it] .= conj(U[it,ic1]) * U[it,ic2]
+                    idx1 = sum(trj_l[1:it-1]) + 1
+                    idx2 = sum(trj_l[1:it])
+                    @inbounds S[idx1:idx2] .= conj(U[it,ic1]) * U[it,ic2]
                 end
 
                 mul!(λ, adjoint(nfftplan), vec(S))
@@ -136,6 +139,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
 
     return Λ, kmask_indcs
 end
+
 
 function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) where {T}
     idx = CartesianIndices(S.shape)
