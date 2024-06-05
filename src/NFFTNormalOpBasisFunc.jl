@@ -35,7 +35,7 @@ end
 
 function NFFTNormalOp(
     img_shape,
-    Λ::Array{Complex{T},3},
+    Λ::Array{T,3},
     kmask_indcs;
     cmaps=[ones(T, img_shape)],
     num_fft_threads = round(Int, Threads.nthreads()/size(Λ, 1))
@@ -47,7 +47,7 @@ function NFFTNormalOp(
 
     Ncoeff = size(Λ, 1)
     img_shape_os = 2 .* img_shape
-    kL1 = Array{Complex{T}}(undef, img_shape_os..., Ncoeff)
+    kL1 = Array{complex(T)}(undef, img_shape_os..., Ncoeff)
     kL2 = similar(kL1)
 
     ktmp = @view kL1[CartesianIndices(img_shape_os),1]
@@ -57,7 +57,7 @@ function NFFTNormalOp(
     A = _NFFTNormalOp(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps)
 
 	return LinearOperator(
-        Complex{T},
+        complex(T),
         prod(A.shape) * A.Ncoeff,
         prod(A.shape) * A.Ncoeff,
         true,
@@ -72,12 +72,12 @@ end
 # Internal use
 #############################################################################
 
-struct _NFFTNormalOp{S,T,N,E,F,G}
+struct _NFFTNormalOp{S,T,N,E,F,G,H}
     shape::S
     Ncoeff::Int
     fftplan::E
     ifftplan::F
-    Λ::Array{Complex{T},3}
+    Λ::H
     kmask_indcs::Vector{Int}
     kL1::Array{Complex{T},N}
     kL2::Array{Complex{T},N}
@@ -105,7 +105,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
     λ  = Array{Complex{T}}(undef, img_shape_os)
     λ2 = similar(λ)
     λ3 = similar(λ)
-    Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
+    Λ  = Array{Tc}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
     
     trj_l = [size(trj[it],2) for it in eachindex(trj)]
     S  = Vector{Complex{T}}(undef, sum(trj_l))
@@ -128,9 +128,14 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
                 λ2 .= conj.(λ2)
                 mul!(λ3, fftplan, λ2)
 
+                if eltype(Λ) <: Real
+                    λ  .= real.(λ)
+		    λ3 .= real.(λ3)
+                end
+
                 Threads.@threads for it ∈ eachindex(kmask_indcs)
                     @inbounds Λ[ic2,ic1,it] = λ3[kmask_indcs[it]]
-                    @inbounds Λ[ic1,ic2,it] =  λ[kmask_indcs[it]]
+                    @inbounds Λ[ic1,ic2,it] = λ[kmask_indcs[it]]
                 end
             end
             verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
@@ -168,7 +173,7 @@ function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) w
             Threads.@threads for i in eachindex(kL2_rs)
                 kL2_rs[i] = 0
             end
-            Threads.@threads for i ∈ axes(S.Λ, 3)
+            Threads.@threads for i ∈ axes(S.Λ, 3) # FIXME: Why does it allcocate so much more here?!
                 @views @inbounds mul!(kL2_rs[S.kmask_indcs[i], :], S.Λ[:, :, i], kL1_rs[S.kmask_indcs[i], :])
             end
 
