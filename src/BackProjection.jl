@@ -14,7 +14,7 @@ Calculate backprojection
 - `cmaps::::AbstractVector{<:AbstractArray{T}}`: Coil sensitivities
 
 """
-function calculateBackProjection(data, trj, img_shape::NTuple{N,Int}; T = Float32, U = N==3 ? I(size(data,2)) : I(1), density_compensation=:none, verbose=false) where {N}
+function calculateBackProjection(data, trj, img_shape::NTuple{N,Int}; T = Float32, U = N==3 ? ones(size(data,1)) : I(1), density_compensation=:none, verbose=false) where {N}
     Ncoef = size(U,2)
     p = plan_nfft(reduce(hcat, trj), img_shape; precompute=TENSOR, blocking=true, fftflags=FFTW.MEASURE)
 
@@ -30,7 +30,7 @@ function calculateBackProjection(data, trj, img_shape::NTuple{N,Int}; T = Float3
                 @inbounds data_temp[it] = data[it][:,icoil] * conj(U[it,icoef])
             end
             applyDensityCompensation!(data_temp, trj; density_compensation)
-
+            
             @views mul!(xbp[img_idx, icoef, icoil], adjoint(p), reduce(vcat,data_temp))
         end
         verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
@@ -38,7 +38,7 @@ function calculateBackProjection(data, trj, img_shape::NTuple{N,Int}; T = Float3
     return xbp
 end
 
-function calculateBackProjection(data, trj, cmaps::AbstractVector{<:AbstractArray{T}}; U = N==3 ? I(size(data,2)) : I(1), density_compensation=:none, verbose=false) where {N,T}
+function calculateBackProjection(data, trj, cmaps::AbstractVector{<:AbstractArray{T}}; U = N==3 ? ones(size(data,1)) : I(1), density_compensation=:none, verbose=false) where {N,T}
     test_dimension(data, trj, U, cmaps)
 
     Ncoef = size(U,2)
