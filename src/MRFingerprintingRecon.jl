@@ -4,6 +4,7 @@ using Polyester
 using LinearAlgebra
 using FFTW
 using NFFT
+using CuNFFT
 using NFFTTools
 using MRICoilSensitivities
 using LinearOperators

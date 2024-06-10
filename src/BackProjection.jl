@@ -44,8 +44,9 @@ function calculateBackProjection(data::AbstractArray{T}, trj, img_shape::NTuple{
     return xbp
 end
 
-function calculateBackProjection(data::AbstractArray{T,N}, trj, cmaps::AbstractVector{<:AbstractArray{T}}; U = N==3 ? I(size(data,2)) : I(1), density_compensation=:none, verbose=false) where {N,T}
-    if typeof(trj) <: AbstractMatrix
+function calculateBackProjection(data::aT, trj, cmaps::AbstractVector{aT2}; U = I(size(data,2)), density_compensation=:none, verbose=false) where {aT,aT2}
+
+    if typeof(trj) <: Union{AbstractMatrix, AbstractGPUMatrix}
         trj = [trj]
     end
 
@@ -58,21 +59,47 @@ function calculateBackProjection(data::AbstractArray{T,N}, trj, cmaps::AbstractV
     Ncoef = size(U,2)
     img_shape = size(cmaps[1])
 
-    p = plan_nfft(reduce(hcat,trj), img_shape; precompute=TENSOR, blocking = true, fftflags = FFTW.MEASURE)
-    xbp = zeros(T, img_shape..., Ncoef)
-    xtmp = Array{T}(undef, img_shape)
+    # GPU
+    if aT <: AbstractGPUArray
+        verbose && println("GPU Backprojection")
+        p = plan_nfft(CuArray, reduce(hcat,trj), img_shape) # CuNFFT requires k::Matrix{T}!
+        xbp = CuArray(zeros(eltype(data), img_shape..., Ncoef))
+        xtmp = CuArray{eltype(data)}(undef, img_shape)
+
+        max_threads = 256
+        threads_x = min(max_threads, size(data, 1))
+        threads_y = min(max_threads ÷ threads_x, size(data, 2))
+        threads = (threads_x, threads_y)
+        blocks = ceil.(Int, (size(data, 1), size(data, 2)) ./ threads)
+
+    # CPU
+    else
+        verbose && println("CPU Backprojection")
+        p = plan_nfft(Array, reduce(hcat,trj), img_shape; precompute=TENSOR, blocking = true, fftflags = FFTW.MEASURE)
+        xbp = zeros(eltype(data), img_shape..., Ncoef)
+        xtmp = Array{eltype(data)}(undef, img_shape)
+    end
 
     data_temp = similar(@view data[:,:,1]) # size = Ncycles*Nr x Nt
     img_idx = CartesianIndices(img_shape)
     verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U,2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
-            @simd for i ∈ CartesianIndices(data_temp)
-                @inbounds data_temp[i] = data[i,icoil] * conj(U[i[2],icoef])
+
+            # GPU
+            if aT <: AbstractGPUArray
+                @cuda threads=threads blocks=blocks kernel_mul!(data_temp, data, conj(U), icoef, icoil)
+
+            # CPU
+            else
+                @simd for i ∈ CartesianIndices(data_temp)
+                    @inbounds data_temp[i] = data[i,icoil] * conj(U[i[2],icoef])
+                end
             end
+
             applyDensityCompensation!(data_temp, trj; density_compensation)
 
-            mul!(xtmp, adjoint(p), vec(data_temp))
+            mul!(xtmp, adjoint(p), reshape(data_temp, size(data,1)*size(data,2)))
             xbp[img_idx,icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
         verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
@@ -178,4 +205,15 @@ function test_dimension(data, trj, U, cmaps)
         "The last dimension of `cmaps` is $(Ncoils) and the 3ⁿᵈ dimension of data is $(size(data,3)). They should match and reflect the number of coils.",
     )
 
+end
+
+function kernel_mul!(data_temp, data, Uc, icoef, icoil)
+    
+    i = (blockIdx().x-1) * blockDim().x + threadIdx().x
+    j = (blockIdx().y-1) * blockDim().y + threadIdx().y
+    
+    if i <= size(data, 1) && j <= size(data, 2)
+        data_temp[i,j] = data[i,j,icoil] * Uc[j,icoef]
+    end
+    return
 end
