@@ -133,16 +133,16 @@ end
 #############################################################################
 
 function applyDensityCompensation!(data, trj; density_compensation=:radial_3D)
-    data_temp = reshape(data,:,length(trj))
-    for it in axes(data_temp, 2)
+    data = reshape(data,:,length(trj))
+    for it in axes(data, 2)
         if density_compensation == :radial_3D
-            data_temp[:,it] .*= transpose(sum(abs2, trj[it], dims=1))
+            data[:, it] .*= transpose(sum(abs2, trj[it], dims=1))
         elseif density_compensation == :radial_2D
-            data_temp[:,it] .*= transpose(sqrt.(sum(abs2, trj[it], dims=1)))
+            data[:, it] .*= transpose(sqrt.(sum(abs2, trj[it], dims=1)))
         elseif density_compensation == :none
             # do nothing here
         elseif isa(density_compensation, AbstractVector{<:AbstractVector})
-            data_temp[:,it] .*= density_compensation[it]
+            data[:, it] .*= density_compensation[it]
         else
             error("`density_compensation` can only be `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractVector{<:AbstractVector}`")
         end
