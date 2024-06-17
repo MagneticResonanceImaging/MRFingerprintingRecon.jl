@@ -35,7 +35,6 @@ function NFFTNormalOp(img_shape, trj, U;
     # GPU
     if typeof(Λ) <: AbstractGPUArray
         verbose && println("GPU Operator")
-        # ktmp = kL1[CartesianIndices(img_shape_os)]
         ktmp = kL1[CartesianIndices(size(kL1))]
         fftplan!  = plan_fft!(ktmp, [1, 2])
         ifftplan! = plan_ifft!(ktmp, [1, 2])

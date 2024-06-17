@@ -3,9 +3,9 @@
 #############################################################################
 
 """
-    FFTNormalOp(img_shape, trj, U; cmaps)
-    FFTNormalOp(M, U; cmaps)
-    FFTNormalOp(Λ; cmaps)
+    FFTNormalOp(img_shape, trj, U; cmaps, verbose)
+    FFTNormalOp(M, U; cmaps, verbose)
+    FFTNormalOp(Λ; cmaps, verbose)
 
 Create normal operator of FFT operator.
 Differentiate between functions exploiting a pre-calculated kernel basis `Λ` and the functions which calculate Λ based on a passed trajectory `trj` or mask `M`.
@@ -17,18 +17,19 @@ Differentiate between functions exploiting a pre-calculated kernel basis `Λ` an
 - `cmaps::Matrix{ComplexF32}`: Coil sensitivities
 - `M::Vector{Matrix{Float32}}`: Mask
 - `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
+- `verbose::Boolean`: Verbose level
 """
-function FFTNormalOp(img_shape, trj, U; cmaps=(1,))
+function FFTNormalOp(img_shape, trj, U; cmaps=(1,), verbose = false)
     Λ = calculateKernelBasis(img_shape, trj, U)
     return FFTNormalOp(Λ; cmaps)
 end
 
-function FFTNormalOp(M, U; cmaps=(1,))
+function FFTNormalOp(M, U; cmaps=(1,), verbose = false)
     Λ = calculateKernelBasis(M, U)
     return FFTNormalOp(Λ; cmaps)
 end
 
-function FFTNormalOp(Λ; cmaps=(1,))
+function FFTNormalOp(Λ; cmaps=(1,), verbose = false)
     Ncoeff = size(Λ, 1)
     img_shape = size(Λ)[3:end]
     kL1 = similar(Λ, eltype(Λ), (img_shape..., Ncoeff))
@@ -43,14 +44,14 @@ function FFTNormalOp(Λ; cmaps=(1,))
     if typeof(Λ) <: AbstractGPUArray
         # GPU first to avoid Λ::JLArrays (<: AbstractArray & <: AbstractGPUArray) runs through CPU only
         # FFT interface supports differing options on CPU and GPU
-        println("FFT: Abstract GPU Array version")
+        verbose && println("FFT: Abstract GPU Array version")
         ktmp = kL1[CartesianIndices(size(kL1))]
         fftplan! = plan_fft!(ktmp, [1, 2])
         ifftplan! = plan_ifft!(ktmp, [1, 2])
 
     # CPU
     else typeof(Λ) <: AbstractArray
-        println("FFT: Abstract CPU Array version")
+        verbose && println("FFT: Abstract CPU Array version")
         ktmp = kL1[CartesianIndices(img_shape), 1]
         fftplan! = plan_fft!(ktmp; flags=FFTW.MEASURE, num_threads=round(Int, Threads.nthreads() / Ncoeff))
         ifftplan! = plan_ifft!(ktmp; flags=FFTW.MEASURE, num_threads=round(Int, Threads.nthreads() / Ncoeff))
