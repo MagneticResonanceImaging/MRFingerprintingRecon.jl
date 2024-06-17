@@ -24,6 +24,7 @@ function __init__()
     FFTW.set_num_threads(Threads.nthreads())
 end
 
+include("KernelCUDA.jl")
 include("GROG.jl")
 include("FFTNormalOpBasisFunc.jl")
 include("NFFTNormalOpBasisFunc.jl")

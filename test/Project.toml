@@ -1,6 +1,7 @@
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+CuNFFT = "a9291f20-7f4c-4d50-b30d-4e07b13252e1"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
 ImagePhantoms = "71a99df6-f52c-4da1-bd2a-69d6f37f3252"
