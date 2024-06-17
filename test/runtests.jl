@@ -5,6 +5,10 @@ using Test
 #     include("cmaps.jl")
 # end
 
+@testset "Misc" begin
+    include("data_vec_array_conversion.jl")
+end
+
 @testset "Recon Radial" begin
     include("reconstruct_radial.jl")
 end

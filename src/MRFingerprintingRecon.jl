@@ -20,6 +20,7 @@ function __init__()
     FFTW.set_num_threads(Threads.nthreads())
 end
 
+include("misc.jl")
 include("GROG.jl")
 include("FFTNormalOpBasisFunc.jl")
 include("NFFTNormalOpBasisFunc.jl")
