@@ -96,29 +96,34 @@ function calculateBackProjection_gridded(data, trj, U, cmaps)
     img_idx = CartesianIndices(img_shape)
 
     Nt = length(trj)
-    Nrep = size(data, 4)
+    Nrep = size(data[1], 3)
 
     if (1 != Nrep) # Avoid error during reshape that joins rep and t dim
-        data = permutedims(data, (1,2,4,3))
+        data = cat(data..., dims = 4)
+        data = permutedims(data, (1,4,3,2))
         @assert Nt*Nrep == size(U, 1) "Mismatch between data and basis"
     else
+	data = cat(data..., dims = 3)
+        data = permutedims(data, (1,3,2))
         @assert Nt == size(U, 1) "Mismatch between trajectory and basis"
     end
-    data = reshape(data, :, Nt*Nrep, Ncoil)
 
-    dataU = similar(data, img_shape..., Ncoeff)
-    xbp = zeros(eltype(data), img_shape..., Ncoeff)
+    data = reshape(data, :, Nt*Nrep, Ncoil)
+    data = [data[:,i,:] for i=1:size(data, 2)]
+
+    dataU = similar(data[1], img_shape..., Ncoeff)
+    xbp = zeros(eltype(data[1]), img_shape..., Ncoeff)
 
     Threads.@threads for icoef ∈ axes(U, 2)
-        for icoil ∈ axes(data, 3)
+        for icoil ∈ axes(data[1], 2)
             dataU[img_idx, icoef] .= 0
 
-            for i ∈ CartesianIndices(@view data[:, :, 1, 1])
-                t_idx = mod(i[2] + Nt - 1, Nt) + 1 # "mod" to incorporate repeated sampling pattern, "mod(i[2]+Nt-1,Nt)+1" to compensate for one indexing
-                k_idx = ntuple(j -> mod1(Int(trj[t_idx][j, i[1]]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
+	    for it ∈ axes(data,1), i ∈ axes(data[1],1)
+                t_idx = mod(it + Nt - 1, Nt) + 1 # "mod" to incorporate repeated sampling pattern, "mod(it+Nt-1,Nt)+1" to compensate for one indexing
+                k_idx = ntuple(j -> mod1(Int(trj[t_idx][j, i]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
                 k_idx = CartesianIndex(k_idx)
 
-                @views dataU[k_idx, icoef] += data[i[1], i[2], icoil] * conj(U[i[2], icoef])
+                @views dataU[k_idx, icoef] += data[it][i, icoil] * conj(U[it, icoef])
             end
 
             @views ifft!(dataU[img_idx, icoef])

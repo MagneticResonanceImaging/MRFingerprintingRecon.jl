@@ -64,8 +64,11 @@ for icoil ∈ 1:Ncoil
     end
 end
 
+## Move data to vector format
+data = [data[:,i,:] for i=1:size(data,2)]
+
 ## Reconstruction and test
-U = ones(ComplexF32, size(data)[2], 1)
+U = ones(ComplexF32, length(data), 1)
 
 #### Convert traj to units of sampling rate
 #### Required for calculateBackProjection_gridded function

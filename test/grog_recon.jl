@@ -35,15 +35,6 @@ cmaps[:,:,7] .= phantom(1:Nx, 1:Nx, [gauss2((7Nx÷8, Nx÷8),  (Nx÷1.5,Nx÷1.5))
 cmaps[:,:,8] .= phantom(1:Nx, 1:Nx, [gauss2((7Nx÷8, Nx÷2),  (Nx÷1.5,Nx÷1.5))], 2)
 cmaps[:,:,9] .= phantom(1:Nx, 1:Nx, [gauss2((7Nx÷8, 7Nx÷8), (Nx÷1.5,Nx÷1.5))], 2)
 
-# [cmaps[i,:,2] .*= exp( 1im * π/4 * i/Nx) for i ∈ axes(cmaps,1)]
-# [cmaps[i,:,3] .*= exp(-1im * π/4 * i/Nx) for i ∈ axes(cmaps,1)]
-# [cmaps[:,i,4] .*= exp( 1im * π/4 * i/Nx) for i ∈ axes(cmaps,2)]
-# [cmaps[:,i,5] .*= exp(-1im * π/4 * i/Nx) for i ∈ axes(cmaps,2)]
-# [cmaps[i,:,6] .*= exp( 2im * π/4 * i/Nx) for i ∈ axes(cmaps,1)]
-# [cmaps[i,:,7] .*= exp(-2im * π/4 * i/Nx) for i ∈ axes(cmaps,1)]
-# [cmaps[:,i,8] .*= exp( 2im * π/4 * i/Nx) for i ∈ axes(cmaps,2)]
-# [cmaps[:,i,9] .*= exp(-2im * π/4 * i/Nx) for i ∈ axes(cmaps,2)]
-
 for i ∈ CartesianIndices(@view cmaps[:,:,1])
     cmaps[i,:] ./= norm(cmaps[i,:])
 end
@@ -86,11 +77,15 @@ for i ∈ CartesianIndices(xc)
 end
 xc = ifft(ifftshift(xc, 1:2), 1:2)
 
+## Move data to vector format
+data = [data[:,i,:] for i=1:size(data,2)]
+
 ## NFFT Reconstruction
 xbp_rad = calculateBackProjection(data, trj, cmaps; U=U)
 A_rad = NFFTNormalOp((Nx,Nx), trj, U; cmaps=cmaps)
 xr = cg(A_rad, vec(xbp_rad), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
+
 
 ## GROG Reconstruction
 radial_grog!(data, trj, Nr, (Nx,Nx))

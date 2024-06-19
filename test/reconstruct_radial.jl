@@ -69,6 +69,9 @@ for icoil ∈ 1:Ncoil
     end
 end
 
+## Move data to vector format
+data = [data[:,i,:] for i=1:size(data,2)]
+
 ## BackProjection
 b = calculateBackProjection(data, trj, cmaps; U=U)
 

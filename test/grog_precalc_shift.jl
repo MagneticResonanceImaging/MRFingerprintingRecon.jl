@@ -59,6 +59,9 @@ end
 # Create repeating pattern
 data2 = repeat(deepcopy(data), outer = [1, 1, 1, Nrep])
 
+## Vectorize data
+data = [data[:,i,:,:] for i=1:size(data,2)]
+data2 = [data2[:,i,:,:] for i=1:size(data2,2)]
 
 ## #####################################
 # Test Calibration of GROG kernel
@@ -82,15 +85,15 @@ MRFingerprintingRecon.grog_gridding!(data, trj1, lnG, Nr, (Nx,Nx))
 MRFingerprintingRecon.grog_gridding!(data2, trj, lnG2, Nr, (Nx,Nx))
 
 # Compare gridding with and without repeating pattern
-@test data ≈ data2[:,:,:,1] rtol = 1e-6
-@test data ≈ data2[:,:,:,3] rtol = 1e-6
+@test data[1] ≈ data2[1][:,:,1] rtol = 1e-6
+@test data[1] ≈ data2[1][:,:,3] rtol = 1e-6
 
 
 ## #####################################
 # Test Gridded Reconstruction with and without Repeating Pattern
 ########################################
 
-U = ones(ComplexF32, size(data)[2], 1)
+U = ones(ComplexF32, length(data), 1)
 
 # Reconstruction without repeating pattern
 A_grog = FFTNormalOp((Nx,Nx), trj, U; cmaps)
