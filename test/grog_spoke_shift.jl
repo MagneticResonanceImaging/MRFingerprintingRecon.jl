@@ -24,7 +24,6 @@ trj = [trj[i][1:2,:] for i ∈ eachindex(trj)] # only 2D traj, here
 
 ## Create phantom geometry
 x = shepp_logan(Nx)
-# heatmap(abs.(x), clim=(0.85, 1.25))
 
 
 ## Simulate coil sensitivity maps
@@ -59,25 +58,23 @@ for icoil ∈ 1:Ncoil
     end
 end
 
+# Rearrange data into vector
+data = [data[:,i,:] for i=1:size(data,2)]
 
 ## Test GROG kernels for some spokes in golden ratio based trajectory
 
 lnG = MRFingerprintingRecon.grog_calib(data, trj, Nr)
 
-data_r = reshape(data, Nr, :, Ncoil)
-
-trj_r = reshape(combinedimsview(trj), 2, Nr, :)
-
-for ispoke ∈ rand(axes(data_r, 2), 42) # test randomly 42 spokes
+for ispoke ∈ rand(axes(data, 1), 42) # test randomly 42 spokes
 
     # Distance matrix θn
-    nm = dropdims(diff(trj_r[:,1:2,ispoke],dims=2),dims=2) .* Nr
+    nm = dropdims(diff(trj[ispoke][:,1:2],dims=2),dims=2) .* Nr
 
-    # d1 = [data_r[j,ispoke,:][ic] for j in 1:Nr-1, ic = 1:Ncoil]
+    # d1 = [data[j,ispoke,:][ic] for j in 1:Nr-1, ic = 1:Ncoil]
 
-    d1_shifted = [(exp(nm[1] * lnG[1]) * exp(nm[2] * lnG[2]) * data_r[j,ispoke,:])[ic] for j in 1:Nr-1, ic =1:Ncoil]
+    d1_shifted = [(exp(nm[1] * lnG[1]) * exp(nm[2] * lnG[2]) * data[ispoke][j,:])[ic] for j in 1:Nr-1, ic =1:Ncoil]
 
-    d2 = [data_r[j,ispoke,:][ic] for j in 2:Nr, ic = 1:Ncoil]
+    d2 = [data[ispoke][j,:][ic] for j in 2:Nr, ic = 1:Ncoil]
 
     # FIXME: Relative tolerance the best choice?
     @test d1_shifted ≈ d2 rtol = 3e-1
