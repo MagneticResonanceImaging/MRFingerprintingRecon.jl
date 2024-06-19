@@ -19,8 +19,8 @@ Nrep = 4
 data = randn(Nr*Ncyc, Nt, Ncoil)
 ref = copy(data)
 
-data = MRFingerprintingRecon.data_vec!(data)
-data = MRFingerprintingRecon.data_array!(data)
+data = MRFingerprintingRecon.data_vec(data)
+data = MRFingerprintingRecon.data_array(data)
 
 @test data ≈ ref  rtol = 1e-7
 
@@ -30,8 +30,8 @@ data = MRFingerprintingRecon.data_array!(data)
 data = randn(Nr*Ncyc, Nt, Ncoil, Nrep)
 ref = copy(data)
 
-data = MRFingerprintingRecon.data_vec!(data)
-data = MRFingerprintingRecon.data_array!(data)
+data = MRFingerprintingRecon.data_vec(data)
+data = MRFingerprintingRecon.data_array(data)
 
 @test data ≈ ref  rtol = 1e-7
 
@@ -41,7 +41,7 @@ data = MRFingerprintingRecon.data_array!(data)
 data = randn(Nx, Nx, Nrep)
 ref = copy(data)
 
-data = MRFingerprintingRecon.data_vec!(data; Cartesian=true)
-data = MRFingerprintingRecon.data_array!(data; Cartesian=true)
+data = MRFingerprintingRecon.data_vec(data; Cartesian=true)
+data = MRFingerprintingRecon.data_array(data; Cartesian=true)
 
 @test data ≈ ref  rtol = 1e-7
