@@ -14,59 +14,62 @@ Calculate backprojection
 - `cmaps::::AbstractVector{<:AbstractArray{T}}`: Coil sensitivities
 
 """
-function calculateBackProjection(data, trj, img_shape::NTuple{N,Int}; T = Float32, U = N==3 ? ones(size(data,1)) : I(1), density_compensation=:none, verbose=false) where {N}
+function calculateBackProjection(data, trj, img_shape::NTuple{N,Int}; T = Float32, U = N==3 ? I(size(data,1)) : I(1), density_compensation=:none, verbose=false) where {N}
     Ncoef = size(U,2)
-    p = plan_nfft(reduce(hcat, trj), img_shape; precompute=TENSOR, blocking=true, fftflags=FFTW.MEASURE)
+
+    trj_v = reduce(hcat, trj)
+    p = plan_nfft(trj_v, img_shape; precompute=TENSOR, blocking=true, fftflags=FFTW.MEASURE)
 
     Ncoil = size(data[1],2)
     xbp = Array{Complex{T}}(undef, img_shape..., Ncoef, Ncoil)
 
-    Nf = size(data[1],1)
-    data_temp = Vector{Complex{T}}(undef,length(data)*Nf)
+    trj_l = [size(trj[it],2) for it in eachindex(trj)]
+    data_temp = Vector{Complex{T}}(undef,sum(trj_l))
 
     img_idx = CartesianIndices(img_shape)
     verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U,2)
         t = @elapsed for icoil = 1:Ncoil
             @simd for it in axes(data,1)
-                idx1 = Nf * it - Nf + 1
-                idx2 = idx1 + Nf - 1
+                idx1 = sum(trj_l[1:it-1]) + 1
+                idx2 = sum(trj_l[1:it])
                 @inbounds data_temp[idx1:idx2] .= data[it][:,icoil] .* conj(U[it,icoef])
             end
-            applyDensityCompensation!(data_temp, trj; density_compensation)
+            applyDensityCompensation!(data_temp, trj_v; density_compensation)
             
-            @views mul!(xbp[img_idx, icoef, icoil], adjoint(p), vec(data_temp))
+            @views mul!(xbp[img_idx, icoef, icoil], adjoint(p), data_temp)
         end
         verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
     end
     return xbp
 end
 
-function calculateBackProjection(data, trj, cmaps::AbstractVector{<:AbstractArray{T,N}}; U = N==3 ? ones(size(data,1)) : I(1), density_compensation=:none, verbose=false) where {N,T}
+function calculateBackProjection(data, trj, cmaps::AbstractVector{<:AbstractArray{T,N}}; U = N==3 ? I(size(data,1)) : I(1), density_compensation=:none, verbose=false) where {N,T}
     test_dimension(data, trj, U, cmaps)
-
+    
+    trj_v = reduce(hcat, trj)
     Ncoef = size(U,2)
     img_shape = size(cmaps[1])
 
-    p = plan_nfft(reduce(hcat,trj), img_shape; precompute=TENSOR, blocking = true, fftflags = FFTW.MEASURE)
+    p = plan_nfft(trj_v, img_shape; precompute=TENSOR, blocking = true, fftflags = FFTW.MEASURE)
 
     xbp = zeros(T, img_shape..., Ncoef)
     xtmp = Array{T}(undef, img_shape)
 
-    Nf = size(data[1],1)
-    data_temp = Vector{T}(undef,length(data)*Nf)
+    trj_l = [size(trj[it],2) for it in eachindex(trj)]
+    data_temp = Vector{T}(undef,sum(trj_l))
 
     img_idx = CartesianIndices(img_shape)
     verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U,2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
             @simd for it in axes(data,1)
-                idx1 = Nf * it - Nf + 1
-                idx2 = idx1 + Nf - 1
+                idx1 = sum(trj_l[1:it-1]) + 1
+                idx2 = sum(trj_l[1:it])
                 @inbounds data_temp[idx1:idx2] .= data[it][:,icoil] .* conj(U[it,icoef])
             end
-            applyDensityCompensation!(data_temp, trj; density_compensation)
-            mul!(xtmp, adjoint(p), vec(data_temp))
+            applyDensityCompensation!(data_temp, trj_v; density_compensation)
+            mul!(xtmp, adjoint(p), data_temp)
             xbp[img_idx,icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
         verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
@@ -138,19 +141,16 @@ end
 #############################################################################
 
 function applyDensityCompensation!(data, trj; density_compensation=:radial_3D)
-    data = reshape(data,:,length(trj))
-    for it in axes(data, 2)
-        if density_compensation == :radial_3D
-            data[:, it] .*= transpose(sum(abs2, trj[it], dims=1))
-        elseif density_compensation == :radial_2D
-            data[:, it] .*= transpose(sqrt.(sum(abs2, trj[it], dims=1)))
-        elseif density_compensation == :none
-            # do nothing here
-        elseif isa(density_compensation, AbstractVector{<:AbstractVector})
-            data[:, it] .*= density_compensation[it]
-        else
-            error("`density_compensation` can only be `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractVector{<:AbstractVector}`")
-        end
+    if density_compensation == :radial_3D
+        data .*= transpose(sum(abs2, trj, dims=1))
+    elseif density_compensation == :radial_2D
+        data .*= transpose(sqrt.(sum(abs2, trj, dims=1)))
+    elseif density_compensation == :none
+        # do nothing here
+    elseif isa(density_compensation, AbstractVector{<:AbstractVector})
+        data .*= reduce(hcat,density_compensation)
+    else
+        error("`density_compensation` can only be `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractVector{<:AbstractVector}`")
     end
 end
 

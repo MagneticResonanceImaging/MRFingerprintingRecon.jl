@@ -8,8 +8,13 @@ using Test
 @testset "Recon Radial" begin
     include("reconstruct_radial.jl")
 end
+
 @testset "Recon Cartesian" begin
     include("reconstruct_cart.jl")
+end
+
+@testset "Recon data removal" begin
+    include("data_removal.jl")
 end
 
 @testset "GROG" begin
