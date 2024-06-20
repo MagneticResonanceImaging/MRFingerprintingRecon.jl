@@ -1,34 +1,34 @@
 """
     calculateBackProjection(data, trj, img_shape; U, density_compensation, verbose)
-    calculateBackProjection(data, trj, cmaps; U, density_compensation, verbose)
+    calculateBackProjection(data, trj,     cmaps; U, density_compensation, verbose)
 
 Calculate backprojection
 
 # Arguments
-- `data::AbstractArray{T}`: Basis coefficients of subspace
-- `trj::Vector{Matrix{Float32}}`: Trajectory
+- `data::AbstractArray{cT}`: Basis coefficients of subspace
+- `trj::Vector{Matrix{T}}`: Trajectory
 - `img_shape::NTuple{N,Int}`: Shape of image
-- `U::Matrix{ComplexF32}`: Basis coefficients of subspace
+- `U::Matrix`: Basis coefficients of subspace
 - `density_compensation`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractVector{<:AbstractVector}``
 - `verbose::Boolean`: Verbosity level
 - `cmaps::::AbstractVector{<:AbstractArray{T}}`: Coil sensitivities
 
 """
-function calculateBackProjection(data, trj, img_shape::NTuple{N,Int}; T = Float32, U = N==3 ? I(size(data,1)) : I(1), density_compensation=:none, verbose=false) where {N}
+function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), density_compensation=:none, verbose=false) where {T, cT <: Complex{T},N}
     Ncoef = size(U,2)
 
     trj_v = reduce(hcat, trj)
     p = plan_nfft(trj_v, img_shape; precompute=TENSOR, blocking=true, fftflags=FFTW.MEASURE)
 
-    Ncoil = size(data[1],2)
-    xbp = Array{Complex{T}}(undef, img_shape..., Ncoef, Ncoil)
+    Ncoil = size(data[1], 2)
+    xbp = Array{cT}(undef, img_shape..., Ncoef, Ncoil)
 
     trj_l = [size(trj[it],2) for it in eachindex(trj)]
-    data_temp = Vector{Complex{T}}(undef,sum(trj_l))
+    data_temp = Vector{cT}(undef,sum(trj_l))
 
     img_idx = CartesianIndices(img_shape)
     verbose && println("calculating backprojection..."); flush(stdout)
-    for icoef ∈ axes(U,2)
+    for icoef ∈ axes(U, 2)
         t = @elapsed for icoil = 1:Ncoil
             @simd for it in axes(data,1)
                 idx1 = sum(trj_l[1:it-1]) + 1
@@ -36,7 +36,7 @@ function calculateBackProjection(data, trj, img_shape::NTuple{N,Int}; T = Float3
                 @inbounds data_temp[idx1:idx2] .= data[it][:,icoil] .* conj(U[it,icoef])
             end
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
-            
+
             @views mul!(xbp[img_idx, icoef, icoil], adjoint(p), data_temp)
         end
         verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
@@ -44,24 +44,24 @@ function calculateBackProjection(data, trj, img_shape::NTuple{N,Int}; T = Float3
     return xbp
 end
 
-function calculateBackProjection(data, trj, cmaps::AbstractVector{<:AbstractArray{T,N}}; U = N==3 ? I(size(data,1)) : I(1), density_compensation=:none, verbose=false) where {N,T}
+function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, cmaps::AbstractVector{<:AbstractArray{cT,N}}; U=I(length(data)), density_compensation=:none, verbose=false) where {T, cT <: Complex{T}, N}
     test_dimension(data, trj, U, cmaps)
-    
+
     trj_v = reduce(hcat, trj)
-    Ncoef = size(U,2)
+    Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
 
     p = plan_nfft(trj_v, img_shape; precompute=TENSOR, blocking = true, fftflags = FFTW.MEASURE)
 
-    xbp = zeros(T, img_shape..., Ncoef)
-    xtmp = Array{T}(undef, img_shape)
+    xbp = zeros(cT, img_shape..., Ncoef)
+    xtmp = Array{cT}(undef, img_shape)
 
     trj_l = [size(trj[it],2) for it in eachindex(trj)]
-    data_temp = Vector{T}(undef,sum(trj_l))
+    data_temp = Vector{cT}(undef,sum(trj_l))
 
     img_idx = CartesianIndices(img_shape)
     verbose && println("calculating backprojection..."); flush(stdout)
-    for icoef ∈ axes(U,2)
+    for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
             @simd for it in axes(data,1)
                 idx1 = sum(trj_l[1:it-1]) + 1
@@ -76,6 +76,11 @@ function calculateBackProjection(data, trj, cmaps::AbstractVector{<:AbstractArra
     end
     return xbp
 end
+
+function calculateBackProjection(data::AbstractMatrix{cT}, trj::AbstractMatrix{T}, cmaps_img_shape; U=I(1), density_compensation=:none, verbose=false) where {T, cT <: Complex{T}}
+    return calculateBackProjection([data], [trj], cmaps_img_shape; U, density_compensation, verbose)
+end
+
 
 """
     calculateBackProjection_gridded(data, trj, U, cmaps)
@@ -102,17 +107,17 @@ function calculateBackProjection_gridded(data, trj, U, cmaps)
     Nrep = size(data[1], 3)
 
     if (1 != Nrep) # Avoid error during reshape that joins rep and t dim
-        data = cat(data..., dims = 4)
-        data = permutedims(data, (1,4,3,2))
-        @assert Nt*Nrep == size(U, 1) "Mismatch between data and basis"
+        data = cat(data..., dims=4)
+        data = permutedims(data, (1, 4, 3, 2))
+        @assert Nt * Nrep == size(U, 1) "Mismatch between data and basis"
     else
-	data = cat(data..., dims = 3)
-        data = permutedims(data, (1,3,2))
+        data = cat(data..., dims=3)
+        data = permutedims(data, (1, 3, 2))
         @assert Nt == size(U, 1) "Mismatch between trajectory and basis"
     end
 
-    data = reshape(data, :, Nt*Nrep, Ncoil)
-    data = [data[:,i,:] for i=1:size(data, 2)]
+    data = reshape(data, :, Nt * Nrep, Ncoil)
+    data = [data[:, i, :] for i = 1:size(data, 2)]
 
     dataU = similar(data[1], img_shape..., Ncoeff)
     xbp = zeros(eltype(data[1]), img_shape..., Ncoeff)
@@ -121,7 +126,7 @@ function calculateBackProjection_gridded(data, trj, U, cmaps)
         for icoil ∈ axes(data[1], 2)
             dataU[img_idx, icoef] .= 0
 
-	    for it ∈ axes(data,1), i ∈ axes(data[1],1)
+            for it ∈ axes(data, 1), i ∈ axes(data[1], 1)
                 t_idx = mod(it + Nt - 1, Nt) + 1 # "mod" to incorporate repeated sampling pattern, "mod(it+Nt-1,Nt)+1" to compensate for one indexing
                 k_idx = ntuple(j -> mod1(Int(trj[t_idx][j, i]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
                 k_idx = CartesianIndex(k_idx)
@@ -148,14 +153,14 @@ function applyDensityCompensation!(data, trj; density_compensation=:radial_3D)
     elseif density_compensation == :none
         # do nothing here
     elseif isa(density_compensation, AbstractVector{<:AbstractVector})
-        data .*= reduce(hcat,density_compensation)
+        data .*= reduce(hcat, density_compensation)
     else
         error("`density_compensation` can only be `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractVector{<:AbstractVector}`")
     end
 end
 
 function test_dimension(data, trj, U, cmaps)
-    Nt = size(U,1)
+    Nt = size(U, 1)
     img_shape = size(cmaps)[1:end-1]
     Ncoil = size(cmaps)[end]
 
