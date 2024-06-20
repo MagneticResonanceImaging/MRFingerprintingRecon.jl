@@ -10,40 +10,32 @@ Calibration follows the work on self-calibrating radial GROG (https://doi.org/10
 - `Nr::Int`: Number of samples per read out
 """
 function grog_calib(data, trj, Nr)
-
     Ncoil = size(data[1], 2)
-    Nrep = size(data[1], 3)
+    Nrep  = size(data[1], 3)
 
-    if (1 != Nrep) # Avoid error during reshape that joins rep and t dim
-        data = cat(data..., dims = 4)
-        data = permutedims(data, (1,4,3,2))
-    else
-        data = cat(data..., dims = 3)
-        data = permutedims(data, (1,3,2))
-    end
+    data_r = [reshape(data_i, Nr, :, Ncoil, Nrep) for data_i ∈ data]
+    data_r = @views [vec([data_i[:,is,:,irep] for is ∈ axes(data_i, 2), irep ∈ axes(data_i, 4)]) for data_i ∈ data_r]
+    data_r = reduce(vcat, data_r)
 
-    data = reshape(data, Nr, :, Ncoil)
-    data = [data[:,i,:] for i=1:size(data, 2)]
-
-    Ns = length(data) # number of spokes across whole trajectory
+    Ns = length(data_r) # number of spokes across whole trajectory
     Nd = size(trj[1], 1) # number of dimensions
 
     Nr < Ncoil && @warn "Ncoil < Nr, problem is ill posed"
     Ns < Ncoil^2 && @warn "Number of spokes < Ncoil^2, problem is ill posed"
-    @assert isinteger(Ns / (Nrep * length(trj))) "Mismatch between trajectory and data"
 
     # preallocations
-    lnG = Array{eltype(data[1])}(undef, Nd, Ncoil, Ncoil) #matrix of GROG operators
-    vθ  = Array{eltype(data[1])}(undef, Ns, Ncoil, Ncoil)
+    lnG = Array{eltype(data_r[1])}(undef, Nd, Ncoil, Ncoil) #matrix of GROG operators
+    vθ  = Array{eltype(data_r[1])}(undef, Ns, Ncoil, Ncoil)
 
     # 1) Precompute n, m for the trajectory
-    trjr = reshape(combinedimsview(trj), Nd, Nr, :)
-    nm = transpose(dropdims(diff(trjr[:, 1:2, :], dims=2), dims=2)) .* Nr # units of sampling rate
-    nm = repeat(nm, outer = [Nrep]) # Stack trj in time if sampling repeats
+    trj_r = [reshape(trj_i, size(trj_i,1), Nr, :) for trj_i ∈ trj]
+    nm = @views [vec([(trj_i[:,2,is] .- trj_i[:,1,is]) .* Nr for is ∈ axes(trj_i,3), _ ∈ 1:Nrep]) for trj_i ∈ trj_r]
+    nm = reduce(vcat, nm)
+    nm = [nm[ip][id] for ip ∈ eachindex(nm), id ∈ eachindex(nm[1])]
 
     # 2) For each spoke, solve Eq3 for Gθ and compute matrix log
-    Threads.@threads for ip ∈ axes(data, 1)
-        @views Gθ = transpose(data[ip][1:end-1, :] \ data[ip][2:end, :])
+    Threads.@threads for ip ∈ eachindex(data_r)
+        @views Gθ = transpose(data_r[ip][1:end-1, :] \ data_r[ip][2:end, :])
         vθ[ip, :, :] = log(Gθ) # matrix log
     end
 
@@ -53,7 +45,6 @@ function grog_calib(data, trj, Nr)
     end
 
     lnG = [lnG[id, :, :] for id = 1:Nd]
-
     return lnG
 end
 
@@ -80,7 +71,7 @@ Perform gridding of data based on pre-calculated GROG kernel.
 function grog_gridding!(data, trj, lnG, Nr, img_shape)
 
     Ncoil = size(data[1], 2)
-    Nrep = size(data[1], 3)
+    Nrep  = size(data[1], 3)
 
     Nt = length(trj) # number of time points
 
@@ -88,19 +79,19 @@ function grog_gridding!(data, trj, lnG, Nr, img_shape)
     cache = [ExponentialUtilities.alloc_mem(lnG[1], exp_method) for _ ∈ 1:Threads.nthreads()]
     lGcache = [similar(lnG[1]) for _ ∈ 1:Threads.nthreads()]
 
-    Threads.@threads for i ∈ CartesianIndices(@view cat(data..., dims = 4)[:, 1, 1, :])
+    Threads.@threads for it ∈ eachindex(data, trj)
         idt = Threads.threadid() # TODO: fix data race bug
-        for j ∈ eachindex(img_shape)
-            trj_i = trj[i[2]][j, i[1]] * img_shape[j] + 1 / 2 # +1/2 to avoid stepping outside of FFT definition ∈ (-img_shape[j]/2+1, img_shape[j]/2)
+        for is ∈ axes(data[it],1), idim ∈ eachindex(img_shape)
+            trj_i = trj[it][idim, is] * img_shape[idim] + 1 / 2 # +1/2 to avoid stepping outside of FFT definition ∈ (-img_shape[idim]/2+1, img_shape[idim]/2)
             k_idx = round(trj_i)
-            shift = (k_idx - trj_i) * Nr / img_shape[j]
+            shift = (k_idx - trj_i) * Nr / img_shape[idim]
 
             # store rounded grid point index
-            trj[i[2]][j, i[1]] = k_idx + img_shape[j] ÷ 2
+            trj[it][idim, is] = k_idx + img_shape[idim] ÷ 2
 
             # overwrite trj with rounded grid point index.
-            lGcache[idt] .= shift .* lnG[j]
-            @views data[i[2]][i[1], :, :] =  exponential!(lGcache[idt], exp_method, cache[idt]) * data[i[2]][i[1], :, :]
+            lGcache[idt] .= shift .* lnG[idim]
+            @views data[it][is, :, :] =  exponential!(lGcache[idt], exp_method, cache[idt]) * data[it][is, :, :]
         end
     end
 end
@@ -117,8 +108,6 @@ Perform GROG kernel calibration and gridding of data in-place.
 - `img_shape::Tuple{Int}`: Image dimensions
 """
 function radial_grog!(data, trj, Nr, img_shape)
-
     lnG = grog_calib(data, trj, Nr)
-
     grog_gridding!(data, trj, lnG, Nr, img_shape)
 end

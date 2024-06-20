@@ -55,16 +55,16 @@ U = randn(Complex{T}, Nt, Nc)
 U,_,_ = svd(U)
 
 ## simulate data
-data = Array{Complex{T}}(undef, size(trj[1], 2), Nt, Ncoil)
+data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
 nfftplan = plan_nfft(trj[1], (Nx,Nx))
 xcoil = copy(x)
 for icoil ∈ 1:Ncoil
     xcoil .= x
     xcoil .*= cmaps[icoil]
-    for it ∈ axes(data,2)
+    for it ∈ eachindex(data)
         nodes!(nfftplan, trj[it])
         xt = reshape(reshape(xcoil, :, Nc) * U[it,:], Nx, Nx)
-        @views mul!(data[:,it,icoil], nfftplan, xt)
+        @views mul!(data[it][:,icoil], nfftplan, xt)
     end
 end
 
@@ -76,9 +76,6 @@ for i ∈ CartesianIndices(xc)
     end
 end
 xc = ifft(ifftshift(xc, 1:2), 1:2)
-
-## Move data to vector format
-data = [data[:,i,:] for i=1:size(data,2)]
 
 ## NFFT Reconstruction
 xbp_rad = calculateBackProjection(data, trj, cmaps; U=U)

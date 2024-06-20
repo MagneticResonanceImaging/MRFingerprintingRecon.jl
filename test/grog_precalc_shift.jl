@@ -16,9 +16,10 @@ Nt = 100
 Ncoil = 9
 Nrep = 3
 Nd = 2
+Ncyc = 3
 
 ## Create trajectory
-trj = MRFingerprintingRecon.traj_2d_radial_goldenratio(Nr, 1, Nt; N=1)
+trj = MRFingerprintingRecon.traj_2d_radial_goldenratio(Nr, Ncyc, Nt; N=1)
 trj = [trj[i][1:Nd,:] for i ∈ eachindex(trj)] # only 2D traj, here
 
 ## Create phantom geometry
@@ -44,29 +45,24 @@ cmaps = [cmaps[:,:,ic] for ic=1:Ncoil]
 
 
 ## Simulate data
-data = Array{Complex{T}}(undef, size(trj[1], 2), Nt, Ncoil)
+data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
 nfftplan = plan_nfft(trj[1], (Nx,Nx))
 xcoil = copy(x)
 for icoil ∈ 1:Ncoil
     xcoil .= x
     xcoil .*= cmaps[icoil]
-    for it ∈ axes(data,2)
+    for it ∈ eachindex(data)
         nodes!(nfftplan, trj[it])
-        @views mul!(data[:,it,icoil], nfftplan, xcoil)
+        @views mul!(data[it][:,icoil], nfftplan, xcoil)
     end
 end
 
 # Create repeating pattern
-data2 = repeat(deepcopy(data), outer = [1, 1, 1, Nrep])
-
-## Vectorize data
-data = [data[:,i,:,:] for i=1:size(data,2)]
-data2 = [data2[:,i,:,:] for i=1:size(data2,2)]
+data2 = [repeat(data_i, outer = [1, 1, Nrep]) for data_i ∈ data]
 
 ## #####################################
 # Test Calibration of GROG kernel
 ########################################
-
 lnG = MRFingerprintingRecon.grog_calib(data, trj, Nr)
 lnG2 = MRFingerprintingRecon.grog_calib(data2, trj, Nr)
 
