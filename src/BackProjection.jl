@@ -4,15 +4,17 @@
     calculateBackProjection(data, trj, cmaps_img_shape; U, density_compensation, verbose)
     calculateBackProjection(data, trj, cmaps; U)
 
-Calculate backprojection
+Calculate (filtered) backprojection
 
 # Arguments
-- `data <: Union{AbstractVector{<:AbstractMatrix{cT}},AbstractMatrix{cT}}`: Complex dataset either as AbstractVector of matrices or single matrix
+- `data <: Union{AbstractVector{<:AbstractMatrix{cT}},AbstractMatrix{cT}}`: Complex dataset either as AbstractVector of matrices or single matrix. The optional outer matrix defines different time frames that are reconstruced in the subspace defined in U.
 - `trj <: Union{:AbstractVector{<:AbstractMatrix{T}},AbstractMatrix{T}}`: Trajectory with samples corresponding to the dataset either as AbstractVector of matrices or single matrix.
 - `img_shape::NTuple{N,Int}`: Shape of image
+
+# Optional Keyword Arguments
 - `cmaps::::AbstractVector{<:AbstractArray{T}}`: Coil sensitivities as AbstractVector of arrays
 - `cmaps_img_shape`: Either equal `img_shape` or `cmaps`
-- `U::Matrix` = I(length(data)) or = I(1): Basis coefficients of subspace
+- `U::Matrix` = I(length(data)) or = I(1): Basis coefficients of subspace (only defined if data and trj have different timeframes)
 - `density_compensation`=:`none`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractVector{<:AbstractVector}`
 - `verbose::Boolean`=`false`: Verbosity level
 
@@ -35,10 +37,10 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj:
     verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ axes(data[1], 2)
-            @simd for it in axes(data,1)
+            @simd for it in eachindex(data)
                 idx1 = sum(trj_l[1:it-1]) + 1
                 idx2 = sum(trj_l[1:it])
-                @inbounds data_temp[idx1:idx2] .= data[it][:,icoil] .* conj(U[it,icoef])
+                data_temp[idx1:idx2] .= data[it][:,icoil] .* conj(U[it,icoef])
             end
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
 
@@ -68,7 +70,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
     verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
-            @simd for it in axes(data,1)
+            @simd for it in eachindex(data)
                 idx1 = sum(trj_l[1:it-1]) + 1
                 idx2 = sum(trj_l[1:it])
                 @inbounds data_temp[idx1:idx2] .= data[it][:,icoil] .* conj(U[it,icoef])
@@ -82,8 +84,8 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
     return xbp
 end
 
-function calculateBackProjection(data::AbstractArray{cT}, trj::AbstractMatrix{T}, cmaps_img_shape; U=I(1), density_compensation=:none, verbose=false) where {T <: Real, cT <: Complex{T}}
-    return calculateBackProjection([data], [trj], cmaps_img_shape; U, density_compensation, verbose)
+function calculateBackProjection(data::AbstractArray{cT}, trj::AbstractMatrix{T}, cmaps_img_shape; density_compensation=:none, verbose=false) where {T <: Real, cT <: Complex{T}}
+    return calculateBackProjection([data], [trj], cmaps_img_shape; U=I(1), density_compensation, verbose)
 end
 
 function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, cmaps; U=I(length(data)))
