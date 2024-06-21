@@ -91,7 +91,7 @@ function grog_gridding!(data, trj, lnG, Nr, img_shape)
 
             # overwrite trj with rounded grid point index.
             lGcache[idt] .= shift .* lnG[idim]
-            @views data[it][is, :, :] =  exponential!(lGcache[idt], exp_method, cache[idt]) * data[it][is, :, :]
+            @views data[it][is, :, :] = exponential!(lGcache[idt], exp_method, cache[idt]) * data[it][is, :, :]
         end
     end
 end

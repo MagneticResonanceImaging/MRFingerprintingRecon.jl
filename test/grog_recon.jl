@@ -77,6 +77,10 @@ for i ∈ CartesianIndices(xc)
 end
 xc = ifft(ifftshift(xc, 1:2), 1:2)
 
+## Remove some data
+data[2] = data[2][1:end-Nr,:]
+trj[2]  =  trj[2][:,1:end-Nr]
+
 ## NFFT Reconstruction
 xbp_rad = calculateBackProjection(data, trj, cmaps; U=U)
 A_rad = NFFTNormalOp((Nx,Nx), trj, U; cmaps=cmaps)

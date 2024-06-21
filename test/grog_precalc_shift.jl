@@ -98,7 +98,7 @@ xg1 = cg(A_grog, vec(x1), maxiter=20)
 xg1 = reshape(xg1, Nx, Nx)
 
 # Reconstruction with repeating pattern
-U2 = repeat(U, outer=[Nrep]) # For joint subspace reconstruction
+U2 = repeat(U, 1, 1, Nrep) # For joint subspace reconstruction
 A_grog = FFTNormalOp((Nx,Nx), trj, U2; cmaps)
 x2 = calculateBackProjection_gridded(data2, trj, U2, cmaps)
 xg2 = cg(A_grog, vec(x2), maxiter=20)
