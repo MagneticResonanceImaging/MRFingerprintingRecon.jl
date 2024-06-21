@@ -19,7 +19,7 @@ Calculate backprojection
 # Notes
 - The type of the elements of the trajectory define if a gridded backprojection (eltype(trj[1]) or eltype(trj) <: Int) or a non-uniform (else) is performed.
 """
-function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), density_compensation=:none, verbose=false) where {T, cT <: Complex{T},N}
+function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), density_compensation=:none, verbose=false) where {T <: Real, cT <: Complex{T},N}
     Ncoef = size(U,2)
 
     trj_v = reduce(hcat, trj)
@@ -34,7 +34,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
     img_idx = CartesianIndices(img_shape)
     verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U, 2)
-        t = @elapsed for icoil = 1:Ncoil
+        t = @elapsed for icoil ∈ axes(data[1], 2)
             @simd for it in axes(data,1)
                 idx1 = sum(trj_l[1:it-1]) + 1
                 idx2 = sum(trj_l[1:it])
@@ -49,7 +49,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
     return xbp
 end
 
-function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, cmaps::AbstractVector{<:AbstractArray{cT,N}}; U=I(length(data)), density_compensation=:none, verbose=false) where {T, cT <: Complex{T}, N}
+function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, cmaps::AbstractVector{<:AbstractArray{cT,N}}; U=I(length(data)), density_compensation=:none, verbose=false) where {T <: Real, cT <: Complex{T}, N}
     test_dimension(data, trj, U, cmaps)
 
     trj_v = reduce(hcat, trj)
@@ -82,7 +82,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
     return xbp
 end
 
-function calculateBackProjection(data::AbstractMatrix{cT}, trj::AbstractMatrix{T}, cmaps_img_shape; U=I(1), density_compensation=:none, verbose=false) where {T, cT <: Complex{T}}
+function calculateBackProjection(data::AbstractArray{cT}, trj::AbstractMatrix{T}, cmaps_img_shape; U=I(1), density_compensation=:none, verbose=false) where {T <: Real, cT <: Complex{T}}
     return calculateBackProjection([data], [trj], cmaps_img_shape; U, density_compensation, verbose)
 end
 
