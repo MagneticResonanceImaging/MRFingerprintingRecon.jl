@@ -20,7 +20,6 @@ Ncoil = 9
 
 ## Create trajectory
 trj = MRFingerprintingRecon.traj_2d_radial_goldenratio(Nr, 1, Nt; N=1)
-trj = [trj[i][1:2,:] for i ∈ eachindex(trj)] # only 2D traj, here
 
 ## Create phantom geometry
 x = shepp_logan(Nx)

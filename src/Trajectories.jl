@@ -93,13 +93,15 @@ function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, dela
 
     τ = (sqrt(5) + 1) / 2
 
-    theta = 0 * (0:(Ncyc*Nt-1)) .+ π/2 # 2D only
-    theta = reshape(theta, Nt, Ncyc)
-
-    phi = (0:(Ncyc*Nt-1)) * π / (τ + N - 1) # FIXME: Float32 results in minor differences for very long repetition trains
+    phi = (0:(Ncyc*Nt-1)) * π / (τ + N - 1)
     phi = reshape(phi, Nt, Ncyc)
 
-    return kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay)
+    theta = similar(phi)
+    theta .= π/2 # 2D
+
+    trj = kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay)
+    trj = [trj[i][1:2,:] for i ∈ eachindex(trj)] # remove 3rd dimenion
+    return trj
 end
 
 """
