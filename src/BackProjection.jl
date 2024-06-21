@@ -40,7 +40,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj:
             @simd for it in eachindex(data)
                 idx1 = sum(trj_l[1:it-1]) + 1
                 idx2 = sum(trj_l[1:it])
-                data_temp[idx1:idx2] .= data[it][:,icoil] .* conj(U[it,icoef])
+                @views data_temp[idx1:idx2] .= data[it][:,icoil] .* conj(U[it,icoef])
             end
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
 
@@ -71,7 +71,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
             @simd for it in eachindex(data)
                 idx1 = sum(trj_l[1:it-1]) + 1
                 idx2 = sum(trj_l[1:it])
-                data_temp[idx1:idx2] .= data[it][:,icoil] .* conj(U[it,icoef])
+                @views data_temp[idx1:idx2] .= data[it][:,icoil] .* conj(U[it,icoef])
             end
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
             mul!(xtmp, adjoint(p), data_temp)
@@ -86,6 +86,7 @@ function calculateBackProjection(data::AbstractArray{cT}, trj::AbstractMatrix{T}
     return calculateBackProjection([data], [trj], cmaps_img_shape; U=I(1), density_compensation, verbose)
 end
 
+# Method for GROG gridded data / trajectory
 function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, cmaps; U=I(length(data)))
     Ncoeff = size(U, 2)
     img_shape = size(cmaps[1])
@@ -101,7 +102,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::Abs
             for it ∈ eachindex(data), is ∈ axes(data[it], 1), irep ∈ axes(data[it], 3)
                 k_idx = ntuple(j -> mod1(Int(trj[it][j, is]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
                 k_idx = CartesianIndex(k_idx)
-                @views dataU[k_idx, icoef] += data[it][is, icoil, irep] * conj(U[it, icoef, irep])
+                dataU[k_idx, icoef] += data[it][is, icoil, irep] * conj(U[it, icoef, irep])
             end
 
             @views ifft!(dataU[img_idx, icoef])
