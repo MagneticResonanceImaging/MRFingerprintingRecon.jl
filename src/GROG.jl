@@ -79,6 +79,7 @@ function grog_gridding!(data, trj, lnG, Nr, img_shape)
     cache = [ExponentialUtilities.alloc_mem(lnG[1], exp_method) for _ ∈ 1:Threads.nthreads()]
     lGcache = [similar(lnG[1]) for _ ∈ 1:Threads.nthreads()]
 
+    trj_cart = [similar(trj_i, Int32) for trj_i ∈ trj]
     Threads.@threads for it ∈ eachindex(data, trj)
         idt = Threads.threadid() # TODO: fix data race bug
         for is ∈ axes(data[it],1), idim ∈ eachindex(img_shape)
@@ -87,13 +88,14 @@ function grog_gridding!(data, trj, lnG, Nr, img_shape)
             shift = (k_idx - trj_i) * Nr / img_shape[idim]
 
             # store rounded grid point index
-            trj[it][idim, is] = k_idx + img_shape[idim] ÷ 2
+            trj_cart[it][idim, is] = k_idx + img_shape[idim] ÷ 2
 
             # overwrite trj with rounded grid point index.
             lGcache[idt] .= shift .* lnG[idim]
             @views data[it][is, :, :] = exponential!(lGcache[idt], exp_method, cache[idt]) * data[it][is, :, :]
         end
     end
+    return trj_cart
 end
 
 """
@@ -109,5 +111,6 @@ Perform GROG kernel calibration and gridding of data in-place.
 """
 function radial_grog!(data, trj, Nr, img_shape)
     lnG = grog_calib(data, trj, Nr)
-    grog_gridding!(data, trj, lnG, Nr, img_shape)
+    trj_cart = grog_gridding!(data, trj, lnG, Nr, img_shape)
+    return trj_cart
 end

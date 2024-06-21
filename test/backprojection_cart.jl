@@ -16,7 +16,7 @@ Nt = 1
 Ncoil = 9
 
 ## Create trajectory
-trj = MRFingerprintingRecon.traj_2d_cartesian(Nx, Nx, 1, Nt; samplingRate_units=false) # unitless for plan_nfft()
+trj = MRFingerprintingRecon.traj_cartesian(Nx, Nx, 1, Nt; samplingRate_units=false) # unitless for plan_nfft()
 trj = [trj[i][1:2,:] for i ∈ eachindex(trj)] # only 2D traj here
 
 
@@ -63,14 +63,10 @@ end
 U = ones(ComplexF32, length(data), 1)
 
 #### Convert traj to units of sampling rate
-#### Required for calculateBackProjection_gridded function
-for it ∈ eachindex(trj)
-    @views mul!(trj[it][1,:], trj[it][1,:], Nx)
-    @views mul!(trj[it][2,:], trj[it][2,:], Nx)
-    trj[it] = ceil.(Int, trj[it])
-end
+#### Required for calculateBackProjection function
+trj = [ceil.(Int32, trj_i .* Nx) for trj_i ∈ trj]
 
-reco = calculateBackProjection_gridded(data, trj, U, cmaps)
+reco = calculateBackProjection(data, trj, cmaps; U)
 reco = dropdims(reco, dims=3)
 @test abs.(x) ≈ abs.(reco) atol = 3e-5
 

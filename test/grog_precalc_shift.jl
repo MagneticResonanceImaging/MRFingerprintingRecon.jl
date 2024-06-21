@@ -71,13 +71,13 @@ lnG2 = MRFingerprintingRecon.grog_calib(data2, trj, Nr)
 ## #####################################
 # Test Gridding with GROG kernel
 ########################################
-trj1 =  deepcopy(trj)
+trj2 =  deepcopy(trj)
 
 # Gridding of each sample with non repeating trajectory (Reference)
-MRFingerprintingRecon.grog_gridding!(data, trj1, lnG, Nr, (Nx,Nx))
+trj = MRFingerprintingRecon.grog_gridding!(data, trj, lnG, Nr, (Nx,Nx))
 
 # Exploit Precalculated Shifts
-MRFingerprintingRecon.grog_gridding!(data2, trj, lnG2, Nr, (Nx,Nx))
+trj2 = MRFingerprintingRecon.grog_gridding!(data2, trj2, lnG2, Nr, (Nx,Nx))
 
 # Compare gridding with and without repeating pattern
 @test data[1] ≈ data2[1][:,:,1] rtol = 1e-6
@@ -87,19 +87,18 @@ MRFingerprintingRecon.grog_gridding!(data2, trj, lnG2, Nr, (Nx,Nx))
 ## #####################################
 # Test Gridded Reconstruction with and without Repeating Pattern
 ########################################
-
 U = ones(ComplexF32, length(data), 1)
 
 # Reconstruction without repeating pattern
 A_grog = FFTNormalOp((Nx,Nx), trj, U; cmaps)
-x1 = calculateBackProjection_gridded(data, trj, U, cmaps)
+x1 = calculateBackProjection(data, trj, cmaps; U)
 xg1 = cg(A_grog, vec(x1), maxiter=20)
 xg1 = reshape(xg1, Nx, Nx)
 
 # Reconstruction with repeating pattern
 U2 = repeat(U, 1, 1, Nrep) # For joint subspace reconstruction
-A_grog = FFTNormalOp((Nx,Nx), trj, U2; cmaps)
-x2 = calculateBackProjection_gridded(data2, trj, U2, cmaps)
+A_grog = FFTNormalOp((Nx,Nx), trj2, U2; cmaps)
+x2 = calculateBackProjection(data2, trj2, cmaps; U=U2)
 xg2 = cg(A_grog, vec(x2), maxiter=20)
 xg2 = reshape(xg2, Nx, Nx)
 

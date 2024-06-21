@@ -83,7 +83,7 @@ end
 
 
 """
-    calculateBackProjection_gridded(data, trj, U, cmaps)
+    calculateBackProjection(data, trj, U, cmaps)
 
 Calculate gridded backprojection
 
@@ -97,7 +97,7 @@ Calculate gridded backprojection
 In case of repeated sampling (Nrep > 1), a joint basis reconstruction is required.
 Therefore, the basis needs to have a temporal dimension of Nt⋅Nrep with Nt as time dimension defined by the trajectory.
 """
-function calculateBackProjection_gridded(data, trj, U, cmaps)
+function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, cmaps; U=I(length(data)))
     Ncoeff = size(U, 2)
     img_shape = size(cmaps[1])
     img_idx = CartesianIndices(img_shape)

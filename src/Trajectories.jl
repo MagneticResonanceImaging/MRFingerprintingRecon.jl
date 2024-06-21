@@ -1,5 +1,5 @@
 """
-    traj_2d_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float32)
+    traj_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float32)
 
 Function to calculate a 2D cartesian trajectory in units of sampling rate ∈ {x | -N/2+1 ≤ x ≤ N/2 and x ∈ Z}.
 With `samplingRate_units = false` the ouput is relative with samples ∈ [-1/2:1/2].
@@ -12,14 +12,12 @@ With `samplingRate_units = false` the ouput is relative with samples ∈ [-1/2:1
 - `samplingRate_units::Boolean`: Parameter setting the output units to sampling rate
 - `T::Type`: Type defining the output units of the trajectory
 """
-function traj_2d_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float32)
-
+function traj_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float32)
     kx = collect(((-Nx+1)/2:(Nx-1)/2) / (samplingRate_units ? 1 : Nx))
     ky = collect(((-Ny+1)/2:(Ny-1)/2) / (samplingRate_units ? 1 : Ny))
     kz = collect(((-Nz+1)/2:(Nz-1)/2) / (samplingRate_units ? 1 : Nz))
 
     k = Vector{Matrix{T}}(undef, Nt)
-
     for it ∈ eachindex(k)
 
         ki = Array{T,4}(undef, 3, Nx, Ny, Nz)
@@ -37,7 +35,6 @@ function traj_2d_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float3
             k[it] = round.(k[it] .+ 0.5) # ceil operation on arrays
         end
     end
-
     return k
 end
 
