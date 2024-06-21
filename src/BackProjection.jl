@@ -59,13 +59,11 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
     img_shape = size(cmaps[1])
 
     p = plan_nfft(trj_v, img_shape; precompute=TENSOR, blocking = true, fftflags = FFTW.MEASURE)
-
     xbp = zeros(cT, img_shape..., Ncoef)
     xtmp = Array{cT}(undef, img_shape)
 
     trj_l = [size(trj[it],2) for it in eachindex(trj)]
     data_temp = Vector{cT}(undef,sum(trj_l))
-
     img_idx = CartesianIndices(img_shape)
     verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U, 2)
@@ -73,7 +71,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
             @simd for it in eachindex(data)
                 idx1 = sum(trj_l[1:it-1]) + 1
                 idx2 = sum(trj_l[1:it])
-                @inbounds data_temp[idx1:idx2] .= data[it][:,icoil] .* conj(U[it,icoef])
+                data_temp[idx1:idx2] .= data[it][:,icoil] .* conj(U[it,icoef])
             end
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
             mul!(xtmp, adjoint(p), data_temp)
