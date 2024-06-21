@@ -56,24 +56,21 @@ U = randn(Complex{T}, Nt, Nc)
 U,_,_ = svd(U)
 
 ## simulate data
-data = Array{Complex{T}}(undef, size(trj[1], 2), Nt, Ncoil)
+data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
 nfftplan = plan_nfft(trj[1], (Nx,Nx))
 xcoil = copy(x)
 for icoil ∈ 1:Ncoil
     xcoil .= x
     xcoil .*= cmaps[icoil]
-    for it ∈ axes(data,2)
+    for it ∈ eachindex(data)
         nodes!(nfftplan, trj[it])
         xt = reshape(reshape(xcoil, :, Nc) * U[it,:], Nx, Nx)
-        @views mul!(data[:,it,icoil], nfftplan, xt)
+        @views mul!(data[it][:,icoil], nfftplan, xt)
     end
 end
 
-## Move data to vector format
-data = [data[:,i,:] for i=1:size(data,2)]
-
 ## BackProjection
-b = calculateBackProjection(data, trj, cmaps; U=U)
+b = calculateBackProjection(data, trj, cmaps; U)
 
 ## construct forward operator
 A = NFFTNormalOp((Nx,Nx), trj, U, cmaps=cmaps)
@@ -110,6 +107,6 @@ xc = ifft(ifftshift(xc, 1:2), 1:2)
 
 ##
 # using Plots
-# plotlyjs(bg = RGBA(31/255,36/255,36/255,1.0), ticks=:native); #hide
+# plotlyjs(bg = RGBA(31/255,36/255,36/255,1.0), ticks=:native)
 # heatmap(abs.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), dims=1)), clim=(0.75, 1.25), size=(1200,600))
 # heatmap(angle.(cat(reshape(xr, Nx, :), reshape(xc, Nx, :), dims=1)), size=(1200,600))
