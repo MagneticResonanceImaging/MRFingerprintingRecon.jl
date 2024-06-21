@@ -1,18 +1,23 @@
 """
     calculateBackProjection(data, trj, img_shape; U, density_compensation, verbose)
-    calculateBackProjection(data, trj,     cmaps; U, density_compensation, verbose)
+    calculateBackProjection(data, trj, cmaps::AbstractVector{<:AbstractArray{cT,N}}; U, density_compensation, verbose)
+    calculateBackProjection(data, trj, cmaps_img_shape; U, density_compensation, verbose)
+    calculateBackProjection(data, trj, cmaps; U)
 
 Calculate backprojection
 
 # Arguments
-- `data::AbstractArray{cT}`: Basis coefficients of subspace
-- `trj::Vector{Matrix{T}}`: Trajectory
+- `data <: Union{AbstractVector{<:AbstractMatrix{cT}},AbstractMatrix{cT}}`: Complex dataset either as AbstractVector of matrices or single matrix
+- `trj <: Union{:AbstractVector{<:AbstractMatrix{T}},AbstractMatrix{T}}`: Trajectory with samples corresponding to the dataset either as AbstractVector of matrices or single matrix.
 - `img_shape::NTuple{N,Int}`: Shape of image
-- `U::Matrix`: Basis coefficients of subspace
-- `density_compensation`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractVector{<:AbstractVector}``
-- `verbose::Boolean`: Verbosity level
-- `cmaps::::AbstractVector{<:AbstractArray{T}}`: Coil sensitivities
+- `cmaps::::AbstractVector{<:AbstractArray{T}}`: Coil sensitivities as AbstractVector of arrays
+- `cmaps_img_shape`: Either equal `img_shape` or `cmaps`
+- `U::Matrix` = I(length(data)) or = I(1): Basis coefficients of subspace
+- `density_compensation`=:`none`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractVector{<:AbstractVector}`
+- `verbose::Boolean`=`false`: Verbosity level
 
+# Notes
+- The type of the elements of the trajectory define if a gridded backprojection (eltype(trj[1]) or eltype(trj) <: Int) or a non-uniform (else) is performed.
 """
 function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), density_compensation=:none, verbose=false) where {T, cT <: Complex{T},N}
     Ncoef = size(U,2)
@@ -81,27 +86,10 @@ function calculateBackProjection(data::AbstractMatrix{cT}, trj::AbstractMatrix{T
     return calculateBackProjection([data], [trj], cmaps_img_shape; U, density_compensation, verbose)
 end
 
-
-"""
-    calculateBackProjection(data, trj, U, cmaps)
-
-Calculate gridded backprojection
-
-# Arguments
-- `data::Matrix{ComplexF32}`: Basis coefficients of subspace
-- `trj::Vector{Matrix{Float32}}`: Trajectory
-- `U::Matrix{ComplexF32}`: Basis coefficients of subspace
-- `cmaps::Matrix{ComplexF32}`: Coil sensitivities
-
-# Note
-In case of repeated sampling (Nrep > 1), a joint basis reconstruction is required.
-Therefore, the basis needs to have a temporal dimension of Nt⋅Nrep with Nt as time dimension defined by the trajectory.
-"""
 function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, cmaps; U=I(length(data)))
     Ncoeff = size(U, 2)
     img_shape = size(cmaps[1])
     img_idx = CartesianIndices(img_shape)
-
 
     dataU = similar(data[1], img_shape..., Ncoeff)
     xbp = zeros(eltype(data[1]), img_shape..., Ncoeff)

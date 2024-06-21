@@ -5,8 +5,8 @@ Perform GROG kernel calibration based on whole radial trajectory and passed data
 Calibration follows the work on self-calibrating radial GROG (https://doi.org/10.1002/mrm.21565).
 
 # Arguments
-- `data::Matrix{ComplexF32}`: Basis coefficients of subspace
-- `traj::Vector{Matrix{Float32}}`: Trajectory
+- `data::AbstractVector{<:AbstractMatrix{cT}}`: Complex dataset passed as AbstractVector of matrices
+- `trj::Vector{Matrix{Float32}}`: Trajectory with samples corresponding to the dataset passed as AbstractVector of matrices with Float32 entries
 - `Nr::Int`: Number of samples per read out
 """
 function grog_calib(data, trj, Nr)
@@ -54,19 +54,18 @@ end
 Perform gridding of data based on pre-calculated GROG kernel.
 
 # Arguments
-- `data::Matrix{ComplexF32}`: Basis coefficients of subspace
-- `traj::Vector{Matrix{Float32}}`: Trajectory
+- `data::AbstractVector{<:AbstractMatrix{cT}}`: Complex dataset passed as AbstractVector of matrices
+- `trj::Vector{Matrix{Float32}}`: Trajectory with samples corresponding to the dataset passed as AbstractVector of matrices with Float32 entries
 - `lnG::Vector{Matrix{Float32}}`: Natural logarithm of GROG kernel in all dimensions
 - `Nr::Int`: Number of samples per read out
 - `img_shape::Tuple{Int}`: Image dimensions
 
-# Dimensions:
-- `data`:   [samples, spokes, timesteps, coils, repetitions of sampling pattern]
-- `trj`:    [timesteps, repetitions][dims, samples]
-- `lnG`:    [dims][Ncoils, Ncoils]
+- `trj::Vector{Matrix{Int32}}`: Trajectory
 
-# Further:
-- Ensure sampling pattern repeats in repetitions dimension!
+# Dimensions:
+- `data`:   [timesteps][samples, spokes, coils, repetitions of sampling pattern]
+- `trj`:    [timesteps][dims, samples, repetitions]
+- `lnG`:    [dims][Ncoils, Ncoils]
 """
 function grog_gridding!(data, trj, lnG, Nr, img_shape)
 
@@ -101,13 +100,19 @@ end
 """
     radial_grog!(data, trj, Nr, img_shape)
 
-Perform GROG kernel calibration and gridding of data in-place.
+Perform GROG kernel calibration and gridding [1] of data in-place. The trajectory is returned with integer values.
 
 # Arguments
-- `data::Matrix{ComplexF32}`: Basis coefficients of subspace
-- `traj::Vector{Matrix{Float32}}`: Trajectory
+- `data::AbstractVector{<:AbstractMatrix{cT}}`: Complex dataset passed as AbstractVector of matrices
+- `trj::Vector{Matrix{Float32}}`: Trajectory with samples corresponding to the dataset passed as AbstractVector of matrices with Float32 entries
 - `Nr::Int`: Number of samples per read out
 - `img_shape::Tuple{Int}`: Image dimensions
+
+# return
+- `trj::Vector{Matrix{Int32}}`: Trajectory
+
+# References
+[1] Seiberlich, N., Breuer, F., Blaimer, M., Jakob, P. and Griswold, M. (2008), Self-calibrating GRAPPA operator gridding for radial and spiral trajectories. Magn. Reson. Med., 59: 930-935. https://doi.org/10.1002/mrm.21565
 """
 function radial_grog!(data, trj, Nr, img_shape)
     lnG = grog_calib(data, trj, Nr)

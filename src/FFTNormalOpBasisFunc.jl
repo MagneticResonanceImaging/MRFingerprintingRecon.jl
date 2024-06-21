@@ -13,10 +13,11 @@ Differentiate between functions exploiting a pre-calculated kernel basis `Λ` an
 # Arguments
 - `img_shape::Tuple{Int}`: Image dimensions
 - `traj::Vector{Matrix{Float32}}`: Trajectory
-- `U::Matrix{ComplexF32}`: Basis coefficients of subspace
+- `U::Matrix{ComplexF32}`=(1,): Basis coefficients of subspace
 - `cmaps::Matrix{ComplexF32}`: Coil sensitivities
 - `M::Vector{Matrix{Float32}}`: Mask
 - `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
+-  `num_fft_threads::Int` = `round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1)): Number of Threads for FFT
 """
 function FFTNormalOp(img_shape, trj, U; cmaps=(1,), num_fft_threads = round(Int, Threads.nthreads()/size(U, 2)))
     Λ = calculateKernelBasis(img_shape, trj, U)

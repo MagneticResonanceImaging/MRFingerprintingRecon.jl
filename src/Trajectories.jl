@@ -9,8 +9,8 @@ With `samplingRate_units = false` the ouput is relative with samples ∈ [-1/2:1
 - `Ny::Int`: Number of phase encoding lines
 - `Nz::Int`: Number of phase encoding lines (third dimension)
 - `Nt::Int`: Number of times the sampling pattern is repeated
-- `samplingRate_units::Boolean`: Parameter setting the output units to sampling rate
-- `T::Type`: Type defining the output units of the trajectory
+- `samplingRate_units::Boolean`=`true`: Parameter setting the output units to sampling rate
+- `T::Type`=`Float32`: Type defining the output units of the trajectory
 """
 function traj_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float32)
     kx = collect(((-Nx+1)/2:(Nx-1)/2) / (samplingRate_units ? 1 : Nx))
@@ -39,7 +39,7 @@ function traj_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float32)
 end
 
 """
-    kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
+    kooshballGA(Nr, Ncyc, Nt; thetaRot, phiRot, delay)
 
 Function to calculate  golden means [1] based kooshball trajectory.
 
@@ -47,10 +47,9 @@ Function to calculate  golden means [1] based kooshball trajectory.
 - `Nr::Int`: Number of read out samples
 - `Ncyc::Int`: Number of cycles
 - `Nt::Int`: Number of time steps in the trajectory
-- `thetaRot::Float`: Fixed rotation angle along theta
-- `phiRot::Float`: Fixed rotation angle along phi
-- `delay::Tuple{Float, Float, Float}`: Gradient delays in (HF, AP, LR)
-- `T::Type`: Type defining the output units of the trajectory
+- `thetaRot::Float` = 0: Fixed rotation angle along theta
+- `phiRot::Float` = 0: Fixed rotation angle along phi
+- `delay::Tuple{Float, Float, Float}`= `(0, 0, 0)`: Gradient delays in (HF, AP, LR)
 
 # References
 [1] Chan, R.W., Ramsay, E.A., Cunningham, C.H. and Plewes, D.B. (2009), Temporal stability of adaptive 3D radial MRI using multidimensional golden means. Magn. Reson. Med., 61: 354-363. https://doi.org/10.1002/mrm.21837
@@ -67,7 +66,7 @@ function kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0))
 end
 
 """
-    traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), N = 1, T = Float32)
+    traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot, phiRot, delay, N)
 
 Function to calculate 2D golden ratio based trajectory [1].
 By modifying `N` also tiny golden angles [2] are supported.
@@ -76,11 +75,10 @@ By modifying `N` also tiny golden angles [2] are supported.
 - `Nr::Int`: Number of read out samples
 - `Ncyc::Int`: Number of cycles
 - `Nt::Int`: Number of time steps in the trajectory
-- `thetaRot::Float`: Fixed rotation angle along theta
-- `phiRot::Float`: Fixed rotation angle along phi
-- `delay::Tuple{Float, Float, Float}`: Gradient delays in (HF, AP, LR)
-- `N::Int`: Number of tiny golden angle
-- `T::Type`: Type defining the output units of the trajectory
+- `thetaRot::Float` = 0: Fixed rotation angle along theta
+- `phiRot::Float` = 0: Fixed rotation angle along phi
+- `delay::Tuple{Float, Float, Float}` = `(0, 0, 0)`: Gradient delays in (HF, AP, LR)
+- `N::Int` = 1: Number of tiny golden angle
 
 # References
 [1] Winkelmann S, Schaeffter T, Koehler T, Eggers H, Doessel O. An optimal radial profile order based on the Golden Ratio for time-resolved MRI. IEEE TMI 26:68--76 (2007)
@@ -102,7 +100,7 @@ function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, dela
 end
 
 """
-    kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0))
+    kooshball(Nr, theta, phi; thetaRot, phiRot, delay)
 
 Function to calculate kooshball trajectory.
 
@@ -110,9 +108,9 @@ Function to calculate kooshball trajectory.
 - `Nr::Int`: Number of read out samples
 - `theta::Array{Float,2}`: Array with dimensions: `Ncyc, Nt` defining the angles `theta` for each cycle and timestep.
 - `phi::Array{Float,2}`: Array with dimensions: `Ncyc, Nt` defining the angles `phi` for each cycle and timestep.
-- `thetaRot::Float`: Fixed rotation angle along theta
-- `phiRot::Float`: Fixed rotation angle along phi
-- `delay::Tuple{Float, Float, Float}`: Gradient delays in (HF, AP, LR)
+- `thetaRot::Float` = 0: Fixed rotation angle along theta
+- `phiRot::Float` = 0: Fixed rotation angle along phi
+- `delay::Tuple{Float, Float, Float}` = `(0, 0, 0)`: Gradient delays in (HF, AP, LR)
 """
 function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0))
 

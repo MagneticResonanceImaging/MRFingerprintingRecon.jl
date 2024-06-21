@@ -11,13 +11,13 @@ Differentiate between functions exploiting a pre-calculated Toeplitz kernel basi
 
 # Arguments
 - `img_shape::Tuple{Int}`: Image dimensions
-- `traj::Vector{Matrix{Float32}}`: Trajectory
-- `U::Matrix{ComplexF32}`: Basis coefficients of subspace
-- `cmaps::Matrix{ComplexF32}`: Coil sensitivities
+- `traj::AbstractVector{<:AbstractMatrix{T}}`: Trajectory
+- `U::AbstractMatrix{Tc}`: Basis coefficients of subspace
+- `cmaps::AbstractVector{Matrix{ComplexF32}}`=`[ones(T, img_shape)]`: Coil sensitivities
 - `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
 - `kmask_indcs::Vector{Int}`: Sampling indices of Toeplitz mask
-- `verbose::Boolean`: Verbose level
-- `num_fft_threads::Int`: Number of threads for FFT
+- `verbose::Boolean`=`false`: Verbose level
+- `num_fft_threads::Int`=`round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1))`: Number of threads for FFT
 """
 function NFFTNormalOp(
     img_shape,
