@@ -5,7 +5,6 @@ using LinearAlgebra
 using IterativeSolvers
 using FFTW
 using NFFT
-using SplitApplyCombine
 using Test
 
 ## set parameters
