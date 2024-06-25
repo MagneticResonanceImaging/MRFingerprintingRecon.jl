@@ -75,10 +75,6 @@ end
 
 function calculateKernelBasis(img_shape, trj, U)
     Ncoeff = size(U, 2)
-    Nt = length(trj) # number of time points
-    Nrep = size(U, 1) / Nt
-    @assert isinteger(Nrep) && (Nrep != 0) "Mismatch between trajectory and basis"
-
     Λ = zeros(eltype(U), Ncoeff, Ncoeff, img_shape...)
     for it ∈ axes(U, 1)
         for ix ∈ axes(trj[it], 2)
