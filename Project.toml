@@ -1,7 +1,7 @@
 name = "MRFingerprintingRecon"
 uuid = "f4798e02-a7e0-47f5-a571-12dd775704d3"
 authors = ["Jakob Asslaender <jakob.asslaender@nyumc.org>"]
-version = "0.8.0"
+version = "0.8.1-DEV"
 
 [deps]
 SplitApplyCombine = "03a91e81-4c3e-53e1-a0a4-9c0c8f19dd66"
