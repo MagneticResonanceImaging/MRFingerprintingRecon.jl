@@ -10,8 +10,8 @@ using LinearOperators
 using SplitApplyCombine
 using ExponentialUtilities
 
-export FFTNormalOp, radial_grog!, calculateBackProjection_gridded
 export NFFTNormalOp, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA, calcFilteredBackProjection
+export FFTNormalOp, radial_grog!
 
 function __init__()
     if Threads.nthreads() > 1

@@ -8,13 +8,18 @@ using Test
 @testset "Recon Radial" begin
     include("reconstruct_radial.jl")
 end
+
 @testset "Recon Cartesian" begin
+    include("backprojection_cart.jl")
     include("reconstruct_cart.jl")
+end
+
+@testset "Recon data removal" begin
+    include("data_removal.jl")
 end
 
 @testset "GROG" begin
     include("grog_spoke_shift.jl")
-    include("grog_grid_backproj.jl")
     include("grog_precalc_shift.jl")
     include("grog_recon.jl")
 end

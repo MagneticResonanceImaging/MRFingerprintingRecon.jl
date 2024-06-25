@@ -16,10 +16,10 @@ Nt = 100
 Ncoil = 9
 Nrep = 3
 Nd = 2
+Ncyc = 3
 
 ## Create trajectory
-trj = MRFingerprintingRecon.traj_2d_radial_goldenratio(Nr, 1, Nt; N=1)
-trj = [trj[i][1:Nd,:] for i ∈ eachindex(trj)] # only 2D traj, here
+trj = MRFingerprintingRecon.traj_2d_radial_goldenratio(Nr, Ncyc, Nt; N=1)
 
 ## Create phantom geometry
 x = shepp_logan(Nx)
@@ -44,26 +44,24 @@ cmaps = [cmaps[:,:,ic] for ic=1:Ncoil]
 
 
 ## Simulate data
-data = Array{Complex{T}}(undef, size(trj[1], 2), Nt, Ncoil)
+data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
 nfftplan = plan_nfft(trj[1], (Nx,Nx))
 xcoil = copy(x)
 for icoil ∈ 1:Ncoil
     xcoil .= x
     xcoil .*= cmaps[icoil]
-    for it ∈ axes(data,2)
+    for it ∈ eachindex(data)
         nodes!(nfftplan, trj[it])
-        @views mul!(data[:,it,icoil], nfftplan, xcoil)
+        @views mul!(data[it][:,icoil], nfftplan, xcoil)
     end
 end
 
 # Create repeating pattern
-data2 = repeat(deepcopy(data), outer = [1, 1, 1, Nrep])
-
+data2 = [repeat(data_i, outer = [1, 1, Nrep]) for data_i ∈ data]
 
 ## #####################################
 # Test Calibration of GROG kernel
 ########################################
-
 lnG = MRFingerprintingRecon.grog_calib(data, trj, Nr)
 lnG2 = MRFingerprintingRecon.grog_calib(data2, trj, Nr)
 
@@ -73,35 +71,34 @@ lnG2 = MRFingerprintingRecon.grog_calib(data2, trj, Nr)
 ## #####################################
 # Test Gridding with GROG kernel
 ########################################
-trj1 =  deepcopy(trj)
+trj2 =  deepcopy(trj)
 
 # Gridding of each sample with non repeating trajectory (Reference)
-MRFingerprintingRecon.grog_gridding!(data, trj1, lnG, Nr, (Nx,Nx))
+trj = MRFingerprintingRecon.grog_gridding!(data, trj, lnG, Nr, (Nx,Nx))
 
 # Exploit Precalculated Shifts
-MRFingerprintingRecon.grog_gridding!(data2, trj, lnG2, Nr, (Nx,Nx))
+trj2 = MRFingerprintingRecon.grog_gridding!(data2, trj2, lnG2, Nr, (Nx,Nx))
 
 # Compare gridding with and without repeating pattern
-@test data ≈ data2[:,:,:,1] rtol = 1e-6
-@test data ≈ data2[:,:,:,3] rtol = 1e-6
+@test data[1] ≈ data2[1][:,:,1] rtol = 1e-6
+@test data[1] ≈ data2[1][:,:,3] rtol = 1e-6
 
 
 ## #####################################
 # Test Gridded Reconstruction with and without Repeating Pattern
 ########################################
-
-U = ones(ComplexF32, size(data)[2], 1)
+U = ones(ComplexF32, length(data), 1)
 
 # Reconstruction without repeating pattern
 A_grog = FFTNormalOp((Nx,Nx), trj, U; cmaps)
-x1 = calculateBackProjection_gridded(data, trj, U, cmaps)
+x1 = calculateBackProjection(data, trj, cmaps; U)
 xg1 = cg(A_grog, vec(x1), maxiter=20)
 xg1 = reshape(xg1, Nx, Nx)
 
 # Reconstruction with repeating pattern
-U2 = repeat(U, outer=[Nrep]) # For joint subspace reconstruction
-A_grog = FFTNormalOp((Nx,Nx), trj, U2; cmaps)
-x2 = calculateBackProjection_gridded(data2, trj, U2, cmaps)
+U2 = repeat(U, 1, 1, Nrep) # For joint subspace reconstruction
+A_grog = FFTNormalOp((Nx,Nx), trj2, U2; cmaps)
+x2 = calculateBackProjection(data2, trj2, cmaps; U=U2)
 xg2 = cg(A_grog, vec(x2), maxiter=20)
 xg2 = reshape(xg2, Nx, Nx)
 

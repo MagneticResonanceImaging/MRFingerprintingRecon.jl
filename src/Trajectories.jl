@@ -1,5 +1,5 @@
 """
-    traj_2d_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float32)
+    traj_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float32)
 
 Function to calculate a 2D cartesian trajectory in units of sampling rate ∈ {x | -N/2+1 ≤ x ≤ N/2 and x ∈ Z}.
 With `samplingRate_units = false` the ouput is relative with samples ∈ [-1/2:1/2].
@@ -9,17 +9,15 @@ With `samplingRate_units = false` the ouput is relative with samples ∈ [-1/2:1
 - `Ny::Int`: Number of phase encoding lines
 - `Nz::Int`: Number of phase encoding lines (third dimension)
 - `Nt::Int`: Number of times the sampling pattern is repeated
-- `samplingRate_units::Boolean`: Parameter setting the output units to sampling rate
-- `T::Type`: Type defining the output units of the trajectory
+- `samplingRate_units::Boolean`=`true`: Parameter setting the output units to sampling rate
+- `T::Type`=`Float32`: Type defining the output units of the trajectory
 """
-function traj_2d_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float32)
-
+function traj_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float32)
     kx = collect(((-Nx+1)/2:(Nx-1)/2) / (samplingRate_units ? 1 : Nx))
     ky = collect(((-Ny+1)/2:(Ny-1)/2) / (samplingRate_units ? 1 : Ny))
     kz = collect(((-Nz+1)/2:(Nz-1)/2) / (samplingRate_units ? 1 : Nz))
 
     k = Vector{Matrix{T}}(undef, Nt)
-
     for it ∈ eachindex(k)
 
         ki = Array{T,4}(undef, 3, Nx, Ny, Nz)
@@ -37,12 +35,11 @@ function traj_2d_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float3
             k[it] = round.(k[it] .+ 0.5) # ceil operation on arrays
         end
     end
-
     return k
 end
 
 """
-    kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), T = Float32)
+    kooshballGA(Nr, Ncyc, Nt; thetaRot, phiRot, delay)
 
 Function to calculate  golden means [1] based kooshball trajectory.
 
@@ -50,10 +47,9 @@ Function to calculate  golden means [1] based kooshball trajectory.
 - `Nr::Int`: Number of read out samples
 - `Ncyc::Int`: Number of cycles
 - `Nt::Int`: Number of time steps in the trajectory
-- `thetaRot::Float`: Fixed rotation angle along theta
-- `phiRot::Float`: Fixed rotation angle along phi
-- `delay::Tuple{Float, Float, Float}`: Gradient delays in (HF, AP, LR)
-- `T::Type`: Type defining the output units of the trajectory
+- `thetaRot::Float` = 0: Fixed rotation angle along theta
+- `phiRot::Float` = 0: Fixed rotation angle along phi
+- `delay::Tuple{Float, Float, Float}`= `(0, 0, 0)`: Gradient delays in (HF, AP, LR)
 
 # References
 [1] Chan, R.W., Ramsay, E.A., Cunningham, C.H. and Plewes, D.B. (2009), Temporal stability of adaptive 3D radial MRI using multidimensional golden means. Magn. Reson. Med., 61: 354-363. https://doi.org/10.1002/mrm.21837
@@ -70,7 +66,7 @@ function kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0))
 end
 
 """
-    traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), N = 1, T = Float32)
+    traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot, phiRot, delay, N)
 
 Function to calculate 2D golden ratio based trajectory [1].
 By modifying `N` also tiny golden angles [2] are supported.
@@ -79,11 +75,10 @@ By modifying `N` also tiny golden angles [2] are supported.
 - `Nr::Int`: Number of read out samples
 - `Ncyc::Int`: Number of cycles
 - `Nt::Int`: Number of time steps in the trajectory
-- `thetaRot::Float`: Fixed rotation angle along theta
-- `phiRot::Float`: Fixed rotation angle along phi
-- `delay::Tuple{Float, Float, Float}`: Gradient delays in (HF, AP, LR)
-- `N::Int`: Number of tiny golden angle
-- `T::Type`: Type defining the output units of the trajectory
+- `thetaRot::Float` = 0: Fixed rotation angle along theta
+- `phiRot::Float` = 0: Fixed rotation angle along phi
+- `delay::Tuple{Float, Float, Float}` = `(0, 0, 0)`: Gradient delays in (HF, AP, LR)
+- `N::Int` = 1: Number of tiny golden angle
 
 # References
 [1] Winkelmann S, Schaeffter T, Koehler T, Eggers H, Doessel O. An optimal radial profile order based on the Golden Ratio for time-resolved MRI. IEEE TMI 26:68--76 (2007)
@@ -93,17 +88,19 @@ function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, dela
 
     τ = (sqrt(5) + 1) / 2
 
-    theta = 0 * (0:(Ncyc*Nt-1)) .+ π/2 # 2D only
-    theta = reshape(theta, Nt, Ncyc)
-
-    phi = (0:(Ncyc*Nt-1)) * π / (τ + N - 1) # FIXME: Float32 results in minor differences for very long repetition trains
+    phi = (0:(Ncyc*Nt-1)) * π / (τ + N - 1)
     phi = reshape(phi, Nt, Ncyc)
 
-    return kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay)
+    theta = similar(phi)
+    theta .= π/2 # 2D
+
+    trj = kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay)
+    trj = [trj[i][1:2,:] for i ∈ eachindex(trj)] # remove 3rd dimenion
+    return trj
 end
 
 """
-    kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0))
+    kooshball(Nr, theta, phi; thetaRot, phiRot, delay)
 
 Function to calculate kooshball trajectory.
 
@@ -111,9 +108,9 @@ Function to calculate kooshball trajectory.
 - `Nr::Int`: Number of read out samples
 - `theta::Array{Float,2}`: Array with dimensions: `Ncyc, Nt` defining the angles `theta` for each cycle and timestep.
 - `phi::Array{Float,2}`: Array with dimensions: `Ncyc, Nt` defining the angles `phi` for each cycle and timestep.
-- `thetaRot::Float`: Fixed rotation angle along theta
-- `phiRot::Float`: Fixed rotation angle along phi
-- `delay::Tuple{Float, Float, Float}`: Gradient delays in (HF, AP, LR)
+- `thetaRot::Float` = 0: Fixed rotation angle along theta
+- `phiRot::Float` = 0: Fixed rotation angle along phi
+- `delay::Tuple{Float, Float, Float}` = `(0, 0, 0)`: Gradient delays in (HF, AP, LR)
 """
 function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0))
 

@@ -16,7 +16,7 @@ Nt = 1
 Ncoil = 9
 
 ## Create trajectory
-trj = MRFingerprintingRecon.traj_2d_cartesian(Nx, Nx, 1, Nt; samplingRate_units=false) # unitless for plan_nfft()
+trj = MRFingerprintingRecon.traj_cartesian(Nx, Nx, 1, Nt; samplingRate_units=false) # unitless for plan_nfft()
 trj = [trj[i][1:2,:] for i ∈ eachindex(trj)] # only 2D traj here
 
 
@@ -45,42 +45,29 @@ cmaps = [cmaps[:,:,ic] for ic=1:Ncoil]
 
 
 ## Simulate data
-data = Array{Complex{T}}(undef, size(trj[1], 2), Nt, Ncoil)
-
+data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
 nfftplan = plan_nfft(trj[1], (Nx,Nx))
 
 xcoil = copy(x)
-
 for icoil ∈ 1:Ncoil
-
     xcoil .= x
     xcoil .*= cmaps[icoil]
 
-    for it ∈ axes(data,2)
-
+    for it ∈ eachindex(data)
         nodes!(nfftplan, trj[it])
-
-        @views mul!(data[:,it,icoil], nfftplan, xcoil)
+        @views mul!(data[it][:,icoil], nfftplan, xcoil)
     end
 end
 
 ## Reconstruction and test
-U = ones(ComplexF32, size(data)[2], 1)
+U = ones(ComplexF32, length(data), 1)
 
 #### Convert traj to units of sampling rate
-#### Required for calculateBackProjection_gridded function
-for it ∈ eachindex(trj)
+#### Required for calculateBackProjection function
+trj = [ceil.(Int32, trj_i .* Nx) for trj_i ∈ trj]
 
-    @views mul!(trj[it][1,:], trj[it][1,:], Nx)
-    @views mul!(trj[it][2,:], trj[it][2,:], Nx)
-
-    trj[it] = ceil.(Int, trj[it])
-end
-
-reco = calculateBackProjection_gridded(data, trj, U, cmaps)
-
+reco = calculateBackProjection(data, trj, cmaps; U)
 reco = dropdims(reco, dims=3)
-
 @test abs.(x) ≈ abs.(reco) atol = 3e-5
 
 # @test angle.(x) ≈ angle.(reco) atol = 3e-5 # FIXME: Phase effects?!

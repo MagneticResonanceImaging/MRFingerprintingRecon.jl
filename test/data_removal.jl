@@ -56,21 +56,41 @@ U = randn(Complex{T}, Nt, Nc)
 U,_,_ = svd(U)
 
 ## simulate data
-data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
+data = Array{Complex{T}}(undef, size(trj[1], 2), Nt, Ncoil)
+data = [data[:,it,:] for it = 1:Nt]
+
 nfftplan = plan_nfft(trj[1], (Nx,Nx))
 xcoil = copy(x)
 for icoil ∈ 1:Ncoil
     xcoil .= x
     xcoil .*= cmaps[icoil]
-    for it ∈ eachindex(data)
+    for it ∈ axes(data,1)
         nodes!(nfftplan, trj[it])
         xt = reshape(reshape(xcoil, :, Nc) * U[it,:], Nx, Nx)
         @views mul!(data[it][:,icoil], nfftplan, xt)
     end
 end
 
-## BackProjection
-b = calculateBackProjection(data, trj, cmaps; U)
+# create mask with false value to remove
+it_rm = 1
+icyc_rm = 5
+maskDataSelection = trues(2Nx, Ncyc, Nt)
+maskDataSelection[:, icyc_rm, it_rm] .= false
+
+maskDataSelection = reshape(maskDataSelection,:,Nt)
+maskDataSelection = [vec(maskDataSelection[:,i]) for i in axes(maskDataSelection,2)]
+
+# remove data
+for it ∈ 1:Nt
+    data[it] = data[it][maskDataSelection[it],:] 
+    trj[it] = trj[it][:,maskDataSelection[it]] 
+end
+
+## Test BackProjection 
+img_shape = (Nx,Nx)
+b_temp = calculateBackProjection(data, trj, img_shape)
+
+b = calculateBackProjection(data, trj, cmaps; U=U)
 
 ## construct forward operator
 A = NFFTNormalOp((Nx,Nx), trj, U, cmaps=cmaps)
@@ -104,9 +124,3 @@ xc = ifft(ifftshift(xc, 1:2), 1:2)
 
 ##
 @test xr ≈ xc rtol = 1e-1
-
-##
-# using Plots
-# plotlyjs(bg = RGBA(31/255,36/255,36/255,1.0), ticks=:native)
-# heatmap(abs.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), dims=1)), clim=(0.75, 1.25), size=(1200,600))
-# heatmap(angle.(cat(reshape(xr, Nx, :), reshape(xc, Nx, :), dims=1)), size=(1200,600))

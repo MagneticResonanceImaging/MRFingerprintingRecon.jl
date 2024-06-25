@@ -35,15 +35,6 @@ cmaps[:,:,7] .= phantom(1:Nx, 1:Nx, [gauss2((7Nx÷8, Nx÷8),  (Nx÷1.5,Nx÷1.5))
 cmaps[:,:,8] .= phantom(1:Nx, 1:Nx, [gauss2((7Nx÷8, Nx÷2),  (Nx÷1.5,Nx÷1.5))], 2)
 cmaps[:,:,9] .= phantom(1:Nx, 1:Nx, [gauss2((7Nx÷8, 7Nx÷8), (Nx÷1.5,Nx÷1.5))], 2)
 
-# [cmaps[i,:,2] .*= exp( 1im * π/4 * i/Nx) for i ∈ axes(cmaps,1)]
-# [cmaps[i,:,3] .*= exp(-1im * π/4 * i/Nx) for i ∈ axes(cmaps,1)]
-# [cmaps[:,i,4] .*= exp( 1im * π/4 * i/Nx) for i ∈ axes(cmaps,2)]
-# [cmaps[:,i,5] .*= exp(-1im * π/4 * i/Nx) for i ∈ axes(cmaps,2)]
-# [cmaps[i,:,6] .*= exp( 2im * π/4 * i/Nx) for i ∈ axes(cmaps,1)]
-# [cmaps[i,:,7] .*= exp(-2im * π/4 * i/Nx) for i ∈ axes(cmaps,1)]
-# [cmaps[:,i,8] .*= exp( 2im * π/4 * i/Nx) for i ∈ axes(cmaps,2)]
-# [cmaps[:,i,9] .*= exp(-2im * π/4 * i/Nx) for i ∈ axes(cmaps,2)]
-
 for i ∈ CartesianIndices(@view cmaps[:,:,1])
     cmaps[i,:] ./= norm(cmaps[i,:])
 end
@@ -64,16 +55,16 @@ U = randn(Complex{T}, Nt, Nc)
 U,_,_ = svd(U)
 
 ## simulate data
-data = Array{Complex{T}}(undef, size(trj[1], 2), Nt, Ncoil)
+data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
 nfftplan = plan_nfft(trj[1], (Nx,Nx))
 xcoil = copy(x)
 for icoil ∈ 1:Ncoil
     xcoil .= x
     xcoil .*= cmaps[icoil]
-    for it ∈ axes(data,2)
+    for it ∈ eachindex(data)
         nodes!(nfftplan, trj[it])
         xt = reshape(reshape(xcoil, :, Nc) * U[it,:], Nx, Nx)
-        @views mul!(data[:,it,icoil], nfftplan, xt)
+        @views mul!(data[it][:,icoil], nfftplan, xt)
     end
 end
 
@@ -86,15 +77,20 @@ for i ∈ CartesianIndices(xc)
 end
 xc = ifft(ifftshift(xc, 1:2), 1:2)
 
+## Remove some data
+data[2] = data[2][1:end-Nr,:]
+trj[2]  =  trj[2][:,1:end-Nr]
+
 ## NFFT Reconstruction
 xbp_rad = calculateBackProjection(data, trj, cmaps; U=U)
 A_rad = NFFTNormalOp((Nx,Nx), trj, U; cmaps=cmaps)
 xr = cg(A_rad, vec(xbp_rad), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
 
+
 ## GROG Reconstruction
-radial_grog!(data, trj, Nr, (Nx,Nx))
-xbp_grog = calculateBackProjection_gridded(data, trj, U, cmaps)
+trj = radial_grog!(data, trj, Nr, (Nx,Nx))
+xbp_grog = calculateBackProjection(data, trj, cmaps; U)
 A_grog = FFTNormalOp((Nx,Nx), trj, U; cmaps)
 xg = cg(A_grog, vec(xbp_grog), maxiter=20)
 xg = reshape(xg, Nx, Nx, Nc)

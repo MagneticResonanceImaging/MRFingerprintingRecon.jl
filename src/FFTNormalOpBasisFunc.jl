@@ -13,10 +13,11 @@ Differentiate between functions exploiting a pre-calculated kernel basis `Λ` an
 # Arguments
 - `img_shape::Tuple{Int}`: Image dimensions
 - `traj::Vector{Matrix{Float32}}`: Trajectory
-- `U::Matrix{ComplexF32}`: Basis coefficients of subspace
+- `U::Matrix{ComplexF32}`=(1,): Basis coefficients of subspace
 - `cmaps::Matrix{ComplexF32}`: Coil sensitivities
 - `M::Vector{Matrix{Float32}}`: Mask
 - `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
+-  `num_fft_threads::Int` = `round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1)): Number of Threads for FFT
 """
 function FFTNormalOp(img_shape, trj, U; cmaps=(1,), num_fft_threads = round(Int, Threads.nthreads()/size(U, 2)))
     Λ = calculateKernelBasis(img_shape, trj, U)
@@ -74,24 +75,13 @@ end
 
 function calculateKernelBasis(img_shape, trj, U)
     Ncoeff = size(U, 2)
-    Nt = length(trj) # number of time points
-    Nrep = size(U, 1) / Nt
-
-    @assert isinteger(Nrep) && (Nrep != 0) "Mismatch between trajectory and basis"
-
     Λ = zeros(eltype(U), Ncoeff, Ncoeff, img_shape...)
-
-    for it ∈ 1:size(U, 1)
-
-        t_idx = mod(it + Nt - 1, Nt) + 1 # "mod" to incorporate repeated sampling pattern, "mod(i[2]+Nt-1,Nt)+1" to compensate for one indexing
-
-        for ix ∈ axes(trj[t_idx], 2)
-
-            k_idx = ntuple(j -> mod1(Int(trj[t_idx][j, ix]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
+    for it ∈ axes(U, 1)
+        for ix ∈ axes(trj[it], 2)
+            k_idx = ntuple(j -> mod1(Int(trj[it][j, ix]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
             k_idx = CartesianIndex(k_idx)
-
-            for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
-                Λ[ic[1], ic[2], k_idx] += conj(U[it, ic[1]]) * U[it, ic[2]]
+            for ic ∈ CartesianIndices((Ncoeff, Ncoeff)), irep ∈ axes(U, 3)
+                Λ[ic[1], ic[2], k_idx] += conj(U[it, ic[1], irep]) * U[it, ic[2], irep]
             end
         end
     end
