@@ -23,3 +23,9 @@ end
     include("grog_precalc_shift.jl")
     include("grog_recon.jl")
 end
+
+
+# FIXME: Find way to incorporate GPU tests into CI pipeline
+# @testset "GPU Tests" begin
+#     include("gpu_cart.jl")
+# end

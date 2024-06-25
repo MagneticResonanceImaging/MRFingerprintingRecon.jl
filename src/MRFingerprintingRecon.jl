@@ -9,6 +9,8 @@ using MRICoilSensitivities
 using LinearOperators
 using SplitApplyCombine
 using ExponentialUtilities
+using GPUArrays
+using CUDA
 
 export NFFTNormalOp, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA, calcFilteredBackProjection
 export FFTNormalOp, radial_grog!
@@ -20,6 +22,7 @@ function __init__()
     FFTW.set_num_threads(Threads.nthreads())
 end
 
+include("KernelCUDA.jl")
 include("GROG.jl")
 include("FFTNormalOpBasisFunc.jl")
 include("NFFTNormalOpBasisFunc.jl")
