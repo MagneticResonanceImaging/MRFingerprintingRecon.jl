@@ -50,7 +50,7 @@ function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::A
         img_shape_cmaps = img_shape
     end
     
-    if mask_edges # rm edge artifacts in rosette CG recons
+    if mask_edges # Helps to rm edge artifacts
         x[1:2,:,:,:] .= 0
         x[end-1:end,:,:,:] .= 0
         x[:,1:2,:,:] .= 0
