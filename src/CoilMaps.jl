@@ -24,24 +24,54 @@ Estimate coil sensitivity maps using ESPIRiT [1].
 # References
 [1] Uecker, M., Lai, P., Murphy, M.J., Virtue, P., Elad, M., Pauly, J.M., Vasanawala, S.S. and Lustig, M. (2014), ESPIRiT—an eigenvalue approach to autocalibrating parallel MRI: Where SENSE meets GRAPPA. Magn. Reson. Med., 71: 990-1001. https://doi.org/10.1002/mrm.24751
 """
-function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U = ones(length(data)), density_compensation=:radial_3D, kernel_size=ntuple(_ -> 6, N), calib_size=ntuple(_ -> 24, N), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose=false) where {N,T}
+function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U = ones(length(data)), density_compensation=:radial_3D, res_factor = 1, CG = false, mask_edges = false , kernel_size=ntuple(_ -> 6, N), calib_size=ntuple(_ -> 24, N), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose=false) where {N,T}
     Ncoil = size(data[1], 2)
     Ndims = length(img_shape)
     imdims = ntuple(i -> i, Ndims)
+    Nt = length(trj)
 
-    xbp = calculateBackProjection(data, trj, img_shape; U=U[:,1], density_compensation, verbose)
-    xbp = dropdims(xbp, dims=ndims(xbp)-1)
+    if CG # reconstuct using CG
+        DownSamplingFactor = minimum(img_shape .÷ (calib_size .* 2))
+        img_shape_cmaps = img_shape.÷DownSamplingFactor
 
-    img_idx = CartesianIndices(img_shape)
-    kbp = fftshift(xbp, imdims)
+        trj_CG = Vector{Matrix{T}}(undef, Nt)
+        data_CG = similar(data)
+        for it ∈ eachindex(trj)
+            trj_idx = [maximum(abs.(trj[it][:, i] .* DownSamplingFactor)) .< T(0.5) for i ∈ axes(trj[it], 2)]
+            trj_CG[it] = trj[it][:, trj_idx] .* DownSamplingFactor
+            data_CG[it] = data[it][trj_idx, :]
+        end
+        
+        x = calculateCoilwiseCG(data_CG, trj_CG, img_shape_cmaps; U)
+
+    else # reconstuct using filtered backprojection
+        x = calculateBackProjection(data, trj, img_shape; U=U[:,1], density_compensation, verbose)
+        x = dropdims(x,  dims=ndims(x)-1)
+        img_shape_cmaps = img_shape
+    end
+    
+    if mask_edges # rm edge artifacts in rosette CG recons
+        x[1:2,:,:,:] .= 0
+        x[end-1:end,:,:,:] .= 0
+        x[:,1:2,:,:] .= 0
+        x[:,end-1:end,:,:] .= 0
+        x[:,:,1:2,:] .= 0
+        x[:,:,end-1:end,:] .= 0
+    end
+
+    
+    img_idx = CartesianIndices(round.(Int, img_shape ./ res_factor))
+
+
+    kbp = fftshift(x, imdims)
     fft!(kbp, imdims)
     kbp = fftshift(kbp, imdims)
 
-    m = CartesianIndices(calib_size) .+ CartesianIndex((img_shape .- calib_size) .÷ 2)
+    m = CartesianIndices(calib_size) .+ CartesianIndex((img_shape_cmaps .- calib_size) .÷ 2)
     kbp = kbp[m, :]
 
     t = @elapsed begin
-        cmaps = espirit(kbp, img_shape, kernel_size, eigThresh_1=eigThresh_1, eigThresh_2=eigThresh_2, nmaps=nmaps)
+        cmaps = espirit(kbp, round.(Int, img_shape ./ res_factor), kernel_size, eigThresh_1=eigThresh_1, eigThresh_2=eigThresh_2, nmaps=nmaps)
     end
     verbose && println("espirit: $t s")
 

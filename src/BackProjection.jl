@@ -112,6 +112,23 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::Abs
     return xbp
 end
 
+
+function calculateCoilwiseCG(data::AbstractVector{<:AbstractArray{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), verbose=false) where {T <: Real, cT <: Complex{T},N}
+    Ncoil = size(data[1], 2)
+
+    AᴴA = NFFTNormalOp(img_shape, trj, U[:, 1:1], verbose=false)
+    x = zeros(Complex{T},(img_shape...,Ncoil))
+
+    for icoil = 1:Ncoil
+        data_coil = [data[it][:,icoil:icoil] for it in eachindex(data)]
+        xbp = calculateBackProjection(data_coil, trj, img_shape, U=U[:,1:1])
+        x_tmp = zeros(Complex{T}, length(xbp))
+        cg!(x_tmp, AᴴA, vec(xbp), maxiter=100, verbose=false, reltol=zero(real(eltype(x_tmp))))
+        x[:,:,:,icoil] = reshape(x_tmp, size(xbp))
+    end
+    return x
+end
+
 ## ##########################################################################
 # Internal use
 #############################################################################

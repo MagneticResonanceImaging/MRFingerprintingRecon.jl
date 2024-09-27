@@ -8,6 +8,8 @@ using NFFTTools
 using MRICoilSensitivities
 using LinearOperators
 using ExponentialUtilities
+using IterativeSolvers
+
 
 export NFFTNormalOp, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA, calcFilteredBackProjection
 export FFTNormalOp, radial_grog!
