@@ -113,18 +113,17 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::Abs
 end
 
 
-function calculateCoilwiseCG(data::AbstractVector{<:AbstractArray{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), verbose=false) where {T <: Real, cT <: Complex{T},N}
+function calculateCoilwiseCG(data::AbstractVector{<:AbstractArray{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), maxiter=100, verbose=false) where {T <: Real, cT <: Complex{T},N}
     Ncoil = size(data[1], 2)
 
-    AᴴA = NFFTNormalOp(img_shape, trj, U[:, 1:1], verbose=false)
-    x = zeros(Complex{T},(img_shape...,Ncoil))
+    AᴴA = NFFTNormalOp(img_shape, trj, U[:, 1]; verbose)
+    xbp = calculateBackProjection(data, trj, img_shape; U=U[:,1], verbose)
+    x = zeros(Complex{T}, img_shape..., Ncoil)
 
     for icoil = 1:Ncoil
-        data_coil = [data[it][:,icoil:icoil] for it in eachindex(data)]
-        xbp = calculateBackProjection(data_coil, trj, img_shape, U=U[:,1:1])
-        x_tmp = zeros(Complex{T}, length(xbp))
-        cg!(x_tmp, AᴴA, vec(xbp), maxiter=100, verbose=false, reltol=zero(real(eltype(x_tmp))))
-        x[:,:,:,icoil] = reshape(x_tmp, size(xbp))
+        bi = vec(@view xbp[CartesianIndices(img_shape),1,icoil])
+        xi = vec(@view x[CartesianIndices(img_shape),icoil])
+        cg!(xi, AᴴA, bi; maxiter, verbose, reltol=0)
     end
     return x
 end
