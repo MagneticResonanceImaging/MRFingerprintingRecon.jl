@@ -21,8 +21,8 @@ Calculate (filtered) backprojection
 # Notes
 - The type of the elements of the trajectory define if a gridded backprojection (eltype(trj[1]) or eltype(trj) <: Int) or a non-uniform (else) is performed.
 """
-function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), density_compensation=:none, verbose=false) where {T <: Real, cT <: Complex{T},N}
-    Ncoef = size(U,2)
+function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
+    Ncoef = size(U, 2)
 
     trj_v = reduce(hcat, trj)
     p = plan_nfft(trj_v, img_shape; precompute=TENSOR, blocking=true, fftflags=FFTW.MEASURE)
@@ -30,59 +30,63 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj:
     Ncoil = size(data[1], 2)
     xbp = Array{cT}(undef, img_shape..., Ncoef, Ncoil)
 
-    trj_l = [size(trj[it],2) for it in eachindex(trj)]
-    data_temp = Vector{cT}(undef,sum(trj_l))
+    trj_l = [size(trj[it], 2) for it in eachindex(trj)]
+    data_temp = Vector{cT}(undef, sum(trj_l))
 
     img_idx = CartesianIndices(img_shape)
-    verbose && println("calculating backprojection..."); flush(stdout)
+    verbose && println("calculating backprojection...")
+    flush(stdout)
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ axes(data[1], 2)
             @simd for it in eachindex(data)
                 idx1 = sum(trj_l[1:it-1]) + 1
                 idx2 = sum(trj_l[1:it])
-                @views data_temp[idx1:idx2] .= data[it][:,icoil] .* conj(U[it,icoef])
+                @views data_temp[idx1:idx2] .= data[it][:, icoil] .* conj(U[it, icoef])
             end
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
 
             @views mul!(xbp[img_idx, icoef, icoil], adjoint(p), data_temp)
         end
-        verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
+        verbose && println("coefficient = $icoef: t = $t s")
+        flush(stdout)
     end
     return xbp
 end
 
-function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, cmaps::AbstractVector{<:AbstractArray{cT,N}}; U=I(length(data)), density_compensation=:none, verbose=false) where {T <: Real, cT <: Complex{T}, N}
+function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, cmaps::AbstractVector{<:AbstractArray{cT,N}}; U=I(length(data)), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
     test_dimension(data, trj, U, cmaps)
 
     trj_v = reduce(hcat, trj)
     Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
 
-    p = plan_nfft(trj_v, img_shape; precompute=TENSOR, blocking = true, fftflags = FFTW.MEASURE)
+    p = plan_nfft(trj_v, img_shape; precompute=TENSOR, blocking=true, fftflags=FFTW.MEASURE)
     xbp = zeros(cT, img_shape..., Ncoef)
     xtmp = Array{cT}(undef, img_shape)
 
-    trj_l = [size(trj[it],2) for it in eachindex(trj)]
-    data_temp = Vector{cT}(undef,sum(trj_l))
+    trj_l = [size(trj[it], 2) for it in eachindex(trj)]
+    data_temp = Vector{cT}(undef, sum(trj_l))
     img_idx = CartesianIndices(img_shape)
-    verbose && println("calculating backprojection..."); flush(stdout)
+    verbose && println("calculating backprojection...")
+    flush(stdout)
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
             @simd for it in eachindex(data)
                 idx1 = sum(trj_l[1:it-1]) + 1
                 idx2 = sum(trj_l[1:it])
-                @views data_temp[idx1:idx2] .= data[it][:,icoil] .* conj(U[it,icoef])
+                @views data_temp[idx1:idx2] .= data[it][:, icoil] .* conj(U[it, icoef])
             end
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
             mul!(xtmp, adjoint(p), data_temp)
-            xbp[img_idx,icoef] .+= conj.(cmaps[icoil]) .* xtmp
+            xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
-        verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
+        verbose && println("coefficient = $icoef: t = $t s")
+        flush(stdout)
     end
     return xbp
 end
 
-function calculateBackProjection(data::AbstractArray{cT}, trj::AbstractMatrix{T}, cmaps_img_shape; density_compensation=:none, verbose=false) where {T <: Real, cT <: Complex{T}}
+function calculateBackProjection(data::AbstractArray{cT}, trj::AbstractMatrix{T}, cmaps_img_shape; density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T}}
     return calculateBackProjection([data], [trj], cmaps_img_shape; U=I(1), density_compensation, verbose)
 end
 
@@ -110,6 +114,22 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::Abs
         end
     end
     return xbp
+end
+
+
+function calculateCoilwiseCG(data::AbstractVector{<:AbstractArray{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), maxiter=100, verbose=false) where {T<:Real,cT<:Complex{T},N}
+    Ncoil = size(data[1], 2)
+
+    AᴴA = NFFTNormalOp(img_shape, trj, U[:, 1]; verbose)
+    xbp = calculateBackProjection(data, trj, img_shape; U=U[:, 1], verbose)
+    x = zeros(cT, img_shape..., Ncoil)
+
+    for icoil = 1:Ncoil
+        bi = vec(@view xbp[CartesianIndices(img_shape), 1, icoil])
+        xi = vec(@view x[CartesianIndices(img_shape), icoil])
+        cg!(xi, AᴴA, bi; maxiter, verbose, reltol=0)
+    end
+    return x
 end
 
 ## ##########################################################################

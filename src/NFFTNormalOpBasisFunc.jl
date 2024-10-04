@@ -22,7 +22,7 @@ Differentiate between functions exploiting a pre-calculated Toeplitz kernel basi
 function NFFTNormalOp(
     img_shape,
     trj::AbstractVector{<:AbstractMatrix{T}},
-    U::AbstractMatrix{Tc};
+    U::AbstractArray{Tc};
     cmaps=[ones(T, img_shape)],
     verbose = false,
     num_fft_threads = round(Int, Threads.nthreads()/size(U, 2)),
@@ -93,7 +93,7 @@ function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:AbstractMatri
     return kmask_indcs
 end
 
-function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractMatrix{Tc}; verbose = false) where {T, Tc <: Union{T, Complex{T}}}
+function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractArray{Tc}; verbose = false) where {T, Tc <: Union{T, Complex{T}}}
 
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
@@ -106,7 +106,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
     λ2 = similar(λ)
     λ3 = similar(λ)
     Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
-    
+
     trj_l = [size(trj[it],2) for it in eachindex(trj)]
     S  = Vector{Complex{T}}(undef, sum(trj_l))
 
