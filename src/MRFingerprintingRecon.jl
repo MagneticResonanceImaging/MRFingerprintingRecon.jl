@@ -9,6 +9,7 @@ using MRICoilSensitivities
 using LinearOperators
 using ExponentialUtilities
 using IterativeSolvers
+using CUDA
 
 export NFFTNormalOp, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA, calcFilteredBackProjection
 export FFTNormalOp, radial_grog!
