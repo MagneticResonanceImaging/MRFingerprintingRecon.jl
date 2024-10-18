@@ -10,6 +10,10 @@ using LinearOperators
 using ExponentialUtilities
 using IterativeSolvers
 
+# Additions for GPU functionality
+using CUDA
+using NonuniformFFTs
+export calculateBackProjection1, calculateBackProjection2
 
 export NFFTNormalOp, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA, calcFilteredBackProjection
 export FFTNormalOp, radial_grog!

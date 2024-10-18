@@ -93,10 +93,24 @@ function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:AbstractMatri
     return kmask_indcs
 end
 
+function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:CuArray{T}}) where T
+    shape = Int.(img_shape_os ./ 2)
+    trj_v = reduce(hcat, trj)
+    nfftplan = PlanNUFFT(trj_v, shape; backend=CUDABackend())
+    (; backend, points, kernels, data, blocks,) = nfftplan
+    (; us,) = data
+    vp = (CuArray(ones(Complex{T}, size(trj_v, 2))),)
+    NonuniformFFTs.spread_from_points!(backend, blocks, kernels, us, points, vp)
+    kmask = (us[1] .!= 0)
+    kmask_indcs = findall(vec(kmask))
+    return kmask_indcs
+end
+
 function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractArray{Tc}; verbose = false) where {T, Tc <: Union{T, Complex{T}}}
 
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
-    @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
+
+    @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bounds
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
     Ncoeff = size(U, 2)
@@ -140,6 +154,66 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
     return Λ, kmask_indcs
 end
 
+function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArray{T}}, U::CuArray{Tc}; verbose = false) where {T, Tc <: Union{T, Complex{T}}}
+    
+    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
+
+    @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
+    @assert all(kmask_indcs .<= prod(img_shape_os))
+
+    Ncoeff = size(U, 2)
+    Nt = size(U,1)
+
+    # Allocate kernel arrays
+    λ  = CuArray{Complex{T}}(undef, img_shape_os)
+    λ2 = similar(λ)
+    λ3 = similar(λ)
+    Λ  = CuArray{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
+    trj_l = [size(trj[it],2) for it in eachindex(trj)]
+    S = CuArray{Complex{T}}(undef, sum(trj_l)) 
+
+    # Prep plans
+    fftplan  = plan_fft(λ)
+    nfftplan = PlanNUFFT(reduce(hcat, trj), img_shape_os; backend=CUDABackend())
+
+    # Kernel helpers
+    Uc = conj(U)
+    trj_c = CuArray([0; cumsum(trj_l[1:end-1])])
+    trj_l = CuArray(trj_l)
+
+    # @cuda arguments
+    # 1. kernel_mul_tpk!
+    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK) 
+    threads_y = min(max_threads, maximum(trj_l))
+    threads_x = min(max_threads ÷ threads_y, Nt)
+    threads = (threads_x, threads_y)
+    blocks = ceil.(Int, (Nt, maximum(trj_l)) ./ threads)
+
+    # 2. kernel_sort!
+    threads_sort = min(max_threads, length(kmask_indcs))
+    blocks_sort = ceil.(Int, length(kmask_indcs) ./ threads_sort)
+
+    for ic2 ∈ axes(Λ, 2), ic1 ∈ axes(Λ, 1)
+        if ic2 >= ic1 # eval. only upper triangular matrix
+            t = @elapsed begin
+         
+                @cuda threads=threads blocks=blocks kernel_mul_tpk!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
+
+                mul!(λ, adjoint(nfftplan), vec(S))
+                fftshift!(λ2, λ)
+                mul!(λ, fftplan, λ2)
+                λ2 .= conj.(λ2)
+                mul!(λ3, fftplan, λ2)
+
+                @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, λ3, kmask_indcs, ic1, ic2)
+
+            end
+            verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
+        end
+    end
+
+    return Λ, kmask_indcs
+end
 
 function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) where {T}
     idx = CartesianIndices(S.shape)
@@ -182,3 +256,32 @@ function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) w
     end
     return x
 end
+
+function kernel_mul_tpk!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
+
+    # Get current time index
+    it = (blockIdx().x - 1) * blockDim().x + threadIdx().x # time index
+    ik = (blockIdx().y - 1) * blockDim().y + threadIdx().y # sample index
+
+    # Fill samples with product of basis funcs
+    if it <= Nt
+        # Precompute product once
+        Uprod = Uc[it, ic1] * U[it, ic2]
+        if ik <= trj_l[it] 
+            S[trj_c[it] + ik] = Uprod 
+        return
+        end
+    end
+end
+
+function kernel_sort!(Λ, λ, λ3, kmask_indcs, ic1, ic2)
+    i = (blockIdx().x-1) * blockDim().x + threadIdx().x
+    
+    if i <= length(kmask_indcs)
+        Λ[ic2,ic1,i] = λ3[kmask_indcs[i]]
+        Λ[ic1,ic2,i] =  λ[kmask_indcs[i]]
+    end
+    return
+end
+
+
