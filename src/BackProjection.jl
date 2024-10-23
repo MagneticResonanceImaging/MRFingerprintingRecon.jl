@@ -86,7 +86,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
     return xbp
 end
 
-function calculateBackProjection1(data::AbstractVector{<:CuArray{cT}}, trj::AbstractVector{<:CuArray{T}}, cmaps::AbstractVector{<:CuArray{cT, N}}; U=I(length(data)), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
+function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::AbstractVector{<:CuArray{T}}, cmaps::AbstractVector{<:CuArray{cT, N}}; U=I(length(data)), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
 
     # Run check on array sizes
     test_dimension(data, trj, U, cmaps)
@@ -122,9 +122,9 @@ function calculateBackProjection1(data::AbstractVector{<:CuArray{cT}}, trj::Abst
     verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
-            @cuda threads=threads blocks=blocks kernel_mul1!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
+            @cuda threads=threads blocks=blocks kernel_mul_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
-            mul!(xtmp, adjoint(p), data_temp) # Bottleneck: >90% of computation time spent on mul! operation
+            mul!(xtmp, adjoint(p), data_temp) # Bottleneck: >99% of computation time spent on mul! operation for full-scale BP
             xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
         verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
@@ -308,7 +308,7 @@ function test_dimension(data, trj, U, cmaps)
 
 end
 
-function kernel_mul1!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
+function kernel_mul_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
 
     # ik_sub ≡ sample index within time frame it
     ik_sub = (blockIdx().x - 1) * blockDim().x + threadIdx().x 

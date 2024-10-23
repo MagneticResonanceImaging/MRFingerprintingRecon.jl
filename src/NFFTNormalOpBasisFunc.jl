@@ -19,6 +19,8 @@ Differentiate between functions exploiting a pre-calculated Toeplitz kernel basi
 - `verbose::Boolean`=`false`: Verbose level
 - `num_fft_threads::Int`=`round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1))`: Number of threads for FFT
 """
+
+#CPU
 function NFFTNormalOp(
     img_shape,
     trj::AbstractVector{<:AbstractMatrix{T}},
@@ -27,12 +29,27 @@ function NFFTNormalOp(
     verbose = false,
     num_fft_threads = round(Int, Threads.nthreads()/size(U, 2)),
     ) where {T, Tc <: Union{T, Complex{T}}}
-
+    
     Λ, kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose=verbose)
 
     return NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps, num_fft_threads=num_fft_threads)
 end
 
+# GPU
+function NFFTNormalOp(
+    img_shape, 
+    trj::AbstractVector{<:CuArray{T}},
+    U::CuArray{Tc};
+    cmaps = [CuArray(ones(T, img_shape))],
+    verbose = false
+    ) where {T, Tc <:Union{T, Complex{T}}}
+
+    Λ, kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose=verbose)
+
+    return NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps)
+end
+
+#CPU
 function NFFTNormalOp(
     img_shape,
     Λ::Array{Complex{T},3},
@@ -51,6 +68,7 @@ function NFFTNormalOp(
     kL2 = similar(kL1)
 
     ktmp = @view kL1[CartesianIndices(img_shape_os),1]
+   
     fftplan  = plan_fft!(ktmp; flags = FFTW.MEASURE, num_threads=num_fft_threads)
     ifftplan = plan_ifft!(ktmp; flags = FFTW.MEASURE, num_threads=num_fft_threads)
 
@@ -68,20 +86,70 @@ function NFFTNormalOp(
     )
 end
 
+#GPU
+function NFFTNormalOp(
+    img_shape,
+    Λ::CuArray{Complex{T}, 3},
+    kmask_indcs;
+    cmaps=[CuArray(ones(T, img_shape))]
+    ) where {T}
+
+    @assert length(kmask_indcs) == size(Λ,3) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`
+    @assert all(kmask_indcs .> 0)
+    @assert all(kmask_indcs .<= prod(2 .* img_shape))  
+    
+    Ncoeff = size(Λ, 1)
+    img_shape_os = 2 .* img_shape
+    kL1 = CuArray{Complex{T}}(undef, img_shape_os..., Ncoeff)
+    kL2 = similar(kL1)
+
+    ktmp = kL1[CartesianIndices(size(kL1))]
+
+    fftplan  = plan_fft!(ktmp, Vector(1:length(img_shape_os)))
+    ifftplan = plan_ifft!(ktmp, Vector(1:length(img_shape_os)))
+
+    A = _NFFTNormalOp(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps)
+
+    return LinearOperator(
+        Complex{T},
+        prod(A.shape) * A.Ncoeff,
+        prod(A.shape) * A.Ncoeff,
+        true, 
+        true, 
+        (res, x, α, β) -> mul!(res, A, x, α, β),
+        nothing,
+        (res, x, α, β) -> mul!(res, A, x, α, β),
+    )
+
+end
+
+
 ## ##########################################################################
 # Internal use
 #############################################################################
 
-struct _NFFTNormalOp{S,T,N,E,F,G}
+# struct _NFFTNormalOp{S,T,N,E,F,G}
+#     shape::S
+#     Ncoeff::Int
+#     fftplan::E
+#     ifftplan::F
+#     Λ::Array{Complex{T},3}
+#     kmask_indcs::Vector{Int}
+#     kL1::Array{Complex{T},N}
+#     kL2::Array{Complex{T},N}
+#     cmaps::G
+# end
+
+struct _NFFTNormalOp{S,E,F,G,H,I,J,K}
     shape::S
     Ncoeff::Int
     fftplan::E
     ifftplan::F
-    Λ::Array{Complex{T},3}
-    kmask_indcs::Vector{Int}
-    kL1::Array{Complex{T},N}
-    kL2::Array{Complex{T},N}
-    cmaps::G
+    Λ::G
+    kmask_indcs::H
+    kL1::I
+    kL2::J
+    cmaps::K
 end
 
 function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}) where T
@@ -208,10 +276,11 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArra
     Nt = size(U,1)
 
     # Allocate kernel arrays
-    λ  = CuArray{Complex{T}}(undef, img_shape_os)
+    λ  = CuArray{Complex{T}}(undef, img_shape_os) # upper triangle for (ic1, ic2)
     λ2 = similar(λ)
     λ3 = similar(λ)
-    Λ  = CuArray{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
+    Λ  = CuArray{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs)) 
+  
     trj_l = [size(trj[it],2) for it in eachindex(trj)]
     S = CuArray{Complex{T}}(undef, sum(trj_l)) 
 
@@ -242,11 +311,11 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArra
          
                 @cuda threads=threads blocks=blocks kernel_mul_tpk!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
 
-                mul!(λ, adjoint(nfftplan), vec(S))
-                fftshift!(λ2, λ)
-                mul!(λ, fftplan, λ2)
-                λ2 .= conj.(λ2)
-                mul!(λ3, fftplan, λ2)
+                mul!(λ, adjoint(nfftplan), vec(S)) 
+                fftshift!(λ2, λ) 
+                mul!(λ, fftplan, λ2) 
+                λ2 .= conj.(λ2) 
+                mul!(λ3, fftplan, λ2) 
 
                 @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, λ3, kmask_indcs, ic1, ic2)
 
@@ -270,13 +339,14 @@ function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) w
     xr = reshape(x, S.shape..., S.Ncoeff)
 
     bthreads = BLAS.get_num_threads()
+    # big Ncoeff loop
     try
         BLAS.set_num_threads(1)
         for cmap ∈ S.cmaps
             Threads.@threads for i ∈ 1:S.Ncoeff
                 S.kL1[idxos, i] .= zero(T)
-                @views S.kL1[idx, i] .= cmap .* b[idx, i]
-                @views S.fftplan * S.kL1[idxos, i]
+                @views S.kL1[idx, i] .= cmap .* b[idx, i] 
+                @views S.fftplan * S.kL1[idxos, i] 
             end
 
             kL1_rs = reshape(S.kL1, :, S.Ncoeff)
@@ -289,7 +359,7 @@ function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) w
             end
 
             Threads.@threads for i ∈ 1:S.Ncoeff
-                @views S.ifftplan * S.kL2[idxos, i]
+                @views S.ifftplan * S.kL2[idxos, i] 
                 @views xr[idx,i] .+= α .* conj.(cmap) .* S.kL2[idx,i]
             end
         end
@@ -311,7 +381,7 @@ function kernel_mul_tpk!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
         Uprod = Uc[it, ic1] * U[it, ic2]
         if ik <= trj_l[it] 
             S[trj_c[it] + ik] = Uprod 
-        return
+            return
         end
     end
 end
@@ -327,3 +397,59 @@ function kernel_sort!(Λ, λ, λ3, kmask_indcs, ic1, ic2)
 end
 
 
+# GPU
+function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
+    # Keep specialized on x::Vector, because function should be not called for x::JLArray,
+    # which is member of AbstractArray and(!) AbstractGPUArray
+
+    b = reshape(b, S.shape..., S.Ncoeff)
+    if β == 0
+        x .= 0
+    else
+        x .*= β
+    end
+    xr = reshape(x, S.shape..., S.Ncoeff)
+
+    idx = CartesianIndices(S.shape)
+    idxos = CartesianIndices(2 .* S.shape)
+
+    # Determine best threads and blocks
+    max_threads = 256
+    threads_x = min(max_threads, length(S.kmask_indcs))
+    threads_y = min(max_threads ÷ threads_x, S.Ncoeff)
+    threads = (threads_x, threads_y)
+    blocks = ceil.(Int, (length(S.kmask_indcs), S.Ncoeff) ./ threads)
+
+    for cmap ∈ S.cmaps
+        S.kL1[idxos, :] .= 0
+        @views S.kL1[idx, :] .= cmap .* b[idx, :]
+        S.fftplan * S.kL1
+
+        kL1_rs = reshape(S.kL1, :, S.Ncoeff)
+        kL2_rs = reshape(S.kL2, :, S.Ncoeff) .= 0
+        @cuda threads=threads blocks=blocks kernel_mul!(kL2_rs, S.Λ, kL1_rs, S.kmask_indcs)
+
+        S.ifftplan * S.kL2
+        @views xr[idx, :] .+= α .* conj.(cmap) .* S.kL2[idx, :]
+    end
+
+    return x
+end
+
+function kernel_mul!(kL2_rs, Λ, kL1_rs, kmask_indcs)
+    
+    i = (blockIdx().x-1) * blockDim().x + threadIdx().x
+    j = (blockIdx().y-1) * blockDim().y + threadIdx().y
+    
+    if i <= length(kmask_indcs) && j <= size(kL2_rs, 2)
+    
+        ind = kmask_indcs[i]
+        tmp = 0
+    
+        for k ∈ axes(Λ, 2)#size(Λ, 2)
+            tmp += Λ[j, k, i] * kL1_rs[ind, k]
+        end
+        kL2_rs[ind, j] = tmp
+    end
+    return
+end
