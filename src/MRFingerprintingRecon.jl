@@ -13,7 +13,7 @@ using IterativeSolvers
 # Additions for GPU functionality
 using CUDA
 using NonuniformFFTs
-export calculateBackProjection1, calculateBackProjection2
+export calculateBackProjection2 # will be deprecated if BP1 survives all testing
 
 export NFFTNormalOp, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA, calcFilteredBackProjection
 export FFTNormalOp, radial_grog!
