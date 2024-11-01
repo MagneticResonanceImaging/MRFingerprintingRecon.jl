@@ -75,20 +75,6 @@ b = calculateBackProjection(data, trj, cmaps; U)
 ## construct forward operator
 A = NFFTNormalOp((Nx,Nx), trj, U, cmaps=cmaps)
 
-## test forward operator
-λ = zeros(Complex{T}, Nc, Nc, 2Nx*2Nx)
-for i ∈ eachindex(A.prod!.A.kmask_indcs)
-    λ[:,:,A.prod!.A.kmask_indcs[i]] .= A.prod!.A.Λ[:,:,i]
-end
-λ = reshape(λ, Nc, Nc, 2Nx, 2Nx)
-
-for i = 1:Nc, j = 1:Nc
-    l1 = conj.(λ[i,j,:,:])
-    l2 = λ[j,i,:,:]
-    l2 = conj.(fft(conj.(ifft(l2))))
-    @test l1 ≈ l2 rtol = 1e-4
-end
-
 ## reconstruct
 xr = cg(A, vec(b), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)

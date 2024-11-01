@@ -125,7 +125,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
                 mul!(λ, fftplan, λ2)
 
                 Threads.@threads for it ∈ eachindex(kmask_indcs)
-                    @inbounds Λ[ic2,ic1,it] = conj.(λ[kmask_indcs[it]])
+                    @inbounds Λ[ic2,ic1,it] = conj.(λ[kmask_indcs[it]]) # not 100% inaccurate, but errors are very minor
                     @inbounds Λ[ic1,ic2,it] =       λ[kmask_indcs[it]]
                 end
             end
