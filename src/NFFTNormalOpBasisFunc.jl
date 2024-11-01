@@ -112,6 +112,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
     nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = TENSOR, blocking = true, fftflags = FFTW.MEASURE, m=5, σ=2)
 
     for ic2 ∈ axes(Λ, 2), ic1 ∈ axes(Λ, 1)
+        if ic2 >= ic1 # eval. only upper triangular matrix
         t = @elapsed begin
             @simd for it ∈ axes(U,1)
                 idx1 = sum(trj_l[1:it-1]) + 1
@@ -127,8 +128,8 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
                 @inbounds Λ[ic2,ic1,it] = conj.(λ[kmask_indcs[it]])
                 @inbounds Λ[ic1,ic2,it] =       λ[kmask_indcs[it]]
             end
-        end
         verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
+        end
     end
 
     return Λ, kmask_indcs
