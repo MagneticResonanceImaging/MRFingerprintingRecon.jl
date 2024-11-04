@@ -100,11 +100,9 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
     Ncoeff = size(U, 2)
-    Nt = size(U,1)
 
     λ  = Array{Complex{T}}(undef, img_shape_os)
     λ2 = similar(λ)
-    λ3 = similar(λ)
     Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
 
     trj_l = [size(trj[it],2) for it in eachindex(trj)]
@@ -113,6 +111,9 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
     fftplan  = plan_fft(λ; flags = FFTW.MEASURE, num_threads=Threads.nthreads())
     nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = TENSOR, blocking = true, fftflags = FFTW.MEASURE, m=5, σ=2)
 
+    # Evaluating only the upper triangular matrix assumes that the PSF from the rightmost voxel to the leftmost voxel is the adjoint of the PSF in the opposite direction. 
+    # For the outmost voxel, this is not correct, but the resulting images are virtually identical in our test cases. 
+    # To avoid this error, remove the `if ic2 >= ic1` and the `Λ[ic2,ic1,it] = conj.(λ[kmask_indcs[it]])` statements at the cost of computation time.  
     for ic2 ∈ axes(Λ, 2), ic1 ∈ axes(Λ, 1)
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
@@ -125,12 +126,10 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
                 mul!(λ, adjoint(nfftplan), vec(S))
                 fftshift!(λ2, λ)
                 mul!(λ, fftplan, λ2)
-                λ2 .= conj.(λ2)
-                mul!(λ3, fftplan, λ2)
 
                 Threads.@threads for it ∈ eachindex(kmask_indcs)
-                    @inbounds Λ[ic2,ic1,it] = λ3[kmask_indcs[it]]
-                    @inbounds Λ[ic1,ic2,it] =  λ[kmask_indcs[it]]
+                    @inbounds Λ[ic2,ic1,it] = conj.(λ[kmask_indcs[it]]) 
+                    @inbounds Λ[ic1,ic2,it] =       λ[kmask_indcs[it]]
                 end
             end
             verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
