@@ -21,6 +21,7 @@ One of the following arguments needs to be supplied
 """
 
 function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
+    
     Ncoef = size(U, 2)
 
     trj_v = reduce(hcat, trj)

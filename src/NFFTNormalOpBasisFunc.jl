@@ -64,7 +64,7 @@ function NFFTNormalOp(
 
     Ncoeff = size(Λ, 1)
     img_shape_os = 2 .* img_shape
-    kL1 = Array{Complex{T}}(undef, img_shape_os..., Ncoeff)
+    kL1 = Array{Complex{T}}(undef, img_shape_os..., Ncoeff) 
     kL2 = similar(kL1)
 
     ktmp = @view kL1[CartesianIndices(img_shape_os),1]
@@ -100,8 +100,8 @@ function NFFTNormalOp(
     
     Ncoeff = size(Λ, 1)
     img_shape_os = 2 .* img_shape
-    kL1 = CuArray{Complex{T}}(undef, img_shape_os..., Ncoeff)
-    kL2 = similar(kL1)
+    kL1 = CuArray{Complex{T}}(undef, img_shape_os)
+    kL2 = nothing
 
     ktmp = kL1[CartesianIndices(size(kL1))]
 
@@ -278,8 +278,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArra
     # Allocate kernel arrays
     λ  = CuArray{Complex{T}}(undef, img_shape_os) # upper triangle for (ic1, ic2)
     λ2 = similar(λ)
-    λ3 = similar(λ)
-    Λ  = CuArray{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs)) 
+    Λ  = CuArray{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs)) # Pack
   
     trj_l = [size(trj[it],2) for it in eachindex(trj)]
     S = CuArray{Complex{T}}(undef, sum(trj_l)) 
@@ -314,10 +313,9 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArra
                 mul!(λ, adjoint(nfftplan), vec(S)) 
                 fftshift!(λ2, λ) 
                 mul!(λ, fftplan, λ2) 
-                λ2 .= conj.(λ2) 
-                mul!(λ3, fftplan, λ2) 
+                λ2 .= conj.(λ)
 
-                @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, λ3, kmask_indcs, ic1, ic2)
+                @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, λ2, kmask_indcs, ic1, ic2)
 
             end
             verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
@@ -326,6 +324,8 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArra
     return Λ, kmask_indcs
 end
 
+
+#CPU
 function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) where {T}
     idx = CartesianIndices(S.shape)
     idxos = CartesianIndices(2 .* S.shape)
@@ -339,7 +339,6 @@ function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) w
     xr = reshape(x, S.shape..., S.Ncoeff)
 
     bthreads = BLAS.get_num_threads()
-    # big Ncoeff loop
     try
         BLAS.set_num_threads(1)
         for cmap ∈ S.cmaps
@@ -386,21 +385,53 @@ function kernel_mul_tpk!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
     end
 end
 
-function kernel_sort!(Λ, λ, λ3, kmask_indcs, ic1, ic2)
+function kernel_sort!(Λ, λ, λ2, kmask_indcs, ic1, ic2)
     i = (blockIdx().x-1) * blockDim().x + threadIdx().x
     
     if i <= length(kmask_indcs)
-        Λ[ic2,ic1,i] = λ3[kmask_indcs[i]]
+        Λ[ic2,ic1,i] = λ2[kmask_indcs[i]]
         Λ[ic1,ic2,i] =  λ[kmask_indcs[i]]
     end
     return
 end
 
+#GPU
+# function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
+
+#     b = reshape(b, S.shape..., S.Ncoeff)
+#     if β == 0
+#         x .= 0
+#     else
+#         x .*= β
+#     end
+#     xr = reshape(x, S.shape..., S.Ncoeff)
+
+#     idx = CartesianIndices(S.shape)
+#     idxos = CartesianIndices(2 .* S.shape)
+
+#     max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK) 
+#     threads = min(max_threads, length(S.kmask_indcs))
+#     blocks = ceil(Int, length(S.kmask_indcs) / threads)
+
+#     for cmap ∈ S.cmaps
+#         for ic1 ∈ axes(S.Λ, 1), ic2 ∈ axes(S.Λ, 2)
+#             S.kL1[idxos] .= 0
+#             @views S.kL1[idx] .= cmap .* b[idx, ic2]
+#             S.fftplan * S.kL1
+            
+#             kL1_rs = vec(S.kL1)
+
+#             @cuda threads=threads blocks=blocks kernel_mul!(kL1_rs, S.Λ, S.kmask_indcs, ic1, ic2)
+
+#             S.ifftplan * S.kL1
+#             @views xr[idx, ic1] .+= α .* conj.(cmap) .* S.kL1[idx]
+#         end
+#     end
+#     return x
+# end
 
 # GPU
 function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
-    # Keep specialized on x::Vector, because function should be not called for x::JLArray,
-    # which is member of AbstractArray and(!) AbstractGPUArray
 
     b = reshape(b, S.shape..., S.Ncoeff)
     if β == 0
@@ -413,43 +444,37 @@ function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
     idx = CartesianIndices(S.shape)
     idxos = CartesianIndices(2 .* S.shape)
 
-    # Determine best threads and blocks
-    max_threads = 256
-    threads_x = min(max_threads, length(S.kmask_indcs))
-    threads_y = min(max_threads ÷ threads_x, S.Ncoeff)
-    threads = (threads_x, threads_y)
-    blocks = ceil.(Int, (length(S.kmask_indcs), S.Ncoeff) ./ threads)
+    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK) 
+    threads = min(max_threads, length(S.kmask_indcs))
+    blocks = ceil(Int, length(S.kmask_indcs) / threads)
 
     for cmap ∈ S.cmaps
-        S.kL1[idxos, :] .= 0
-        @views S.kL1[idx, :] .= cmap .* b[idx, :]
-        S.fftplan * S.kL1
+        for ic1 ∈ axes(S.Λ, 1), ic2 ∈ axes(S.Λ, 2) 
 
-        kL1_rs = reshape(S.kL1, :, S.Ncoeff)
-        kL2_rs = reshape(S.kL2, :, S.Ncoeff) .= 0
-        @cuda threads=threads blocks=blocks kernel_mul!(kL2_rs, S.Λ, kL1_rs, S.kmask_indcs)
+            S.kL1[idxos] .= 0
+            @views S.kL1[idx] .= cmap .* b[idx, ic2] # image shape
+            S.fftplan * S.kL1 # image shape out
+            kL1_rs = vec(S.kL1) 
 
-        S.ifftplan * S.kL2
-        @views xr[idx, :] .+= α .* conj.(cmap) .* S.kL2[idx, :]
+            # Pack
+            @cuda threads=threads blocks=blocks kernel_mula!(kL1_rs, S.Λ, S.kmask_indcs, ic1, ic2)
+
+            S.ifftplan * S.kL1
+            @views xr[idx, ic1] .+= α .* conj.(cmap) .* S.kL1[idx]
+        end
     end
-
     return x
 end
 
-function kernel_mul!(kL2_rs, Λ, kL1_rs, kmask_indcs)
-    
+function kernel_mula!(kL1_rs, Λ, kmask_indcs, ic1, ic2)
     i = (blockIdx().x-1) * blockDim().x + threadIdx().x
-    j = (blockIdx().y-1) * blockDim().y + threadIdx().y
-    
-    if i <= length(kmask_indcs) && j <= size(kL2_rs, 2)
-    
+    if i <= length(kmask_indcs)
         ind = kmask_indcs[i]
-        tmp = 0
-    
-        for k ∈ axes(Λ, 2)#size(Λ, 2)
-            tmp += Λ[j, k, i] * kL1_rs[ind, k]
+        if ic2 >= ic1
+            kL1_rs[ind] *= Λ[ic1, ic2, i] # Pack
+        else
+            kL1_rs[ind] *= conj(Λ[ic2, ic1, i]) # Pack
         end
-        kL2_rs[ind, j] = tmp
     end
-    return
+    return 
 end
