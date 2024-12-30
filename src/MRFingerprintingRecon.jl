@@ -10,10 +10,9 @@ using LinearOperators
 using ExponentialUtilities
 using IterativeSolvers
 
-# Additions for GPU functionality
+# Additional packages for GPU functionality
 using CUDA
-using NonuniformFFTs
-export calculateBackProjection2 # will be deprecated if BP1 survives all testing
+using NonuniformFFTs # Solution to NFFT with CuArray crashing when number of samples exceeds approx 2 mill
 
 export NFFTNormalOp, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA, calcFilteredBackProjection
 export FFTNormalOp, radial_grog!
