@@ -92,7 +92,7 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
     # Run check on array sizes
     test_dimension(data, trj, U, cmaps)
 
-    # Helper variables
+    # General helper variables
     Nt = size(U, 1)
     Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
@@ -104,14 +104,14 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
     trj_c = CuArray([0; cumsum(trj_l[1:end-1])]) # cumulative sum, starting at 0
     trj_l = CuArray(trj_l)
 
-    # Threads-and-blocks settings: Kernel 1
+    # Threads-and-blocks settings for kernel_bp!
     max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK) 
     threads_x = min(max_threads, maximum(trj_l)) 
     threads_y = min(max_threads ÷ threads_x, Nt) 
     threads = (threads_x, threads_y) 
-    blocks = ceil.(Int, (maximum(trj_l), Nt) ./ threads) # samples belong to frames as inner idx
+    blocks = ceil.(Int, (maximum(trj_l), Nt) ./ threads) # samples as inner index
 
-    # Perform backprojection
+    # Plan NFFT
     backend = CUDABackend()
     p = PlanNUFFT(trj_v, img_shape; backend)
     img_idx = CartesianIndices(img_shape)
@@ -120,65 +120,21 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
     data = reduce(vcat, data)
     data_temp = CuArray{cT}(undef, sum(trj_l))
     
-    verbose && println("calculating backprojection..."); flush(stdout)
-    for icoef ∈ axes(U, 2)
-        t = @elapsed for icoil ∈ eachindex(cmaps)
-            @cuda threads=threads blocks=blocks kernel_mul_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
-            applyDensityCompensation!(data_temp, trj_v; density_compensation)
-            mul!(xtmp, adjoint(p), data_temp) # Bottleneck: >99% of computation time spent on mul! operation for full-scale BP
-            xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
-        end
-        verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
-    end
-    return xbp
-end
-
-function calculateBackProjection2(data::AbstractVector{<:CuArray{cT}}, trj::AbstractVector{<:CuArray{T}}, cmaps::AbstractVector{<:CuArray{cT, N}}; U=I(length(data)), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
-
-    # Run check on array sizes
-    test_dimension(data, trj, U, cmaps)
-
-    # Helper variables
-    Nt = size(U, 1)
-    Ncoef = size(U, 2)
-    img_shape = size(cmaps[1])
-    trj_v = reduce(hcat, trj)
-    Uc = conj(U)
-
-    # Kernel helper arrays
-    trj_l = [size(trj[it], 2) for it in eachindex(trj)] # nr nodes per frame
-    trj_c = CuArray([0; cumsum(trj_l[1:end-1])]) # cumulative sum, starting at 0
-    trj_l = CuArray(trj_l)
-
-    # Threads-and-blocks settings: Kernel 2
-    samples = length(trj_l)
-    threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK) 
-    blocks = ceil(Int, samples / threads)
-    Uc = conj(U)
-    trj_c = CuArray([0; cumsum(trj_l)]) # cumulative sum, starting at 0
-
     # Perform backprojection
-    backend = CUDABackend()
-    p = PlanNUFFT(trj_v, img_shape; backend)
-    img_idx = CartesianIndices(img_shape)
-    xbp = CuArray(zeros(cT, img_shape..., Ncoef))
-    xtmp = CuArray{cT}(undef, img_shape)
-    data = reduce(vcat, data)
-    data_temp = CuArray{cT}(undef, sum(trj_l))
-
     verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
-            @cuda threads=threads blocks=blocks kernel_mul2!(data_temp, data, Uc, trj_c, Nt, icoef, icoil)
+            @cuda threads=threads blocks=blocks kernel_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
-            mul!(xtmp, adjoint(p), data_temp) # Bottleneck: >90% of computation time spent on mul! operation
+
+            # Bottleneck: >99% of computation time spent on mul! op for full-scale BP, irrespective of kernel design
+            mul!(xtmp, adjoint(p), data_temp)
             xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
         verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
     end
     return xbp
 end
-
 
 function calculateBackProjection(data::AbstractArray{cT}, trj::AbstractMatrix{T}, cmaps_img_shape; density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T}}
     return calculateBackProjection([data], [trj], cmaps_img_shape; U=I(1), density_compensation, verbose)
@@ -309,7 +265,7 @@ function test_dimension(data, trj, U, cmaps)
 
 end
 
-function kernel_mul_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
+function kernel_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
 
     # ik_sub ≡ sample index within time frame it
     ik_sub = (blockIdx().x - 1) * blockDim().x + threadIdx().x 
@@ -320,40 +276,9 @@ function kernel_mul_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
     # Multiply data by basis elements
     if it <= Nt
         if ik_sub <= trj_l[it]
-            ik = trj_c[it] + ik_sub # absolute sample index
+            ik = trj_c[it] + ik_sub # Absolute sample index
             data_temp[ik] = data[ik, icoil] * Uc[it, icoef]
             return
         end
     end
  end
-
-function kernel_mul2!(data_temp, data, Uc, trj_c, Nt, icoef, icoil)
-
-    # Get current time index
-    it = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-
-    if it <= Nt
-        ksize = trj_c[it+1] - trj_c[it]
-        for ik ∈ 1:ksize # samples contiguous in memory
-            data_temp[trj_c[it] + ik, icoil] = data[trj_c[it] + ik, icoil] * Uc[it, icoef]
-        end
-    end
-    return
-end
-
-# function kernel_mul3!(data_temp, data, Uc, Nt, bounds, icoef, icoil)
-
-#     # Get current index
-#     i = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-
-#     if i <= size(data, 1)
-#         # Find correct element of Uc using bounds
-#         for j ∈ 1:Nt
-#             if i > bounds[j] && i <= bounds[j+1]
-#                 # Perform kernel mul
-#                 data_temp[i] = data[i, icoil] * Uc[j, icoef]
-#                 return 
-#             end
-#         end 
-#     end
-# end

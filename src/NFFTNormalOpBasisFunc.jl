@@ -45,6 +45,7 @@ function NFFTNormalOp(
     ) where {T, Tc <:Union{T, Complex{T}}}
 
     Λ, kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose=verbose)
+    println("Size of Λ in NFFTNormalOp = ", size(Λ))
 
     return NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps)
 end
@@ -89,22 +90,25 @@ end
 #GPU
 function NFFTNormalOp(
     img_shape,
-    Λ::CuArray{Complex{T}, 3},
+    Λ::CuArray{Complex{T}, 2},
     kmask_indcs;
     cmaps=[CuArray(ones(T, img_shape))]
     ) where {T}
 
-    @assert length(kmask_indcs) == size(Λ,3) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`
+    @assert length(kmask_indcs) == size(Λ, length(size(Λ))) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`
     @assert all(kmask_indcs .> 0)
     @assert all(kmask_indcs .<= prod(2 .* img_shape))  
     
-    Ncoeff = size(Λ, 1)
+    # Derive number of coefficients from length of packed axis using quadratic eqn 
+    packed_length = size(Λ, 1)
+    Ncoeff = Int(0.5 * (-1 + sqrt( 8 * packed_length + 1)))
+
+    # Create temp arrays
     img_shape_os = 2 .* img_shape
     kL1 = CuArray{Complex{T}}(undef, img_shape_os)
     kL2 = nothing
 
     ktmp = kL1[CartesianIndices(size(kL1))]
-
     fftplan  = plan_fft!(ktmp, Vector(1:length(img_shape_os)))
     ifftplan = plan_ifft!(ktmp, Vector(1:length(img_shape_os)))
 
@@ -127,18 +131,6 @@ end
 ## ##########################################################################
 # Internal use
 #############################################################################
-
-# struct _NFFTNormalOp{S,T,N,E,F,G}
-#     shape::S
-#     Ncoeff::Int
-#     fftplan::E
-#     ifftplan::F
-#     Λ::Array{Complex{T},3}
-#     kmask_indcs::Vector{Int}
-#     kL1::Array{Complex{T},N}
-#     kL2::Array{Complex{T},N}
-#     cmaps::G
-# end
 
 struct _NFFTNormalOp{S,E,F,G,H,I,J,K}
     shape::S
@@ -175,7 +167,7 @@ end
 
 function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractArray{Tc}; verbose = false) where {T, Tc <: Complex{T}}
 
-    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
+    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj) 
 
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bounds
     @assert all(kmask_indcs .<= prod(img_shape_os))
@@ -267,7 +259,7 @@ end
 
 function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArray{T}}, U::CuArray{Tc}; verbose = false) where {T, Tc <: Union{T, Complex{T}}}
     
-    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
+    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj) # 420 MB
 
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))
@@ -275,47 +267,45 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArra
     Ncoeff = size(U, 2)
     Nt = size(U,1)
 
-    # Allocate kernel arrays
-    λ  = CuArray{Complex{T}}(undef, img_shape_os) # upper triangle for (ic1, ic2)
-    λ2 = similar(λ)
-    Λ  = CuArray{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs)) # Pack
+    # Allocate kernel arrays, write Λ as packed storage arrays
+    λ  = CuArray{Complex{T}}(undef, img_shape_os) # 0.75 GB
+    λ2 = similar(λ) # 0.75 GB
+    Λ  = CuArray{Complex{T}}(undef, Int(Ncoeff*(Ncoeff+1)/2), length(kmask_indcs)) # 3.4 GB * Ncoeff
   
-    trj_l = [size(trj[it],2) for it in eachindex(trj)]
-    S = CuArray{Complex{T}}(undef, sum(trj_l)) 
+    trj_l = [size(trj[it],2) for it in eachindex(trj)] 
+    S = CuArray{Complex{T}}(undef, sum(trj_l)) # 440 MB
 
     # Prep plans
     fftplan  = plan_fft(λ)
-    nfftplan = PlanNUFFT(reduce(hcat, trj), img_shape_os; backend=CUDABackend())
+    nfftplan = PlanNUFFT(reduce(hcat, trj), img_shape_os; backend=CUDABackend()) # 8 GB
 
     # Kernel helpers
     Uc = conj(U)
     trj_c = CuArray([0; cumsum(trj_l[1:end-1])])
     trj_l = CuArray(trj_l)
 
-    # @cuda arguments
-    # 1. kernel_mul_tpk!
+    # Params for kernel_traj!
     max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK) 
     threads_y = min(max_threads, maximum(trj_l))
     threads_x = min(max_threads ÷ threads_y, Nt)
     threads = (threads_x, threads_y)
     blocks = ceil.(Int, (Nt, maximum(trj_l)) ./ threads)
 
-    # 2. kernel_sort!
+    # Params for kernel_sort!
     threads_sort = min(max_threads, length(kmask_indcs))
     blocks_sort = ceil.(Int, length(kmask_indcs) ./ threads_sort)
 
-    for ic2 ∈ axes(Λ, 2), ic1 ∈ axes(Λ, 1)
+    for ic2 ∈ 1:Ncoeff, ic1 ∈ 1:Ncoeff
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
          
-                @cuda threads=threads blocks=blocks kernel_mul_tpk!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
+                @cuda threads=threads blocks=blocks kernel_uprod!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
 
                 mul!(λ, adjoint(nfftplan), vec(S)) 
                 fftshift!(λ2, λ) 
                 mul!(λ, fftplan, λ2) 
-                λ2 .= conj.(λ)
 
-                @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, λ2, kmask_indcs, ic1, ic2)
+                @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
 
             end
             verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
@@ -368,68 +358,6 @@ function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) w
     return x
 end
 
-function kernel_mul_tpk!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
-
-    # Get current time index
-    it = (blockIdx().x - 1) * blockDim().x + threadIdx().x # time index
-    ik = (blockIdx().y - 1) * blockDim().y + threadIdx().y # sample index
-
-    # Fill samples with product of basis funcs
-    if it <= Nt
-        # Precompute product once
-        Uprod = Uc[it, ic1] * U[it, ic2]
-        if ik <= trj_l[it] 
-            S[trj_c[it] + ik] = Uprod 
-            return
-        end
-    end
-end
-
-function kernel_sort!(Λ, λ, λ2, kmask_indcs, ic1, ic2)
-    i = (blockIdx().x-1) * blockDim().x + threadIdx().x
-    
-    if i <= length(kmask_indcs)
-        Λ[ic2,ic1,i] = λ2[kmask_indcs[i]]
-        Λ[ic1,ic2,i] =  λ[kmask_indcs[i]]
-    end
-    return
-end
-
-#GPU
-# function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
-
-#     b = reshape(b, S.shape..., S.Ncoeff)
-#     if β == 0
-#         x .= 0
-#     else
-#         x .*= β
-#     end
-#     xr = reshape(x, S.shape..., S.Ncoeff)
-
-#     idx = CartesianIndices(S.shape)
-#     idxos = CartesianIndices(2 .* S.shape)
-
-#     max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK) 
-#     threads = min(max_threads, length(S.kmask_indcs))
-#     blocks = ceil(Int, length(S.kmask_indcs) / threads)
-
-#     for cmap ∈ S.cmaps
-#         for ic1 ∈ axes(S.Λ, 1), ic2 ∈ axes(S.Λ, 2)
-#             S.kL1[idxos] .= 0
-#             @views S.kL1[idx] .= cmap .* b[idx, ic2]
-#             S.fftplan * S.kL1
-            
-#             kL1_rs = vec(S.kL1)
-
-#             @cuda threads=threads blocks=blocks kernel_mul!(kL1_rs, S.Λ, S.kmask_indcs, ic1, ic2)
-
-#             S.ifftplan * S.kL1
-#             @views xr[idx, ic1] .+= α .* conj.(cmap) .* S.kL1[idx]
-#         end
-#     end
-#     return x
-# end
-
 # GPU
 function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
 
@@ -449,15 +377,14 @@ function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
     blocks = ceil(Int, length(S.kmask_indcs) / threads)
 
     for cmap ∈ S.cmaps
-        for ic1 ∈ axes(S.Λ, 1), ic2 ∈ axes(S.Λ, 2) 
+        for ic1 ∈ 1:S.Ncoeff, ic2 ∈ 1:S.Ncoeff 
 
             S.kL1[idxos] .= 0
-            @views S.kL1[idx] .= cmap .* b[idx, ic2] # image shape
-            S.fftplan * S.kL1 # image shape out
+            @views S.kL1[idx] .= cmap .* b[idx, ic2] 
+            S.fftplan * S.kL1 
             kL1_rs = vec(S.kL1) 
 
-            # Pack
-            @cuda threads=threads blocks=blocks kernel_mula!(kL1_rs, S.Λ, S.kmask_indcs, ic1, ic2)
+            @cuda threads=threads blocks=blocks kernel_cg!(kL1_rs, S.Λ, S.kmask_indcs, ic1, ic2)
 
             S.ifftplan * S.kL1
             @views xr[idx, ic1] .+= α .* conj.(cmap) .* S.kL1[idx]
@@ -466,14 +393,47 @@ function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
     return x
 end
 
-function kernel_mula!(kL1_rs, Λ, kmask_indcs, ic1, ic2)
+function kernel_uprod!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
+
+    # Parallelize across time frames and inner k-space samples
+    it = (blockIdx().x - 1) * blockDim().x + threadIdx().x # time index
+    ik = (blockIdx().y - 1) * blockDim().y + threadIdx().y # sample index
+
+    # Fill samples with product of basis funcs
+    if it <= Nt
+        # Precompute product once
+        Uprod = Uc[it, ic1] * U[it, ic2]
+        if ik <= trj_l[it] 
+            S[trj_c[it] + ik] = Uprod 
+            return
+        end
+    end
+end
+
+function kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
     i = (blockIdx().x-1) * blockDim().x + threadIdx().x
+    
+    # Packed storage of Λ by columns
+    ind_pack = Int(ic1 + ic2*(ic2-1)/2)
+    if i <= length(kmask_indcs)
+        Λ[ind_pack, i] = λ[kmask_indcs[i]] 
+    end
+    return
+end
+
+function kernel_cg!(kL1_rs, Λ, kmask_indcs, ic1, ic2)
+    i = (blockIdx().x-1) * blockDim().x + threadIdx().x
+
+    # Obtain correct index for packed storage of Λ
+    ind_pack = ic2 >= ic1 ? Int(ic1 + ic2*(ic2-1)/2) : Int(ic2 + ic1*(ic1-1)/2)
+
+    # Multiply single-channel k-space elementwise with kernel elements
     if i <= length(kmask_indcs)
         ind = kmask_indcs[i]
         if ic2 >= ic1
-            kL1_rs[ind] *= Λ[ic1, ic2, i] # Pack
+            kL1_rs[ind] *= Λ[ind_pack, i] 
         else
-            kL1_rs[ind] *= conj(Λ[ic2, ic1, i]) # Pack
+            kL1_rs[ind] *= conj(Λ[ind_pack, i]) 
         end
     end
     return 
