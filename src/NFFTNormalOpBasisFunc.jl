@@ -45,7 +45,6 @@ function NFFTNormalOp(
     ) where {T, Tc <:Union{T, Complex{T}}}
 
     Λ, kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose=verbose)
-    println("Size of Λ in NFFTNormalOp = ", size(Λ))
 
     return NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps)
 end
@@ -268,9 +267,9 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArra
     return Λ, kmask_indcs 
 end
 
-
-#CPU
+# CPU
 function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) where {T}
+    
     idx = CartesianIndices(S.shape)
     idxos = CartesianIndices(2 .* S.shape)
 
@@ -331,7 +330,7 @@ function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
     blocks = ceil(Int, length(S.kmask_indcs) / threads)
 
     for cmap ∈ S.cmaps
-        for ic1 ∈ 1:S.Ncoeff, ic2 ∈ 1:S.Ncoeff 
+        for ic1 ∈ 1:S.Ncoeff, ic2 ∈ 1:S.Ncoeff
 
             S.kL1[idxos] .= 0
             @views S.kL1[idx] .= cmap .* b[idx, ic2] 
