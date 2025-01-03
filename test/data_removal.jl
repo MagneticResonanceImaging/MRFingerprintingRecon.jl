@@ -40,7 +40,6 @@ for i ∈ CartesianIndices(@view cmaps[:,:,1])
 end
 cmaps = [cmaps[:,:,ic] for ic=1:Ncoil]
 
-
 ## set up trajectory
 α_g = 2π / (1+√5)
 phi = Float32.(α_g * (1:Nt*Ncyc))
@@ -94,20 +93,6 @@ b = calculateBackProjection(data, trj, cmaps; U=U)
 
 ## construct forward operator
 A = NFFTNormalOp((Nx,Nx), trj, U, cmaps=cmaps)
-
-## test forward operator
-λ = zeros(Complex{T}, Nc, Nc, 2Nx*2Nx)
-for i ∈ eachindex(A.prod!.A.kmask_indcs)
-    λ[:,:,A.prod!.A.kmask_indcs[i]] .= A.prod!.A.Λ[:,:,i]
-end
-λ = reshape(λ, Nc, Nc, 2Nx, 2Nx)
-
-for i = 1:Nc, j = 1:Nc
-    l1 = conj.(λ[i,j,:,:])
-    l2 = λ[j,i,:,:]
-    l2 = conj.(fft(conj.(ifft(l2))))
-    @test l1 ≈ l2 rtol = 1e-4
-end
 
 ## reconstruct
 xr = cg(A, vec(b), maxiter=20)

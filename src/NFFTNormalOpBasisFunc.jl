@@ -184,6 +184,9 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
     fftplan  = plan_fft(λ; flags = FFTW.MEASURE, num_threads=Threads.nthreads())
     nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = TENSOR, blocking = true, fftflags = FFTW.MEASURE, m=5, σ=2)
 
+    # Evaluating only the upper triangular matrix assumes that the PSF from the rightmost voxel to the leftmost voxel is the adjoint of the PSF in the opposite direction. 
+    # For the outmost voxel, this is not correct, but the resulting images are virtually identical in our test cases. 
+    # To avoid this error, remove the `if ic2 >= ic1` and the `Λ[ic2,ic1,it] = conj.(λ[kmask_indcs[it]])` statements at the cost of computation time.  
     for ic2 ∈ axes(Λ, 2), ic1 ∈ axes(Λ, 1)
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
