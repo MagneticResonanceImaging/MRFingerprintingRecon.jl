@@ -3,8 +3,6 @@ module MRFingerprintingRecon
 using Polyester
 using LinearAlgebra
 using FFTW
-using NFFT
-using NFFTTools
 using MRICoilSensitivities
 using LinearOperators
 using ExponentialUtilities
@@ -12,7 +10,7 @@ using IterativeSolvers
 
 # Additional packages for GPU functionality
 using CUDA
-using NonuniformFFTs # Solution to NFFT with CuArray crashing when number of samples exceeds approx 2 mill
+using NonuniformFFTs # Solves CUDA NFFT crash when number of samples >2.2 mill
 
 export NFFTNormalOp, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA, calcFilteredBackProjection
 export FFTNormalOp, radial_grog!

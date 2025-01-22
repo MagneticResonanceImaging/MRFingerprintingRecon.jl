@@ -27,7 +27,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj:
     Ncoef = size(U, 2)
 
     trj_v = reduce(hcat, trj)
-    p = plan_nfft(trj_v, img_shape; precompute=TENSOR, blocking=true, fftflags=FFTW.MEASURE)
+    p = NonuniformFFTs.NFFTPlan(trj_v, img_shape; blocking=true, fftflags=FFTW.measure)
 
     Ncoil = size(data[1], 2)
     xbp = Array{cT}(undef, img_shape..., Ncoef, Ncoil)
@@ -62,7 +62,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
     Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
 
-    p = plan_nfft(trj_v, img_shape; precompute=TENSOR, blocking=true, fftflags=FFTW.MEASURE)
+    p = NonuniformFFTs.NFFTPlan(trj_v, img_shape; blocking=true, fftflags=FFTW.MEASURE)
 
     xbp = zeros(cT, img_shape..., Ncoef)
     xtmp = Array{cT}(undef, img_shape)
@@ -114,8 +114,7 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
     blocks = ceil.(Int, (maximum(trj_l), Nt) ./ threads) # samples as inner index
 
     # Plan NFFT
-    backend = CUDABackend()
-    p = PlanNUFFT(trj_v, img_shape; backend)
+    p = NonuniformFFTs.NFFTPlan(trj_v, img_shape)
     img_idx = CartesianIndices(img_shape)
     xbp = CuArray(zeros(cT, img_shape..., Ncoef))
     xtmp = CuArray{cT}(undef, img_shape)
