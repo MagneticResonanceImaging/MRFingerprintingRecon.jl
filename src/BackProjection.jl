@@ -27,7 +27,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj:
     Ncoef = size(U, 2)
 
     trj_v = reduce(hcat, trj)
-    p = NonuniformFFTs.NFFTPlan(trj_v, img_shape; blocking=true, fftflags=FFTW.measure)
+    p = NonuniformFFTs.NFFTPlan(trj_v, img_shape; blocking=true, fftflags=FFTW.MEASURE)
 
     Ncoil = size(data[1], 2)
     xbp = Array{cT}(undef, img_shape..., Ncoef, Ncoil)
@@ -128,7 +128,7 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
             @cuda threads=threads blocks=blocks kernel_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
 
-            # Bottleneck: >99% of computation time spent on mul! op for full-scale BP, irrespective of kernel design
+            # Bottleneck: >99% of computation time spent on mul! op for full-scale BP, irrespective of kernel_bp! design
             mul!(xtmp, adjoint(p), data_temp)
             xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
@@ -237,7 +237,7 @@ function kernel_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
     # Multiply data by basis elements
     if it <= Nt
         if ik_sub <= trj_l[it]
-            ik = trj_c[it] + ik_sub # Absolute sample index
+            ik = trj_c[it] + ik_sub # absolute sample index
             data_temp[ik] = data[ik, icoil] * Uc[it, icoef]
             return
         end
