@@ -112,8 +112,7 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
     blocks = ceil.(Int, (maximum(trj_l), Nt) ./ threads) # samples as inner index
 
     # Plan NFFT
-    backend = CUDABackend()
-    p = PlanNUFFT(trj_v, img_shape; backend)
+    p = NonuniformFFTs.NFFTPlan(trj_v, img_shape)
     img_idx = CartesianIndices(img_shape)
     xbp = CuArray(zeros(cT, img_shape..., Ncoef))
     xtmp = CuArray{cT}(undef, img_shape)
