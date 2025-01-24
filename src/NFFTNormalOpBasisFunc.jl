@@ -296,7 +296,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArra
 
                 mul!(λ, adjoint(nfftplan), vec(S)) 
                 fftshift!(λ2, λ) 
-                mul!(λ, fftplan, λ2) 
+                mul!(λ, fftplan, λ2)
 
                 @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
 
@@ -363,8 +363,11 @@ function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
     idx = CartesianIndices(S.shape)
     idxos = CartesianIndices(2 .* S.shape)
 
-    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK) 
-    threads = min(max_threads, length(S.kmask_indcs))
+    # Threads are optimized for an NVIDIA A100 and our typical data arrays using CUDA.launch_configuration().
+    # If opt_threads exceeds what is available on current device, maximum available is used instead.
+    opt_threads = 576 
+    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
+    threads = min(opt_threads, max_threads, length(S.kmask_indcs))
     blocks = ceil(Int, length(S.kmask_indcs) / threads)
 
     for cmap ∈ S.cmaps
