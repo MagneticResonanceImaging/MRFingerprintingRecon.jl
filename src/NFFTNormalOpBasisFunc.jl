@@ -49,7 +49,7 @@ end
 
 function NFFTNormalOp(
     img_shape,
-    Λ::Array{Complex{T},3},
+    Λ::Array{T,3},
     kmask_indcs;
     cmaps=[ones(T, img_shape)],
     num_fft_threads = round(Int, Threads.nthreads()/size(Λ, 1))
@@ -85,10 +85,12 @@ end
  
 function NFFTNormalOp(
     img_shape,
-    Λ::CuArray{Complex{T}, 2},
+    Λ::CuArray{T},
     kmask_indcs;
     cmaps=[CuArray(ones(T, img_shape))]
     ) where {T}
+
+    println("size(Λ) = ", size(Λ))
 
     @assert length(kmask_indcs) == size(Λ, length(size(Λ))) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`
     @assert all(kmask_indcs .> 0)
@@ -101,7 +103,7 @@ function NFFTNormalOp(
     # Create temp arrays
     img_shape_os = 2 .* img_shape
     kL1 = CuArray{Complex{T}}(undef, img_shape_os..., Ncoeff)
-    kL2 = CuArray{Complex{T}}(undef, img_shape_os)
+    kL2 = CuArray{Complex{T}}(undef, img_shape_os...)
 
     fftplan  = plan_fft!(kL1, Vector(1:length(img_shape_os)))
     ifftplan = plan_ifft!(kL2, Vector(1:length(img_shape_os)))
@@ -263,7 +265,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArra
     # Allocate kernel arrays, write Λ as packed storage arrays
     λ  = CuArray{Complex{T}}(undef, img_shape_os)
     λ2 = similar(λ)
-    Λ  = CuArray{Complex{T}}(undef, Int(Ncoeff*(Ncoeff+1)/2), length(kmask_indcs)) 
+    Λ  = CuArray{T}(undef, Int(Ncoeff*(Ncoeff+1)/2), length(kmask_indcs)) 
   
     trj_l = [size(trj[it],2) for it in eachindex(trj)] 
     S = CuArray{Complex{T}}(undef, sum(trj_l))
@@ -295,6 +297,13 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArra
                 @cuda threads=threads blocks=blocks kernel_uprod!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
 
                 mul!(λ, adjoint(nfftplan), vec(S)) 
+
+                # Set asymmetric PSF edge to null to remove imaginary part from kernel
+                for d in 1:ndims(λ)
+                    slices = ntuple(i -> i == d ? 1 : Colon(), ndims(λ))
+                    λ[slices...] .= 0
+                end
+    
                 fftshift!(λ2, λ) 
                 mul!(λ, fftplan, λ2)
 
@@ -410,7 +419,7 @@ function kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
     # Packed storage of Λ by columns
     ind_pack = Int(ic1 + ic2*(ic2-1)/2)
     if i <= length(kmask_indcs)
-        Λ[ind_pack, i] = λ[kmask_indcs[i]] 
+        Λ[ind_pack, i] = real.(λ[kmask_indcs[i]])
     end
     return
 end
