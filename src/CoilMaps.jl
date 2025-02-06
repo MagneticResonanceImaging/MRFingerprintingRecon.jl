@@ -54,6 +54,6 @@ function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::A
     return cmaps
 end
 
-function calcCoilMaps(data::AbstractMatrix{Complex{T}}, trj::AbstractMatrix{T}, img_shape::NTuple{N,Int}; density_compensation=:radial_3D, kernel_size=ntuple(_ -> 6, N), calib_size=ntuple(_ -> 24, N), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose=false) where {N,T}
-    calcCoilMaps([data], [trj], img_shape; U=I(1), density_compensation, kernel_size, calib_size, eigThresh_1, eigThresh_2, nmaps, verbose)
+function calcCoilMaps(data::AbstractMatrix{Complex{T}}, trj::AbstractMatrix{T}, img_shape::NTuple{N,Int}; kernel_size=ntuple(_ -> 6, N), calib_size=ntuple(_ -> 24, N), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose=false) where {N,T}
+    calcCoilMaps([data], [trj], img_shape; U=I(1), kernel_size, calib_size, eigThresh_1, eigThresh_2, nmaps, verbose)
 end
