@@ -49,11 +49,11 @@ end
 
 function NFFTNormalOp(
     img_shape,
-    Λ::Array{T,3},
+    Λ::Array{Tc,3},
     kmask_indcs;
     cmaps=[ones(T, img_shape)],
     num_fft_threads = round(Int, Threads.nthreads()/size(Λ, 1))
-    ) where {T}
+    ) where {T, Tc <:Union{T, Complex{T}}}
 
     @assert length(kmask_indcs) == size(Λ,3) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`
     @assert all(kmask_indcs .> 0)
@@ -90,8 +90,6 @@ function NFFTNormalOp(
     cmaps=[CuArray(ones(T, img_shape))]
     ) where {T}
 
-    println("size(Λ) = ", size(Λ))
-
     @assert length(kmask_indcs) == size(Λ, length(size(Λ))) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`
     @assert all(kmask_indcs .> 0)
     @assert all(kmask_indcs .<= prod(2 .* img_shape))  
@@ -103,7 +101,7 @@ function NFFTNormalOp(
     # Create temp arrays
     img_shape_os = 2 .* img_shape
     kL1 = CuArray{Complex{T}}(undef, img_shape_os..., Ncoeff)
-    kL2 = CuArray{Complex{T}}(undef, img_shape_os...)
+    kL2 = CuArray{Complex{T}}(undef, img_shape_os..., Ncoeff)
 
     fftplan  = plan_fft!(kL1, Vector(1:length(img_shape_os)))
     ifftplan = plan_ifft!(kL2, Vector(1:length(img_shape_os)))
@@ -374,27 +372,28 @@ function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
 
     # Threads are optimized for an NVIDIA A100 and our typical data arrays using CUDA.launch_configuration().
     # If opt_threads exceeds what is available on current device, maximum available is used instead.
-    opt_threads = 576 
-    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
-    threads = min(opt_threads, max_threads, length(S.kmask_indcs))
-    blocks = ceil(Int, length(S.kmask_indcs) / threads)
+    opt_threads = 768
+    max_threads = min(opt_threads, attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK))
+    threads_x = min(max_threads, length(S.kmask_indcs))
+    threads_y = min(max_threads ÷ threads_x, S.Ncoeff)
+    threads = (threads_x, threads_y)
+    blocks = ceil.(Int, (length(S.kmask_indcs), S.Ncoeff) ./ threads)
 
     for cmap ∈ S.cmaps
         S.kL1[idxos, :] .= 0
         @views S.kL1[idx, :] .= cmap .* b[idx, :]
         S.fftplan * S.kL1
-        kL1_rs = reshape(S.kL1, :, S.Ncoeff)
 
-        for ic1 ∈ 1:S.Ncoeff # sequential loop over ic1 reduces gpu mem use
-            S.kL2[idxos] .= 0
-            kL2_rs = vec(S.kL2)
-            @cuda threads=threads blocks=blocks kernel_mul!(kL1_rs, kL2_rs, S.Λ, S.kmask_indcs, ic1, S.Ncoeff)
-            S.ifftplan * S.kL2 
-            @views xr[idx, ic1] .+= α .* conj.(cmap) .* S.kL2[idx]
-        end
+        kL1_rs = reshape(S.kL1, :, S.Ncoeff)
+        kL2_rs = reshape(S.kL2, :, S.Ncoeff) .= 0
+        @cuda threads=threads blocks=blocks kernel_mul!(kL2_rs, S.Λ, kL1_rs, S.kmask_indcs, S.Ncoeff)
+
+        S.ifftplan * S.kL2
+        @views xr[idx, :] .+= α .* conj.(cmap) .* S.kL2[idx, :]
     end
     return x
 end
+
 
 function kernel_uprod!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
 
@@ -417,28 +416,24 @@ function kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
     i = (blockIdx().x-1) * blockDim().x + threadIdx().x
     
     # Packed storage of Λ by columns
-    ind_pack = Int(ic1 + ic2*(ic2-1)/2)
+    ind_pack = ic1 + ic2 * (ic2-1) ÷ 2
     if i <= length(kmask_indcs)
         Λ[ind_pack, i] = real.(λ[kmask_indcs[i]])
     end
     return
 end
 
-function kernel_mul!(kL1_rs, kL2_rs, Λ, kmask_indcs, ic1, Ncoeff)
-
-    i = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-
-    # Perform matrix multiplication per sample location
-    if i <= length(kmask_indcs)
+function kernel_mul!(kL2_rs, Λ, kL1_rs, kmask_indcs, Ncoeff)
+    
+    i = (blockIdx().x-1) * blockDim().x + threadIdx().x
+    j = (blockIdx().y-1) * blockDim().y + threadIdx().y
+    
+    if i <= length(kmask_indcs) && j <= size(kL2_rs, 2)
+    
         ind = kmask_indcs[i]
-        for ic2 ∈ 1:Ncoeff
-            if ic2 >= ic1
-                ind_pack = ic1 + ic2 * (ic2-1) ÷ 2
-                kL2_rs[ind] += kL1_rs[ind, ic2] *      Λ[ind_pack, i]
-            else
-                ind_pack = ic2 + ic1 * (ic1-1) ÷ 2
-                kL2_rs[ind] += kL1_rs[ind, ic2] * conj(Λ[ind_pack, i])
-            end
+        for k in 1:Ncoeff
+            ind_pack = k >= j ? j+k*(k-1)÷2 : k+j*(j-1)÷2
+            kL2_rs[ind, j] += Λ[ind_pack, i] * kL1_rs[ind, k]
         end
     end
     return
