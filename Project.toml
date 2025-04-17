@@ -1,7 +1,7 @@
 name = "MRFingerprintingRecon"
 uuid = "f4798e02-a7e0-47f5-a571-12dd775704d3"
 authors = ["Jakob Asslaender <jakob.asslaender@nyumc.org>"]
-version = "0.8.3"
+version = "0.8.4-DEV"
 
 [deps]
 IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153"
