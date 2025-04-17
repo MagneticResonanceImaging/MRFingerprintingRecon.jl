@@ -30,8 +30,8 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj:
     Ncoil = size(data[1], 2)
     xbp = Array{cT}(undef, img_shape..., Ncoef, Ncoil)
 
-    trj_l = [size(trj[it], 2) for it in eachindex(trj)]
-    data_temp = Vector{cT}(undef, sum(trj_l))
+    trj_idx = cumsum([size(trj[it],2) for it in eachindex(trj)])
+    data_temp = Vector{cT}(undef, trj_idx[end])
 
     img_idx = CartesianIndices(img_shape)
     verbose && println("calculating backprojection...")
@@ -39,8 +39,8 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj:
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ axes(data[1], 2)
             @simd for it in eachindex(data)
-                idx1 = sum(trj_l[1:it-1]) + 1
-                idx2 = sum(trj_l[1:it])
+                idx1 = (it == 1) ? 1 : trj_idx[it-1] + 1
+                idx2 = trj_idx[it]
                 @views data_temp[idx1:idx2] .= data[it][:, icoil] .* conj(U[it, icoef])
             end
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
@@ -64,16 +64,16 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
     xbp = zeros(cT, img_shape..., Ncoef)
     xtmp = Array{cT}(undef, img_shape)
 
-    trj_l = [size(trj[it], 2) for it in eachindex(trj)]
-    data_temp = Vector{cT}(undef, sum(trj_l))
+    trj_idx = cumsum([size(trj[it],2) for it in eachindex(trj)])
+    data_temp = Vector{cT}(undef, trj_idx[end])
     img_idx = CartesianIndices(img_shape)
     verbose && println("calculating backprojection...")
     flush(stdout)
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
             @simd for it in eachindex(data)
-                idx1 = sum(trj_l[1:it-1]) + 1
-                idx2 = sum(trj_l[1:it])
+                idx1 = (it == 1) ? 1 : trj_idx[it-1] + 1
+                idx2 = trj_idx[it]
                 @views data_temp[idx1:idx2] .= data[it][:, icoil] .* conj(U[it, icoef])
             end
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
