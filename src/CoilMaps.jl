@@ -1,7 +1,7 @@
 """
     calcCoilMaps(data, trj, img_shape; U, density_compensation, kernel_size, calib_size, eigThresh_1, eigThresh_2, nmaps, verbose)
 
-Estimate coil sensitivity maps using ESPIRiT [1]. 
+Estimate coil sensitivity maps using ESPIRiT [1].
 
 # Arguments
 - `data::AbstractVector{<:AbstractMatrix{Complex{T}}}`: Complex dataset either as AbstractVector of matrices or single matrix. The optional outer vector defines different time frames that are combined using the subspace defined in `U`
