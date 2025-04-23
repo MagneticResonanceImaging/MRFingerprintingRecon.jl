@@ -91,7 +91,7 @@ function calculateBackProjection(data::AbstractArray{cT}, trj::AbstractMatrix{T}
 end
 
 # Method for GROG gridded data / trajectory
-function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, cmaps; U=I(length(data)))
+function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, cmaps::AbstractVector{<:AbstractArray{cT,N}}; U=I(length(data))) where {cT<:Complex, N}
     Ncoeff = size(U, 2)
     img_shape = size(cmaps[1])
     img_idx = CartesianIndices(img_shape)
@@ -116,6 +116,30 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::Abs
     return xbp
 end
 
+function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, img_shape::NTuple{N,Int}; U=I(length(data))) where {N}
+    Ncoeff = size(U, 2)
+    Ncoil = size(data[1], 2)
+    img_idx = CartesianIndices(img_shape)
+
+    dataU = similar(data[1], img_shape..., Ncoeff)
+    xbp = zeros(eltype(data[1]), img_shape..., Ncoeff, Ncoil)
+
+    Threads.@threads for icoef ∈ axes(U, 2)
+        for icoil ∈ axes(data[1], 2)
+            dataU[img_idx, icoef] .= 0
+
+            for it ∈ eachindex(data), is ∈ axes(data[it], 1), irep ∈ axes(data[it], 3)
+                k_idx = ntuple(j -> mod1(Int(trj[it][j, is]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
+                k_idx = CartesianIndex(k_idx)
+                dataU[k_idx, icoef] += data[it][is, icoil, irep] * conj(U[it, icoef, irep])
+            end
+
+            @views ifft!(dataU[img_idx, icoef])
+            @views xbp[img_idx, icoef, icoil] .= fftshift(dataU[img_idx, icoef])
+        end
+    end
+    return xbp
+end
 
 function calculateCoilwiseCG(data::AbstractVector{<:AbstractArray{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), maxiter=100, verbose=false) where {T<:Real,cT<:Complex{T},N}
     Ncoil = size(data[1], 2)
@@ -128,6 +152,21 @@ function calculateCoilwiseCG(data::AbstractVector{<:AbstractArray{cT}}, trj::Abs
         bi = vec(@view xbp[CartesianIndices(img_shape), 1, icoil])
         xi = vec(@view x[CartesianIndices(img_shape), icoil])
         cg!(xi, AᴴA, bi; maxiter, verbose, reltol=0)
+    end
+    return x
+end
+
+function calculateCoilwiseCG(data::AbstractVector{<:AbstractArray{cT}}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, img_shape::NTuple{N,Int}; U=I(length(data)), maxiter=5, verbose=false) where {cT<:Complex,N}
+    Ncoil = size(data[1], 2)
+
+    AᴴA = FFTNormalOp(img_shape, trj, U[:, 1])
+    xbp = calculateBackProjection(data, trj, img_shape; U=U[:, 1])
+    x = zeros(cT, img_shape..., Ncoil)
+
+    for icoil = 1:Ncoil
+        bi = vec(@view xbp[CartesianIndices(img_shape), 1, icoil])
+        xi = vec(@view x[CartesianIndices(img_shape), icoil])
+        cg!(xi, AᴴA, bi; maxiter, verbose) # maxiter <8 to avoid diverging
     end
     return x
 end

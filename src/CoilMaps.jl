@@ -1,7 +1,7 @@
 """
     calcCoilMaps(data, trj, img_shape; U, density_compensation, kernel_size, calib_size, eigThresh_1, eigThresh_2, nmaps, verbose)
 
-Estimate coil sensitivity maps using ESPIRiT [1].
+Estimate coil sensitivity maps using ESPIRiT [1]. 
 
 # Arguments
 - `data::AbstractVector{<:AbstractMatrix{Complex{T}}}`: Complex dataset either as AbstractVector of matrices or single matrix. The optional outer vector defines different time frames that are combined using the subspace defined in `U`
@@ -37,6 +37,39 @@ function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::A
     Threads.@threads for it ∈ eachindex(trj)
         trj_idx = [all(abs.(trj[it][:, i] .* calib_scale) .< T(0.5)) for i ∈ axes(trj[it], 2)]
         trj_calib[it] = trj[it][:, trj_idx] .* calib_scale
+        data_calib[it] = data[it][trj_idx, :]
+    end
+    x = calculateCoilwiseCG(data_calib, trj_calib, calib_size; U)
+
+    kbp = fftshift(x, imdims)
+    fft!(kbp, imdims)
+    kbp = fftshift(kbp, imdims)
+
+    t = @elapsed begin
+        cmaps = espirit(kbp, img_shape, kernel_size; eigThresh_1, eigThresh_2, nmaps)
+    end
+    verbose && println("espirit: $t s")
+
+    cmaps = [cmaps[CartesianIndices(img_shape), ic, in] for ic = 1:Ncoil, in = (nmaps == 1 ? 1 : 1:nmaps)]
+    return cmaps
+end
+
+function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, img_shape::NTuple{N,Int}; U=ones(Complex{T},length(data)), kernel_size=ntuple(_ -> 6, N), calib_size=img_shape.÷(img_shape[1]÷32), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose=false) where {N,T}
+    Ncoil = size(data[1], 2)
+    Ndims = length(img_shape)
+    imdims = ntuple(i -> i, Ndims)
+    Nt = length(trj)
+
+    # Normalized trajectory to obtain trj_idx within calibration region
+    trj_norm = [trj[it] ./ img_shape for it ∈ 1:Nt]
+
+    calib_scale = img_shape ./ calib_size
+
+    trj_calib = Vector{Matrix{Integer}}(undef, Nt)
+    data_calib = Vector{Matrix{Complex{T}}}(undef, Nt)
+    Threads.@threads for it ∈ eachindex(trj)
+        trj_idx = [all(abs.(trj_norm[it][:, i] .* calib_scale) .< T(0.5)) for i ∈ axes(trj_norm[it], 2)]
+        trj_calib[it] = trj[it][:, trj_idx]
         data_calib[it] = data[it][trj_idx, :]
     end
     x = calculateCoilwiseCG(data_calib, trj_calib, calib_size; U)
