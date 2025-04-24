@@ -91,7 +91,7 @@ function calculateBackProjection(data::AbstractArray{cT}, trj::AbstractMatrix{T}
 end
 
 # Method for GROG gridded data / trajectory
-function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, cmaps::AbstractVector{<:AbstractArray{cT,N}}; U=I(length(data))) where {cT<:Complex, N}
+function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, cmaps::AbstractVector{<:AbstractArray}; U=I(length(data)))
     Ncoeff = size(U, 2)
     img_shape = size(cmaps[1])
     img_idx = CartesianIndices(img_shape)
