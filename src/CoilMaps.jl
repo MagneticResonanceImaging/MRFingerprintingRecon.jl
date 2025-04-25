@@ -60,9 +60,8 @@ function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::A
     imdims = ntuple(i -> i, Ndims)
     Nt = length(trj)
 
-    # Normalized trajectory to obtain trj_idx within calibration region
-    trj_norm = [trj[it] ./ img_shape for it ∈ 1:Nt]
-
+    # Adjusted trajectory to obtain trj_idx within calibration region
+    trj_norm = [(trj[it] .- 1) ./ img_shape .- 0.5 for it ∈ 1:Nt]
     calib_scale = img_shape ./ calib_size
 
     trj_calib = Vector{Matrix{Integer}}(undef, Nt)
