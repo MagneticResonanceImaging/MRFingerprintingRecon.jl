@@ -189,13 +189,8 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
                 @simd for it ∈ axes(U,1)
-<<<<<<< HEAD
-                    idx1 = sum(trj_l[1:it-1]) + 1
-                    idx2 = sum(trj_l[1:it]) 
-=======
                     idx1 = (it == 1) ? 1 : trj_idx[it-1] + 1
                     idx2 = trj_idx[it]
->>>>>>> origin/master
                     @inbounds S[idx1:idx2] .= conj(U[it,ic1]) * U[it,ic2]
                 end
 

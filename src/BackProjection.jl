@@ -167,8 +167,6 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::Abs
     return xbp
 end
 
-<<<<<<< HEAD
-=======
 function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, img_shape::NTuple{N,Int}; U=I(length(data))) where {N}
     Ncoeff = size(U, 2)
     Ncoil = size(data[1], 2)
@@ -194,7 +192,6 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::Abs
     return xbp
 end
 
->>>>>>> origin/master
 function calculateCoilwiseCG(data::AbstractVector{<:AbstractArray{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), maxiter=100, verbose=false) where {T<:Real,cT<:Complex{T},N}
     Ncoil = size(data[1], 2)
 
@@ -210,9 +207,6 @@ function calculateCoilwiseCG(data::AbstractVector{<:AbstractArray{cT}}, trj::Abs
     return x
 end
 
-<<<<<<< HEAD
-#############################################################################
-=======
 function calculateCoilwiseCG(data::AbstractVector{<:AbstractArray{cT}}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, img_shape::NTuple{N,Int}; U=I(length(data)), maxiter=5, verbose=false) where {cT<:Complex,N}
     Ncoil = size(data[1], 2)
 
@@ -229,7 +223,6 @@ function calculateCoilwiseCG(data::AbstractVector{<:AbstractArray{cT}}, trj::Abs
 end
 
 ## ##########################################################################
->>>>>>> origin/master
 # Internal use
 #############################################################################
 
