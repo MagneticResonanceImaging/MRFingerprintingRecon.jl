@@ -68,19 +68,15 @@ Perform gridding of data based on pre-calculated GROG kernel.
 - `lnG`:    [dims][Ncoils, Ncoils]
 """
 function grog_gridding!(data, trj, lnG, Nr, img_shape)
-
-    Ncoil = size(data[1], 2)
-    Nrep  = size(data[1], 3)
-
-    Nt = length(trj) # number of time points
-
     exp_method = ExpMethodHigham2005()
-    cache = [ExponentialUtilities.alloc_mem(lnG[1], exp_method) for _ ∈ 1:Threads.nthreads()]
-    lGcache = [similar(lnG[1]) for _ ∈ 1:Threads.nthreads()]
-
     trj_cart = [similar(trj_i, Int32) for trj_i ∈ trj]
-    Threads.@threads for it ∈ eachindex(data, trj)
-        idt = Threads.threadid() # TODO: fix data race bug
+
+    @tasks for it ∈ eachindex(data, trj)
+        @local begin
+            exp_cache = ExponentialUtilities.alloc_mem(lnG[1], exp_method)
+            lnG_cache = similar(lnG[1])
+        end
+
         for is ∈ axes(data[it],1), idim ∈ eachindex(img_shape)
             trj_i = trj[it][idim, is] * img_shape[idim] + 1 / 2 # +1/2 to avoid stepping outside of FFT definition ∈ (-img_shape[idim]/2+1, img_shape[idim]/2)
             k_idx = round(trj_i)
@@ -90,8 +86,8 @@ function grog_gridding!(data, trj, lnG, Nr, img_shape)
             trj_cart[it][idim, is] = k_idx + img_shape[idim] ÷ 2
 
             # overwrite trj with rounded grid point index.
-            lGcache[idt] .= shift .* lnG[idim]
-            @views data[it][is, :, :] = exponential!(lGcache[idt], exp_method, cache[idt]) * data[it][is, :, :]
+            lnG_cache .= shift .* lnG[idim]
+            @views data[it][is, :, :] = exponential!(lnG_cache, exp_method, exp_cache) * data[it][is, :, :]
         end
     end
     return trj_cart
