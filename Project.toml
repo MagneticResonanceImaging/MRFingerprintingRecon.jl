@@ -4,7 +4,6 @@ authors = ["Jakob Asslaender <jakob.asslaender@nyumc.org>"]
 version = "0.8.5-DEV"
 
 [deps]
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 ExponentialUtilities = "d4d017d3-3776-5f7e-afef-a10c40355c18"
 MRICoilSensitivities = "c57eb701-aafc-44a2-a53c-128049758959"

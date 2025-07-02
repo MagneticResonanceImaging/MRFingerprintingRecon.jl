@@ -96,7 +96,7 @@ function NFFTNormalOp(
     
     # Derive number of coefficients from length of packed axis using quadratic eqn 
     packed_length = size(Λ, 1)
-    Ncoeff = Int(0.5 * (-1 + sqrt( 8 * packed_length + 1)))
+    Ncoeff = Int(0.5 * (-1 + sqrt(8 * packed_length + 1)))
 
     # Create temp arrays
     img_shape_os = 2 .* img_shape
@@ -116,7 +116,8 @@ function NFFTNormalOp(
         true, 
         (res, x, α, β) -> mul!(res, A, x, α, β),
         nothing,
-        (res, x, α, β) -> mul!(res, A, x, α, β),
+        (res, x, α, β) -> mul!(res, A, x, α, β);
+        S = CuArray{Complex{T}}
     )
 
 end
@@ -149,10 +150,12 @@ function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:CuArray{T}}) 
     img_shape = Int.(img_shape_os ./ 2)
     trj_v = reduce(hcat, trj)
     nfftplan = NonuniformFFTs.NFFTPlan(trj_v, img_shape)
-    (; backend, points, kernels, data, blocks,) = nfftplan.p
+    p = nfftplan.p
+    (; backend, points, kernels, data, blocks, index_map,) = p
     (; us,) = data
     vp = (CuArray(ones(Complex{T}, size(trj_v, 2))),)
-    NonuniformFFTs.spread_from_points!(backend, blocks, kernels, nfftplan.p.kernel_evalmode, us, points, vp)
+    callback = NonuniformFFTs.NUFFTCallbacks()
+    NonuniformFFTs.spread_from_points!(backend, callback.nonuniform, p.point_transform_fold, blocks, kernels, p.kernel_evalmode, us, points, vp)
     kmask = (us[1] .!= 0)
     kmask_indcs = findall(vec(kmask))
     return kmask_indcs
