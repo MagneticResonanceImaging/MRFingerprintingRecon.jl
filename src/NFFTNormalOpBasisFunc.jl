@@ -94,11 +94,9 @@ function NFFTNormalOp(
     @assert all(kmask_indcs .> 0)
     @assert all(kmask_indcs .<= prod(2 .* img_shape))  
     
-    # Derive number of coefficients from length of packed axis using quadratic eqn 
-    packed_length = size(Λ, 1)
+    packed_length = size(Λ, 1) # derive Ncoeff from length of packed axis using quadratic eqn 
     Ncoeff = Int(0.5 * (-1 + sqrt(8 * packed_length + 1)))
 
-    # Create temp arrays
     img_shape_os = 2 .* img_shape
     kL1 = CuArray{Complex{T}}(undef, img_shape_os..., Ncoeff)
     kL2 = CuArray{Complex{T}}(undef, img_shape_os..., Ncoeff)
@@ -298,13 +296,6 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArra
                 @cuda threads=threads blocks=blocks kernel_uprod!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
 
                 mul!(λ, adjoint(nfftplan), vec(S)) 
-
-                # Set asymmetric PSF edge to null to remove imaginary part from kernel
-                for d in 1:ndims(λ)
-                    slices = ntuple(i -> i == d ? 1 : Colon(), ndims(λ))
-                    λ[slices...] .= 0
-                end
-    
                 fftshift!(λ2, λ) 
                 mul!(λ, fftplan, λ2)
 
@@ -373,9 +364,7 @@ function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
     idx = CartesianIndices(S.shape)
     idxos = CartesianIndices(2 .* S.shape)
 
-    # Threads are optimized for an NVIDIA A100 and our typical data arrays using CUDA.launch_configuration().
-    # If opt_threads exceeds what is available on current device, maximum available is used instead.
-    opt_threads = 768
+    opt_threads = 768 # threads optimized for an NVIDIA A100 and our usual data arrays using CUDA.launch_configuration()
     max_threads = min(opt_threads, attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK))
     threads_x = min(max_threads, length(S.kmask_indcs))
     threads_y = min(max_threads ÷ threads_x, S.Ncoeff)
@@ -400,11 +389,9 @@ end
 
 function kernel_uprod!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
 
-    # Parallelize across time frames and inner k-space samples
     it = (blockIdx().x - 1) * blockDim().x + threadIdx().x # time index
     ik = (blockIdx().y - 1) * blockDim().y + threadIdx().y # sample index
 
-    # Fill samples with product of basis funcs
     if it <= Nt
         Uprod = Uc[it, ic1] * U[it, ic2]
         if ik <= trj_l[it] 
@@ -421,7 +408,7 @@ function kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
     # Packed storage of Λ by columns
     ind_pack = ic1 + ic2 * (ic2-1) ÷ 2
     if i <= length(kmask_indcs)
-        Λ[ind_pack, i] = real.(λ[kmask_indcs[i]])
+        Λ[ind_pack, i] = real(λ[kmask_indcs[i]])
     end
     return
 end
@@ -431,10 +418,11 @@ function kernel_mul!(kL2_rs, Λ, kL1_rs, kmask_indcs, Ncoeff)
     i = (blockIdx().x-1) * blockDim().x + threadIdx().x
     j = (blockIdx().y-1) * blockDim().y + threadIdx().y
     
+    # Parallelize across kmask and row index j
     if i <= length(kmask_indcs) && j <= size(kL2_rs, 2)
     
         ind = kmask_indcs[i]
-        for k in 1:Ncoeff
+        for k in 1:Ncoeff 
             ind_pack = k >= j ? j+k*(k-1)÷2 : k+j*(j-1)÷2
             kL2_rs[ind, j] += Λ[ind_pack, i] * kL1_rs[ind, k]
         end
