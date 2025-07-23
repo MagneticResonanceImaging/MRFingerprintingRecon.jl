@@ -8,18 +8,16 @@ Calculate (filtered) backprojection
 
 # Arguments
 - `data <: Union{AbstractVector{<:AbstractMatrix{cT}},AbstractMatrix{cT}}`: Complex dataset either as AbstractVector of matrices or single matrix. The optional outer matrix defines different time frames that are reconstruced in the subspace defined in U.
-- `trj <: Union{:AbstractVector{<:AbstractMatrix{T}},AbstractMatrix{T}}`: Trajectory with samples corresponding to the dataset either as AbstractVector of matrices or single matrix.
-- `img_shape::NTuple{N,Int}`: Shape of image
+- `trj <: AbstractVector{<:AbstractMatrix{T}}`: Trajectory with samples corresponding to the dataset. For a Cartesian reconstruction, use `T <: Int` and define `trj[it][idim,ik] ∈ (-img_shape[idim]/2, img_shape[idim]/2-1)`. If `T <: Float`, the NFFT is used.
+
+One of the following arguments needs to be supplied
+- `img_shape::NTuple{N,Int}`: Shape of image; in this case, the data is reconstruced coilwise.
+- `cmaps::::AbstractVector{<:AbstractArray{T}}`: Coil sensitivities; in this case, the coils are added up to a single backprojection.
 
 # Optional Keyword Arguments
-- `cmaps::::AbstractVector{<:AbstractArray{T}}`: Coil sensitivities as AbstractVector of arrays
-- `cmaps_img_shape`: Either equal `img_shape` or `cmaps`
-- `U::Matrix` = I(length(data)) or = I(1): Basis coefficients of subspace (only defined if data and trj have different timeframes)
-- `density_compensation`=:`none`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractVector{<:AbstractVector}`
-- `verbose::Boolean`=`false`: Verbosity level
-
-# Notes
-- The type of the elements of the trajectory define if a gridded backprojection (eltype(trj[1]) or eltype(trj) <: Int) or a non-uniform (else) is performed.
+- `U::Matrix = I(length(data))` or `= I(1)``: Basis coefficients of subspace (only defined if data and trj have different timeframes)
+- `density_compensation = :none`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type `AbstractVector{<:AbstractVector}`
+- `verbose::Boolean = false`: Verbosity level
 """
 function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
     Ncoef = size(U, 2)
@@ -129,7 +127,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::Abs
             dataU[img_idx, icoef] .= 0
 
             for it ∈ eachindex(data), is ∈ axes(data[it], 1), irep ∈ axes(data[it], 3)
-                k_idx = ntuple(j -> mod1(Int(trj[it][j, is]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
+                k_idx = ntuple(j -> mod(trj[it][j, is] - img_shape[j] ÷ 2, img_shape[j]) + 1, length(img_shape)) # incorporates ifftshift
                 k_idx = CartesianIndex(k_idx)
                 dataU[k_idx, icoef] += data[it][is, icoil, irep] * conj(U[it, icoef, irep])
             end

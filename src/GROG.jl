@@ -60,7 +60,8 @@ Perform gridding of data based on pre-calculated GROG kernel.
 - `Nr::Int`: Number of samples per read out
 - `img_shape::Tuple{Int}`: Image dimensions
 
-- `trj::Vector{Matrix{Int32}}`: Trajectory
+# Output
+- `trj::Vector{Matrix{Int32}}`: Cartesian trajectory with the elements `trj[it][idim,ik] ∈ (-img_shape[idim]/2, img_shape[idim]/2-1)`
 
 # Dimensions:
 - `data`:   [timesteps][samples, spokes, coils, repetitions of sampling pattern]
@@ -78,14 +79,14 @@ function grog_gridding!(data, trj, lnG, Nr, img_shape)
         end
 
         for is ∈ axes(data[it],1), idim ∈ eachindex(img_shape)
-            trj_i = trj[it][idim, is] * img_shape[idim] + 1 / 2 # +1/2 to avoid stepping outside of FFT definition ∈ (-img_shape[idim]/2+1, img_shape[idim]/2)
+            trj_i = trj[it][idim, is] * img_shape[idim] - 1 / 2 # -1/2 to avoid stepping outside of FFT definition ∈ (-img_shape[idim]/2, img_shape[idim]/2-1)
             k_idx = round(trj_i)
             shift = (k_idx - trj_i) * Nr / img_shape[idim]
 
             # store rounded grid point index
-            trj_cart[it][idim, is] = k_idx + img_shape[idim] ÷ 2
+            trj_cart[it][idim, is] = Int(k_idx) + img_shape[idim] ÷ 2
 
-            # overwrite trj with rounded grid point index.
+            # grid data
             lnG_cache .= shift .* lnG[idim]
             @views data[it][is, :, :] = exponential!(lnG_cache, exp_method, exp_cache) * data[it][is, :, :]
         end
@@ -104,8 +105,8 @@ Perform GROG kernel calibration and gridding [1] of data in-place. The trajector
 - `Nr::Int`: Number of samples per read out
 - `img_shape::Tuple{Int}`: Image dimensions
 
-# return
-- `trj::Vector{Matrix{Int32}}`: Trajectory
+# Output
+- `trj::Vector{Matrix{Int32}}`: Cartesian trajectory with the elements `trj[it][idim,ik] ∈ (-img_shape[idim]/2, img_shape[idim]/2-1)`
 
 # References
 [1] Seiberlich, N., Breuer, F., Blaimer, M., Jakob, P. and Griswold, M. (2008), Self-calibrating GRAPPA operator gridding for radial and spiral trajectories. Magn. Reson. Med., 59: 930-935. https://doi.org/10.1002/mrm.21565
