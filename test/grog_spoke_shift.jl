@@ -23,7 +23,6 @@ trj = MRFingerprintingRecon.traj_2d_radial_goldenratio(Nr, Nspokes, 1; N=1)
 ## Create phantom geometry
 x = shepp_logan(Nx)
 
-
 ## Simulate coil sensitivity maps
 cmaps = ones(Complex{T}, Nx, Nx, Ncoil)
 cmaps[:,:,1] .= phantom(1:Nx, 1:Nx, [gauss2((Nx÷8,  Nx÷8),  (Nx÷1.5,Nx÷1.5))], 2)
@@ -42,7 +41,6 @@ end
 
 cmaps = [cmaps[:,:,ic] for ic=1:Ncoil]
 
-
 ## Simulate data
 data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil)]
 nfftplan = plan_nfft(trj[1], (Nx,Nx))
@@ -55,7 +53,6 @@ for icoil ∈ 1:Ncoil
         @views mul!(data[it][:,icoil], nfftplan, xcoil)
     end
 end
-
 
 ## Test GROG kernels for some spokes in golden ratio based trajectory
 lnG = MRFingerprintingRecon.grog_calib(data, trj, Nr)

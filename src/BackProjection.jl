@@ -7,11 +7,11 @@
 Calculate (filtered) backprojection
 
 # Arguments
-- `data <: Union{AbstractVector{<:AbstractMatrix{cT}},AbstractMatrix{cT}}`: Complex dataset either as AbstractVector of matrices or single matrix. The optional outer matrix defines different time frames that are reconstruced in the subspace defined in U.
-- `trj <: AbstractVector{<:AbstractMatrix{T}}`: Trajectory with samples corresponding to the dataset. For a Cartesian reconstruction, use `T <: Int` and define `trj[it][idim,ik] ∈ (-img_shape[idim]/2, img_shape[idim]/2-1)`. If `T <: Float`, the NFFT is used.
+- `data <: Union{AbstractVector{<:AbstractMatrix{cT}},AbstractMatrix{cT}}`: Complex dataset either as AbstractVector of matrices or single matrix. The optional outer matrix defines different time frames that are reconstructed in the subspace defined in U.
+- `trj <: AbstractVector{<:AbstractMatrix{T}}`: Trajectory with samples corresponding to the dataset. For a Cartesian reconstruction, use `T <: Int` and define `trj[it][idim,ik] ∈ (1, img_shape[idim])`. If `T <: Float`, the NFFT is used.
 
 One of the following arguments needs to be supplied
-- `img_shape::NTuple{N,Int}`: Shape of image; in this case, the data is reconstruced coilwise.
+- `img_shape::NTuple{N,Int}`: Shape of image; in this case, the data is reconstructed coilwise.
 - `cmaps::::AbstractVector{<:AbstractArray{T}}`: Coil sensitivities; in this case, the coils are added up to a single backprojection.
 
 # Optional Keyword Arguments
@@ -102,7 +102,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::Abs
             dataU[img_idx, icoef] .= 0
 
             for it ∈ eachindex(data), is ∈ axes(data[it], 1), irep ∈ axes(data[it], 3)
-                k_idx = ntuple(j -> mod1(Int(trj[it][j, is]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
+                k_idx = ntuple(j -> mod1(trj[it][j, is] - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
                 k_idx = CartesianIndex(k_idx)
                 dataU[k_idx, icoef] += data[it][is, icoil, irep] * conj(U[it, icoef, irep])
             end
@@ -127,7 +127,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray}, trj::Abs
             dataU[img_idx, icoef] .= 0
 
             for it ∈ eachindex(data), is ∈ axes(data[it], 1), irep ∈ axes(data[it], 3)
-                k_idx = ntuple(j -> mod(trj[it][j, is] - img_shape[j] ÷ 2, img_shape[j]) + 1, length(img_shape)) # incorporates ifftshift
+                k_idx = ntuple(j -> mod1(trj[it][j, is] - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
                 k_idx = CartesianIndex(k_idx)
                 dataU[k_idx, icoef] += data[it][is, icoil, irep] * conj(U[it, icoef, irep])
             end

@@ -61,7 +61,7 @@ Perform gridding of data based on pre-calculated GROG kernel.
 - `img_shape::Tuple{Int}`: Image dimensions
 
 # Output
-- `trj::Vector{Matrix{Int32}}`: Cartesian trajectory with the elements `trj[it][idim,ik] ∈ (-img_shape[idim]/2, img_shape[idim]/2-1)`
+- `trj::Vector{Matrix{Int32}}`: Cartesian trajectory with the elements `trj[it][idim,ik] ∈ (1, img_shape[idim])`
 
 # Dimensions:
 - `data`:   [timesteps][samples, spokes, coils, repetitions of sampling pattern]
@@ -79,7 +79,7 @@ function grog_gridding!(data, trj, lnG, Nr, img_shape)
         end
 
         for is ∈ axes(data[it],1), idim ∈ eachindex(img_shape)
-            trj_i = trj[it][idim, is] * img_shape[idim] - 1 / 2 # -1/2 to avoid stepping outside of FFT definition ∈ (-img_shape[idim]/2, img_shape[idim]/2-1)
+            trj_i = trj[it][idim, is] * img_shape[idim] + 0.5 
             k_idx = round(trj_i)
             shift = (k_idx - trj_i) * Nr / img_shape[idim]
 

@@ -11,7 +11,8 @@ end
 
 @testset "Recon Cartesian" begin
     include("backprojection_cart.jl")
-    include("reconstruct_cart.jl")
+    include("reconstruct_cart_mask.jl")
+    include("reconstruct_cart_trj.jl")
 end
 
 @testset "Recon data removal" begin

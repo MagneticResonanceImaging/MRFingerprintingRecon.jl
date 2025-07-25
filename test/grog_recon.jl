@@ -86,7 +86,6 @@ A_rad = NFFTNormalOp((Nx,Nx), trj, U; cmaps=cmaps)
 xr = cg(A_rad, vec(xbp_rad), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
 
-
 ## GROG Reconstruction
 trj_cart = radial_grog!(data, trj, Nr, (Nx,Nx))
 xbp_grog = calculateBackProjection(data, trj_cart, cmaps; U)
@@ -95,7 +94,7 @@ xg = cg(A_cart, vec(xbp_grog), maxiter=20)
 xg = reshape(xg, Nx, Nx, Nc)
 
 ## Fix irrelevant phase slope
-[xg[i,j,:] .*= -exp(1im * 3π * (i + j - 2)/Nx) for i = 1:Nx, j = 1:Nx]
+[xg[i,j,:] .*= -exp(1im * π * (i + j - 2)/Nx) for i = 1:Nx, j = 1:Nx]
 
 ## test recon equivalence
 @test xc ≈ xr  rtol = 5e-2

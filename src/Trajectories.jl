@@ -1,39 +1,49 @@
 """
-    traj_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float32)
+    traj_cartesian(T, Nx, Ny, Nz, Nt)
 
-Function to calculate a 2D cartesian trajectory in units of sampling rate ∈ {x | -N/2+1 ≤ x ≤ N/2 and x ∈ Z}.
-With `samplingRate_units = false` the ouput is relative with samples ∈ [-1/2:1/2].
+Generate a 3D Cartesian trajectory. 
+As input to functions using NFFTs, the trajectory can be defined as floats ∈ [-0.5, 0.5). 
+For use with Cartesian FFTs, the trajectory consists of integers ∈ [1, N].
 
 # Arguments
-- `Nx::Int`: Number of frequency encoded samples per read out
+- `T::Type`: Type of output trajectory. If `T <: Float`, trajectory is defined ∈ (-0.5, 0.5). If `T <: Int`, trajectory consists of values ∈ (1, N) instead.
+- `Nx::Int`: Number of readout samples
 - `Ny::Int`: Number of phase encoding lines
 - `Nz::Int`: Number of phase encoding lines (third dimension)
-- `Nt::Int`: Number of times the sampling pattern is repeated
-- `samplingRate_units::Boolean`=`true`: Parameter setting the output units to sampling rate
-- `T::Type`=`Float32`: Type defining the output units of the trajectory
+- `Nt::Int`: Number of time steps in the trajectory
 """
-function traj_cartesian(Nx, Ny, Nz, Nt; samplingRate_units = true, T = Float32)
-    kx = collect(((-Nx+1)/2:(Nx-1)/2) / (samplingRate_units ? 1 : Nx))
-    ky = collect(((-Ny+1)/2:(Ny-1)/2) / (samplingRate_units ? 1 : Ny))
-    kz = collect(((-Nz+1)/2:(Nz-1)/2) / (samplingRate_units ? 1 : Nz))
+function traj_cartesian(::Type{T}, Nx, Ny, Nz, Nt) where {T<:AbstractFloat}
+    kx = collect(-Nx/2:Nx/2-1) / Nx
+    ky = collect(-Ny/2:Ny/2-1) / Ny
+    kz = collect(-Nz/2:Nz/2-1) / Nz
 
     k = Vector{Matrix{T}}(undef, Nt)
     for it ∈ eachindex(k)
-
         ki = Array{T,4}(undef, 3, Nx, Ny, Nz)
-
         @batch for x ∈ 1:Nx, y ∈ 1:Ny, z ∈ 1:Nz
-
             ki[1, x, y, z] = kx[x]
             ki[2, x, y, z] = ky[y]
             ki[3, x, y, z] = kz[z]
         end
-
         k[it] = reshape(ki, 3, :)
+    end
+    return k
+end
 
-        if samplingRate_units
-            k[it] = round.(k[it] .+ 0.5) # ceil operation on arrays
+function traj_cartesian(::Type{T}, Nx, Ny, Nz, Nt) where {T<:Integer}
+    kx = collect(1:Nx) 
+    ky = collect(1:Ny) 
+    kz = collect(1:Nz)
+
+    k = Vector{Matrix{T}}(undef, Nt)
+    for it ∈ eachindex(k)
+        ki = Array{T,4}(undef, 3, Nx, Ny, Nz)
+        @batch for x ∈ 1:Nx, y ∈ 1:Ny, z ∈ 1:Nz
+            ki[1, x, y, z] = kx[x]
+            ki[2, x, y, z] = ky[y]
+            ki[3, x, y, z] = kz[z]
         end
+        k[it] = reshape(ki, 3, :)
     end
     return k
 end
