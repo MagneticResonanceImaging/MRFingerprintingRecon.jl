@@ -86,12 +86,11 @@ A_rad = NFFTNormalOp((Nx,Nx), trj, U; cmaps=cmaps)
 xr = cg(A_rad, vec(xbp_rad), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
 
-
 ## GROG Reconstruction
-trj = radial_grog!(data, trj, Nr, (Nx,Nx))
-xbp_grog = calculateBackProjection(data, trj, cmaps; U)
-A_grog = FFTNormalOp((Nx,Nx), trj, U; cmaps)
-xg = cg(A_grog, vec(xbp_grog), maxiter=20)
+trj_cart = radial_grog!(data, trj, Nr, (Nx,Nx))
+xbp_grog = calculateBackProjection(data, trj_cart, cmaps; U)
+A_cart = FFTNormalOp((Nx,Nx), trj_cart, U; cmaps)
+xg = cg(A_cart, vec(xbp_grog), maxiter=20)
 xg = reshape(xg, Nx, Nx, Nc)
 
 ## Fix irrelevant phase slope
@@ -104,5 +103,5 @@ xg = reshape(xg, Nx, Nx, Nc)
 ##
 # using Plots
 # heatmap(abs.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), reshape(xg, Nx, :), dims=1)), clim=(0.75, 1.25), size=(1100,750))
-# heatmap(angle.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), reshape(xg, Nx, :); dims=1)), clim=(-0.1, 1.1), size=(1100,750))
+# heatmap(angle.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), reshape(xg, Nx, :); dims=1)), size=(1100,750))
 # heatmap(angle.(reshape(xr, Nx, :)) .- angle.(reshape(xg, Nx, :)), clim=(-0.05, 0.05), size=(1100,250), c=:bluesreds)
