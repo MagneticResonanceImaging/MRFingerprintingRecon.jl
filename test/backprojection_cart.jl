@@ -15,7 +15,7 @@ Nt = 1
 Ncoil = 9
 
 ## Create trajectory
-trj = MRFingerprintingRecon.traj_cartesian(Float32, Nx, Nx, 1, Nt) # float for plan_nfft()
+trj = MRFingerprintingRecon.traj_cartesian(Nx, Nx, 1, Nt; T=Float32) # float for plan_nfft()
 trj = [trj[i][1:2,:] for i ∈ eachindex(trj)] # only 2D traj here
 
 ## Create phantom geometry
@@ -58,7 +58,7 @@ end
 U = ones(ComplexF32, length(data), 1)
 
 ## Create the equivalent integer trajectory
-trj = MRFingerprintingRecon.traj_cartesian(Int32, Nx, Nx, 1, Nt)
+trj = MRFingerprintingRecon.traj_cartesian(Nx, Nx, 1, Nt; T=Int32)
 trj = [trj[i][1:2,:] for i ∈ eachindex(trj)] # only 2D traj here
 reco = calculateBackProjection(data, trj, cmaps; U)
 reco = dropdims(reco, dims=3)

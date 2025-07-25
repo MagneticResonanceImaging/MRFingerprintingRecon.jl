@@ -1,39 +1,23 @@
 """
     traj_cartesian(T, Nx, Ny, Nz, Nt)
 
-Generate a 3D Cartesian trajectory. 
-As input to functions using NFFTs, the trajectory can be defined as floats ∈ [-0.5, 0.5). 
+Generate a 3D Cartesian trajectory.
+As input to functions using NFFTs, the trajectory can be defined as floats ∈ [-0.5, 0.5).
 For use with Cartesian FFTs, the trajectory consists of integers ∈ [1, N].
 
 # Arguments
-- `T::Type`: Type of output trajectory. If `T <: Float`, trajectory is defined ∈ (-0.5, 0.5). If `T <: Int`, trajectory consists of values ∈ (1, N) instead.
 - `Nx::Int`: Number of readout samples
 - `Ny::Int`: Number of phase encoding lines
 - `Nz::Int`: Number of phase encoding lines (third dimension)
 - `Nt::Int`: Number of time steps in the trajectory
+
+# Optional Keyword Argument
+- `T::Type=Int`: Type of output trajectory. If `T <: Float`, trajectory is defined ∈ (-0.5, 0.5). If `T <: Int`, trajectory consists of values ∈ (1, N) instead.
 """
-function traj_cartesian(::Type{T}, Nx, Ny, Nz, Nt) where {T<:AbstractFloat}
-    kx = collect(-Nx/2:Nx/2-1) / Nx
-    ky = collect(-Ny/2:Ny/2-1) / Ny
-    kz = collect(-Nz/2:Nz/2-1) / Nz
-
-    k = Vector{Matrix{T}}(undef, Nt)
-    for it ∈ eachindex(k)
-        ki = Array{T,4}(undef, 3, Nx, Ny, Nz)
-        @batch for x ∈ 1:Nx, y ∈ 1:Ny, z ∈ 1:Nz
-            ki[1, x, y, z] = kx[x]
-            ki[2, x, y, z] = ky[y]
-            ki[3, x, y, z] = kz[z]
-        end
-        k[it] = reshape(ki, 3, :)
-    end
-    return k
-end
-
-function traj_cartesian(::Type{T}, Nx, Ny, Nz, Nt) where {T<:Integer}
-    kx = collect(1:Nx) 
-    ky = collect(1:Ny) 
-    kz = collect(1:Nz)
+function traj_cartesian(Nx, Ny, Nz, Nt; T=Int)
+    kx = T <: Integer ? collect(1:Nx) : collect(-Nx/2:Nx/2-1) / Nx
+    ky = T <: Integer ? collect(1:Ny) : collect(-Ny/2:Ny/2-1) / Ny
+    kz = T <: Integer ? collect(1:Nz) : collect(-Nz/2:Nz/2-1) / Nz
 
     k = Vector{Matrix{T}}(undef, Nt)
     for it ∈ eachindex(k)

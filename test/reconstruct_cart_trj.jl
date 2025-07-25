@@ -8,7 +8,7 @@ using FFTW
 using Test
 
 ## set parameters
-T  = Float32
+T = Float32
 Tint = Int32
 Nx = 64
 Nc = 4
