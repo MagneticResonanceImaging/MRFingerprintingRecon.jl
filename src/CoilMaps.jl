@@ -60,17 +60,18 @@ function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::A
     imdims = ntuple(i -> i, Ndims)
     Nt = length(trj)
 
-    # Adjusted trajectory to obtain trj_idx within calibration region
-    trj_norm = [(trj_it .- 1) ./ img_shape .- 0.5 for trj_it ∈ trj]
-    calib_scale = img_shape ./ calib_size
-
     trj_calib = Vector{Matrix{Integer}}(undef, Nt)
     data_calib = Vector{Matrix{Complex{T}}}(undef, Nt)
+
+    lower_bound = @. Int(ceil((img_shape - calib_size) / 2))
+    upper_bound = @. lower_bound + calib_size + 1
+
     Threads.@threads for it ∈ eachindex(trj)
-        trj_idx = [all(abs.(trj_norm[it][:, i] .* calib_scale) .< T(0.5)) for i ∈ axes(trj_norm[it], 2)]
-        trj_calib[it] = trj[it][:, trj_idx]
+        trj_idx = [all(trj[it][:, is] .> lower_bound) && all(trj[it][:, is] .< upper_bound) for is ∈ axes(trj[it], 2)]
+        trj_calib[it] = trj[it][:, trj_idx] .- lower_bound
         data_calib[it] = data[it][trj_idx, :]
     end
+
     x = calculateCoilwiseCG(data_calib, trj_calib, calib_size; U)
 
     kbp = fftshift(x, imdims)
