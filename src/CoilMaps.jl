@@ -64,7 +64,7 @@ function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::A
     data_calib = Vector{Matrix{Complex{T}}}(undef, Nt)
 
     lower_bound = @. Int(ceil((img_shape - calib_size) / 2))
-    upper_bound = @. Int(lower_bound + calib_size + 1)
+    upper_bound = @. lower_bound + calib_size + 1
 
     Threads.@threads for it ∈ eachindex(trj)
         trj_idx = [all(trj[it][:, is] .> lower_bound) && all(trj[it][:, is] .< upper_bound) for is ∈ axes(trj[it], 2)]
