@@ -370,7 +370,8 @@ function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
     threads_y = min(max_threads ÷ threads_x, S.Ncoeff)
     threads = (threads_x, threads_y)
     blocks = ceil.(Int, (length(S.kmask_indcs), S.Ncoeff) ./ threads)
-
+    ind_lookup = CuArray([j<k ? j+k*(k-1)÷2 : k+j*(j-1)÷2 for j ∈ 1:S.Ncoeff, k ∈ 1:S.Ncoeff])
+  
     for cmap ∈ S.cmaps
         S.kL1[idxos, :] .= 0
         @views S.kL1[idx, :] .= cmap .* b[idx, :]
@@ -378,14 +379,13 @@ function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
 
         kL1_rs = reshape(S.kL1, :, S.Ncoeff)
         kL2_rs = reshape(S.kL2, :, S.Ncoeff) .= 0
-        @cuda threads=threads blocks=blocks kernel_mul!(kL2_rs, S.Λ, kL1_rs, S.kmask_indcs, S.Ncoeff)
+        @cuda threads=threads blocks=blocks kernel_mul!(kL2_rs, S.Λ, kL1_rs, S.kmask_indcs, S.Ncoeff, ind_lookup)
 
         S.ifftplan * S.kL2
         @views xr[idx, :] .+= α .* conj.(cmap) .* S.kL2[idx, :]
     end
     return x
 end
-
 
 function kernel_uprod!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
 
@@ -413,7 +413,7 @@ function kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
     return
 end
 
-function kernel_mul!(kL2_rs, Λ, kL1_rs, kmask_indcs, Ncoeff)
+function kernel_mul!(kL2_rs, Λ, kL1_rs, kmask_indcs, Ncoeff, ind_lookup)
     
     i = (blockIdx().x-1) * blockDim().x + threadIdx().x
     j = (blockIdx().y-1) * blockDim().y + threadIdx().y
@@ -423,8 +423,8 @@ function kernel_mul!(kL2_rs, Λ, kL1_rs, kmask_indcs, Ncoeff)
     
         ind = kmask_indcs[i]
         for k in 1:Ncoeff 
-            ind_pack = k >= j ? j+k*(k-1)÷2 : k+j*(j-1)÷2
-            kL2_rs[ind, j] += Λ[ind_pack, i] * kL1_rs[ind, k]
+            ind_packed = ind_lookup[j,k]
+            kL2_rs[ind, j] += Λ[ind_packed, i] * kL1_rs[ind, k]
         end
     end
     return

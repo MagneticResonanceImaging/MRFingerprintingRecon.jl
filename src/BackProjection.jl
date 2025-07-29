@@ -77,7 +77,7 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
     # Plan NFFT
     p = NonuniformFFTs.NFFTPlan(trj_v, img_shape)
     img_idx = CartesianIndices(img_shape)
-    xbp = CuArray(zeros(cT, img_shape..., Ncoef, Ncoil))
+    xbp = CUDA.zeros(cT, img_shape..., Ncoef, Ncoil)
     data = reduce(vcat, data)
     data_temp = CuArray{cT}(undef, sum(trj_l))
     
@@ -143,8 +143,8 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
     Uc = conj(U)
 
     # Kernel helper arrays
-    trj_l = [size(trj[it], 2) for it in eachindex(trj)] # nr nodes per frame
-    trj_c = CuArray([0; cumsum(trj_l[1:end-1])]) # cumulative sum, starting at 0
+    trj_l = [size(trj[it], 2) for it in eachindex(trj)]
+    trj_c = CuArray([0; cumsum(trj_l[1:end-1])])
     trj_l = CuArray(trj_l)
 
     # Threads-and-blocks settings for kernel_bp!
@@ -152,12 +152,12 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
     threads_x = min(max_threads, maximum(trj_l)) 
     threads_y = min(max_threads ÷ threads_x, Nt) 
     threads = (threads_x, threads_y) 
-    blocks = ceil.(Int, (maximum(trj_l), Nt) ./ threads) # samples as inner index
+    blocks = ceil.(Int, (maximum(trj_l), Nt) ./ threads)
 
     # Plan NFFT
     p = NonuniformFFTs.NFFTPlan(trj_v, img_shape)
     img_idx = CartesianIndices(img_shape)
-    xbp = CuArray(zeros(cT, img_shape..., Ncoef))
+    xbp = CUDA.zeros(cT, img_shape..., Ncoef)
     xtmp = CuArray{cT}(undef, img_shape)
     data = reduce(vcat, data)
     data_temp = CuArray{cT}(undef, sum(trj_l))
