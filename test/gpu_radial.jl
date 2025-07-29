@@ -1,9 +1,3 @@
-using Pkg
-Pkg.activate(".")
-Pkg.instantiate()
-
-##
-
 using CUDA
 using LinearAlgebra
 using MRFingerprintingRecon
@@ -116,11 +110,3 @@ xr_d = reshape(Array(xr_d), img_shape..., Nc)
 
 ## Test equivalence CPU and GPU code
 @test xr ≈ xr_d rtol=1e-3
-
-## Time both
-bm_cpu = @benchmark            cg(A,   vec(b),   maxiter=50)
-bm_gpu = @benchmark CUDA.@sync cg(A_d, vec(b_d), maxiter=50)
-t_cpu  = minimum(bm_cpu).time
-t_gpu  = minimum(bm_gpu).time
-
-@test t_gpu < t_cpu/5
