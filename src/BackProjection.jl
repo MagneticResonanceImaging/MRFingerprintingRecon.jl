@@ -23,7 +23,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj:
     Ncoef = size(U, 2)
 
     trj_v = reduce(hcat, trj)
-    p = plan_nfft(trj_v, img_shape; precompute=TENSOR, blocking=true, fftflags=FFTW.MEASURE)
+    p = plan_nfft(trj_v, img_shape; blocking=true, fftflags=FFTW.MEASURE)
 
     Ncoil = size(data[1], 2)
     xbp = Array{cT}(undef, img_shape..., Ncoef, Ncoil)
@@ -58,7 +58,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
     Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
 
-    p = plan_nfft(trj_v, img_shape; precompute=TENSOR, blocking=true, fftflags=FFTW.MEASURE)
+    p = plan_nfft(trj_v, img_shape; blocking=true, fftflags=FFTW.MEASURE)
     xbp = zeros(cT, img_shape..., Ncoef)
     xtmp = Array{cT}(undef, img_shape)
 

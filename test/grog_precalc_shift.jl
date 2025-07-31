@@ -4,7 +4,7 @@ using ImagePhantoms
 using LinearAlgebra
 using IterativeSolvers
 using FFTW
-using NFFT
+using NonuniformFFTs
 using Test
 
 ##
@@ -41,16 +41,15 @@ end
 
 cmaps = [cmaps[:,:,ic] for ic=1:Ncoil]
 
-
 ## Simulate data
 data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
 nfftplan = plan_nfft(trj[1], (Nx,Nx))
-xcoil = copy(x)
+xcoil = similar(x, Complex{T})
 for icoil ∈ 1:Ncoil
     xcoil .= x
     xcoil .*= cmaps[icoil]
     for it ∈ eachindex(data)
-        nodes!(nfftplan, trj[it])
+        set_points!(nfftplan.p, trj[it])
         @views mul!(data[it][:,icoil], nfftplan, xcoil)
     end
 end

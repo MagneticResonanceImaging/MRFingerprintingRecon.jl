@@ -78,14 +78,14 @@ By modifying `N` also tiny golden angles [2] are supported.
 [1] Winkelmann S, Schaeffter T, Koehler T, Eggers H, Doessel O. An optimal radial profile order based on the Golden Ratio for time-resolved MRI. IEEE TMI 26:68--76 (2007)
 [2] Wundrak S, Paul J, Ulrici J, Hell E, Geibel MA, Bernhardt P, Rottbauer W, Rasche V. Golden ratio sparse MRI using tiny golden angles. Magn Reson Med 75:2372-2378 (2016)
 """
-function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), N = 1)
+function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), N = 1, T=Float32)
 
     τ = (sqrt(5) + 1) / 2
-
-    phi = (0:(Ncyc*Nt-1)) * π / (τ + N - 1)
+    angle_GR = T.(π / (τ + N - 1))
+    phi = (0:(Ncyc*Nt-1)) * angle_GR
     phi = reshape(phi, Nt, Ncyc)
 
-    theta = similar(phi)
+    theta = similar(phi, T)
     theta .= π/2 # 2D
 
     trj = kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay)

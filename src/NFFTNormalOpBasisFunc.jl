@@ -85,10 +85,16 @@ struct _NFFTNormalOp{S,T,N,E,F,G}
 end
 
 function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}) where T
-    nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = POLYNOMIAL, blocking = false, fftflags = FFTW.MEASURE, m=5, σ=1)
-
-    convolve_transpose!(nfftplan, ones(Complex{T}, size(nfftplan)[1]), nfftplan.tmpVec)
-    kmask = (nfftplan.tmpVec .!= 0)
+    img_shape = Int.(img_shape_os ./ 2)
+    trj_v = reduce(hcat, trj)
+    nfftplan = NonuniformFFTs.NFFTPlan(trj_v, img_shape)
+    p = nfftplan.p
+    (; backend, points, kernels, data, blocks, index_map,) = p
+    (; us,) = data
+    vp = (Array(ones(Complex{T}, size(trj_v, 2))),)
+    callback = NonuniformFFTs.NUFFTCallbacks()
+    NonuniformFFTs.spread_from_points!(backend, callback.nonuniform, p.point_transform_fold, blocks, kernels, p.kernel_evalmode, us, points, vp)
+    kmask = (us[1] .!= 0)
     kmask_indcs = findall(vec(kmask))
     return kmask_indcs
 end
@@ -109,7 +115,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
     S  = Vector{Complex{T}}(undef, trj_idx[end])
 
     fftplan  = plan_fft(λ; flags = FFTW.MEASURE, num_threads=Threads.nthreads())
-    nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = TENSOR, blocking = true, fftflags = FFTW.MEASURE, m=5, σ=2)
+    nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; blocking = true, fftflags = FFTW.MEASURE, m=5, σ=2)
 
     # Evaluating only the upper triangular matrix assumes that the PSF from the rightmost voxel to the leftmost voxel is the adjoint of the PSF in the opposite direction.
     # For the outmost voxel, this is not correct, but the resulting images are virtually identical in our test cases.
@@ -138,7 +144,6 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
 
     return Λ, kmask_indcs
 end
-
 
 function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) where {T}
     idx = CartesianIndices(S.shape)
