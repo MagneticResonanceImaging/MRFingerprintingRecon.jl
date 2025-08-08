@@ -40,7 +40,7 @@ function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::A
         data_calib[it] = data[it][trj_idx, :]
     end
     x = calculateCoilwiseCG(data_calib, trj_calib, calib_size; U)
-
+    
     kbp = fftshift(x, imdims)
     fft!(kbp, imdims)
     kbp = fftshift(kbp, imdims)

@@ -40,18 +40,20 @@ for i ∈ CartesianIndices(@view cmaps[:,:,1])
 end
 cmaps = [cmaps[:,:,ic] for ic=1:Ncoil]
 
-## set up trajectory
+## create trajectory without point symmetry
 α_g = 2π / (1+√5)
 phi = Float32.(α_g * (1:Nt*Ncyc))
 theta = Float32.(0 * (1:Nt*Ncyc) .+ pi/2)
 phi = reshape(phi, Ncyc, Nt)
 theta = reshape(theta, Ncyc, Nt)
 
-trj = kooshball(2Nx, theta, phi)
-trj = [trj[i][1:2,:] for i ∈ eachindex(trj)]
+trj = reduce(hcat, kooshball(2Nx, theta, phi))[1:2, :]
+trj = reshape(trj, 2, 2Nx, Nt*Ncyc)
+trj = reshape(trj[:, 1:Nx, :], 2, Nx*Ncyc, Nt)
+trj = [trj[:,:,i] for i ∈ 1:20]
 
-## set up basis functions
-U = randn(Complex{T}, Nt, Nc)
+## set up real basis functions
+U = randn(T, Nt, Nc)
 U,_,_ = svd(U)
 
 ## simulate data
@@ -69,10 +71,10 @@ for icoil ∈ 1:Ncoil
 end
 
 ## backprojection
-b = calculateBackProjection(data, trj, cmaps; U)
+b = calculateBackProjection(data, trj, cmaps; U);
 
 ## construct forward operator
-A = NFFTNormalOp((Nx,Nx), trj, U, cmaps=cmaps);
+A = NFFTNormalOp((Nx,Nx), trj, U, cmaps=cmaps)
 
 ## reconstruct
 xr = cg(A, vec(b), maxiter=20);

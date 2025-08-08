@@ -23,7 +23,8 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj:
     Ncoef = size(U, 2)
 
     trj_v = reduce(hcat, trj)
-    p = plan_nfft(trj_v, img_shape; blocking=true, fftflags=FFTW.MEASURE)
+    p = PlanNUFFT(Complex{T}, img_shape; m=HalfSupport(5), fftshift=true)
+    set_points!(p, NonuniformFFTs._transform_point_convention.(trj_v))
 
     Ncoil = size(data[1], 2)
     xbp = Array{cT}(undef, img_shape..., Ncoef, Ncoil)
@@ -42,8 +43,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj:
                 @views data_temp[idx1:idx2] .= data[it][:, icoil] .* conj(U[it, icoef])
             end
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
-
-            @views mul!(xbp[img_idx, icoef, icoil], adjoint(p), data_temp)
+            @views exec_type1!(xbp[img_idx, icoef, icoil], p, data_temp)
         end
         verbose && println("coefficient = $icoef: t = $t s")
         flush(stdout)
@@ -58,7 +58,8 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
     Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
 
-    p = plan_nfft(trj_v, img_shape; blocking=true, fftflags=FFTW.MEASURE)
+    p = PlanNUFFT(Complex{T}, img_shape; m=HalfSupport(5), fftshift=true)
+    set_points!(p, NonuniformFFTs._transform_point_convention.(trj_v))
     xbp = zeros(cT, img_shape..., Ncoef)
     xtmp = Array{cT}(undef, img_shape)
 
@@ -75,7 +76,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
                 @views data_temp[idx1:idx2] .= data[it][:, icoil] .* conj(U[it, icoef])
             end
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
-            mul!(xtmp, adjoint(p), data_temp)
+            exec_type1!(xtmp, p, data_temp)
             xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
         verbose && println("coefficient = $icoef: t = $t s")

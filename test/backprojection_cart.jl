@@ -41,7 +41,7 @@ cmaps = [cmaps[:,:,ic] for ic=1:Ncoil]
 
 ## Simulate data
 data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
-nfftplan = plan_nfft(trj[1], (Nx,Nx))
+nfftplan = NonuniformFFTs.NFFTPlan(trj[1], (Nx,Nx))
 
 xcoil = similar(x, Complex{T})
 for icoil ∈ 1:Ncoil
