@@ -4,7 +4,7 @@ using ImagePhantoms
 using LinearAlgebra
 using IterativeSolvers
 using FFTW
-using NFFT
+using NonuniformFFTs
 using Test
 
 ##
@@ -41,16 +41,15 @@ end
 
 cmaps = [cmaps[:,:,ic] for ic=1:Ncoil]
 
-
 ## Simulate data
 data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
 nfftplan = plan_nfft(trj[1], (Nx,Nx))
-xcoil = copy(x)
+xcoil = similar(x, Complex{T})
 for icoil ∈ 1:Ncoil
     xcoil .= x
     xcoil .*= cmaps[icoil]
     for it ∈ eachindex(data)
-        nodes!(nfftplan, trj[it])
+        set_points!(nfftplan.p, trj[it])
         @views mul!(data[it][:,icoil], nfftplan, xcoil)
     end
 end
@@ -70,7 +69,7 @@ lnG2 = MRFingerprintingRecon.grog_calib(data2, trj, Nr)
 ## #####################################
 # Test Gridding with GROG kernel
 ########################################
-trj2 =  deepcopy(trj)
+trj2 = deepcopy(trj)
 
 # Gridding of each sample with non repeating trajectory (Reference)
 trj = MRFingerprintingRecon.grog_gridding!(data, trj, lnG, Nr, (Nx,Nx))
@@ -79,8 +78,8 @@ trj = MRFingerprintingRecon.grog_gridding!(data, trj, lnG, Nr, (Nx,Nx))
 trj2 = MRFingerprintingRecon.grog_gridding!(data2, trj2, lnG2, Nr, (Nx,Nx))
 
 # Compare gridding with and without repeating pattern
-@test data[1] ≈ data2[1][:,:,1] rtol = 1e-6
-@test data[1] ≈ data2[1][:,:,3] rtol = 1e-6
+@test data[1] ≈ data2[1][:,:,1] rtol = 1e-5
+@test data[1] ≈ data2[1][:,:,3] rtol = 1e-5
 
 
 ## #####################################

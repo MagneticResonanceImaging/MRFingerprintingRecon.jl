@@ -7,6 +7,7 @@ using Test
 
 @testset "Recon Radial" begin
     include("reconstruct_radial.jl")
+    include("reconstruct_radial_asym.jl")
 end
 
 @testset "Recon Cartesian" begin

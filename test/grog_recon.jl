@@ -4,7 +4,7 @@ using ImagePhantoms
 using LinearAlgebra
 using IterativeSolvers
 using FFTW
-using NFFT
+using NonuniformFFTs
 using Test
 
 ## set parameters
@@ -61,7 +61,7 @@ for icoil ∈ 1:Ncoil
     xcoil .= x
     xcoil .*= cmaps[icoil]
     for it ∈ eachindex(data)
-        nodes!(nfftplan, trj[it])
+        set_points!(nfftplan.p, trj[it])
         xt = reshape(reshape(xcoil, :, Nc) * U[it,:], Nx, Nx)
         @views mul!(data[it][:,icoil], nfftplan, xt)
     end

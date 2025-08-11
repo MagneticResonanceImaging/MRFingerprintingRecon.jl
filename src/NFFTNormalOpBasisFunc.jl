@@ -85,15 +85,14 @@ struct _NFFTNormalOp{S,T,N,E,F,G}
 end
 
 function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}) where T
-    nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = POLYNOMIAL, blocking = false, fftflags = FFTW.MEASURE, m=5, σ=1)
-
-    convolve_transpose!(nfftplan, ones(Complex{T}, size(nfftplan)[1]), nfftplan.tmpVec)
-    kmask = (nfftplan.tmpVec .!= 0)
-    kmask_indcs = findall(vec(kmask))
+    p = NonuniformFFTs.NFFTPlan(hcat(trj...), img_shape_os .÷ 2).p
+    vp = (ones(Complex{T}, size(p.points[1])),) # values to spread across Cartesian grid
+    NonuniformFFTs.spread_from_points!(p.backend, NUFFTCallbacks().nonuniform, p.point_transform_fold, p.blocks, p.kernels, p.kernel_evalmode, p.data.us, p.points, vp)
+    kmask_indcs = findall(vec(p.data.us[1] .!= 0))
     return kmask_indcs
 end
 
-function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractArray{Tc}; verbose = false) where {T, Tc <: Union{T, Complex{T}}}
+function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractArray{Tc}; verbose = false) where {T, Tc <: Complex{T}}
 
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
@@ -107,9 +106,10 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
 
     trj_idx = cumsum([size(trj[it],2) for it in eachindex(trj)])
     S  = Vector{Complex{T}}(undef, trj_idx[end])
-
-    fftplan  = plan_fft(λ; flags = FFTW.MEASURE, num_threads=Threads.nthreads())
-    nfftplan = plan_nfft(reduce(hcat, trj), img_shape_os; precompute = TENSOR, blocking = true, fftflags = FFTW.MEASURE, m=5, σ=2)
+ 
+    fftplan  = plan_fft(λ; flags=FFTW.MEASURE, num_threads=Threads.nthreads())
+    nfftplan = PlanNUFFT(Complex{T}, img_shape_os) # default is without fftshift
+    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reduce(hcat, trj)))
 
     # Evaluating only the upper triangular matrix assumes that the PSF from the rightmost voxel to the leftmost voxel is the adjoint of the PSF in the opposite direction.
     # For the outmost voxel, this is not correct, but the resulting images are virtually identical in our test cases.
@@ -123,8 +123,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
                     @inbounds S[idx1:idx2] .= conj(U[it,ic1]) * U[it,ic2]
                 end
 
-                mul!(λ, adjoint(nfftplan), vec(S))
-                fftshift!(λ2, λ)
+                exec_type1!(λ2, nfftplan, vec(S))
                 mul!(λ, fftplan, λ2)
 
                 Threads.@threads for it ∈ eachindex(kmask_indcs)
@@ -135,10 +134,53 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
             verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
         end
     end
-
     return Λ, kmask_indcs
 end
 
+function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractArray{T}; verbose=false) where {T <: Real}
+
+    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
+    @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
+    @assert all(kmask_indcs .<= prod(img_shape_os))
+
+    Ncoeff = size(U, 2)
+
+    λ  = Array{T}(undef, img_shape_os)
+    λ2 = Array{Complex{T}}(undef, img_shape_os[1] ÷ 2 + 1, Base.tail(img_shape_os)...)
+    Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
+
+    trj_idx = cumsum([size(trj[it],2) for it in eachindex(trj)])
+    S  = Vector{T}(undef, trj_idx[end])
+
+    brfftplan = plan_brfft(λ2, img_shape_os[1]; flags=FFTW.MEASURE, num_threads=Threads.nthreads())
+    nfftplan = PlanNUFFT(T, img_shape_os) # use plan specific to real inputs
+    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reduce(hcat, trj)))
+
+    # Evaluating only the upper triangular matrix assumes that the PSF from the rightmost voxel to the leftmost voxel is the adjoint of the PSF in the opposite direction.
+    # For the outmost voxel, this is not correct, but the resulting images are virtually identical in our test cases.
+    for ic2 ∈ axes(Λ, 2), ic1 ∈ axes(Λ, 1)
+        if ic2 >= ic1 # eval. only upper triangular matrix
+            t = @elapsed begin
+                @simd for it ∈ axes(U,1)
+                    idx1 = (it == 1) ? 1 : trj_idx[it-1] + 1
+                    idx2 = trj_idx[it]
+                    @inbounds S[idx1:idx2] .= U[it,ic1] * U[it,ic2]
+                end
+
+                exec_type1!(λ2, nfftplan, vec(S))
+                λ2 .= conj.(λ2) # conjugate input to flip the sign of the exponential in brfft
+                mul!(λ, brfftplan, λ2) 
+
+                Threads.@threads for it ∈ eachindex(kmask_indcs)
+                    @inbounds Λ[ic2,ic1,it] = λ[kmask_indcs[it]]
+                    @inbounds Λ[ic1,ic2,it] = λ[kmask_indcs[it]]
+                end
+            end
+            verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
+        end
+    end
+    return Λ, kmask_indcs
+end
 
 function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) where {T}
     idx = CartesianIndices(S.shape)
