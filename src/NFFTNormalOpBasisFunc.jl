@@ -108,7 +108,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
     S  = Vector{Complex{T}}(undef, trj_idx[end])
  
     fftplan  = plan_fft(λ; flags=FFTW.MEASURE, num_threads=Threads.nthreads())
-    nfftplan = PlanNUFFT(Complex{T}, img_shape_os; m=HalfSupport(5))
+    nfftplan = PlanNUFFT(Complex{T}, img_shape_os) # default is without fftshift
     set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reduce(hcat, trj)))
 
     # Evaluating only the upper triangular matrix assumes that the PSF from the rightmost voxel to the leftmost voxel is the adjoint of the PSF in the opposite direction.
@@ -137,7 +137,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
     return Λ, kmask_indcs
 end
 
-function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractArray{T}; verbose = false) where {T <: Real}
+function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractArray{T}; verbose=false) where {T <: Real}
 
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
@@ -153,7 +153,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
     S  = Vector{T}(undef, trj_idx[end])
 
     brfftplan = plan_brfft(λ2, img_shape_os[1]; flags=FFTW.MEASURE, num_threads=Threads.nthreads())
-    nfftplan = PlanNUFFT(T, img_shape_os; m=HalfSupport(5)) # use plan specific to real inputs
+    nfftplan = PlanNUFFT(T, img_shape_os) # use plan specific to real inputs
     set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reduce(hcat, trj)))
 
     # Evaluating only the upper triangular matrix assumes that the PSF from the rightmost voxel to the leftmost voxel is the adjoint of the PSF in the opposite direction.
@@ -168,7 +168,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
                 end
 
                 exec_type1!(λ2, nfftplan, vec(S))
-                λ2 .= conj.(λ2) # conjugating input is equivalent to flipping the sign of the exponential in brfft
+                λ2 .= conj.(λ2) # conjugate input to flip the sign of the exponential in brfft
                 mul!(λ, brfftplan, λ2) 
 
                 Threads.@threads for it ∈ eachindex(kmask_indcs)

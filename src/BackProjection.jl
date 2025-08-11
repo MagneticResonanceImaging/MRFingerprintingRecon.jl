@@ -23,7 +23,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj:
     Ncoef = size(U, 2)
 
     trj_v = reduce(hcat, trj)
-    p = PlanNUFFT(Complex{T}, img_shape; m=HalfSupport(5), fftshift=true)
+    p = PlanNUFFT(Complex{T}, img_shape; fftshift=true)
     set_points!(p, NonuniformFFTs._transform_point_convention.(trj_v))
 
     Ncoil = size(data[1], 2)
@@ -58,7 +58,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
     Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
 
-    p = PlanNUFFT(Complex{T}, img_shape; m=HalfSupport(5), fftshift=true)
+    p = PlanNUFFT(Complex{T}, img_shape; fftshift=true)
     set_points!(p, NonuniformFFTs._transform_point_convention.(trj_v))
     xbp = zeros(cT, img_shape..., Ncoef)
     xtmp = Array{cT}(undef, img_shape)
