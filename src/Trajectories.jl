@@ -82,7 +82,7 @@ function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, dela
 
     τ = (sqrt(5) + 1) / 2
     angle_GR = T.(π / (τ + N - 1))
-    phi = (0:(Ncyc*Nt-1)) * angle_GR
+    phi = (0:(Ncyc*Nt-1)) .* angle_GR
     phi = reshape(phi, Nt, Ncyc)
 
     theta = similar(phi, T)

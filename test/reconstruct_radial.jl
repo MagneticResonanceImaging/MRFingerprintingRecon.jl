@@ -56,7 +56,7 @@ U,_,_ = svd(U)
 
 ## simulate data
 data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
-nfftplan = PlanNUFFT(Complex{T}, (Nx, Nx); fftshift=true) 
+nfftplan = PlanNUFFT(Complex{T}, (Nx, Nx); fftshift=true)
 xcoil = copy(x)
 for icoil ∈ 1:Ncoil
     xcoil .= x
@@ -72,11 +72,11 @@ end
 b = calculateBackProjection(data, trj, cmaps; U)
 
 ## construct forward operator
-A = NFFTNormalOp((Nx,Nx), trj, U, cmaps=cmaps);
+A = NFFTNormalOp((Nx,Nx), trj, U, cmaps=cmaps)
 
 ## reconstruct
-xr = cg(A, vec(b), maxiter=20);
-xr = reshape(xr, Nx, Nx, Nc);
+xr = cg(A, vec(b), maxiter=20)
+xr = reshape(xr, Nx, Nx, Nc)
 
 ## crop x
 xc = fftshift(fft(x, 1:2), 1:2)
