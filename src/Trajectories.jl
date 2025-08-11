@@ -85,7 +85,7 @@ function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, dela
     phi = (0:(Ncyc*Nt-1)) .* angle_GR
     phi = reshape(phi, Nt, Ncyc)
 
-    theta = similar(phi, T)
+    theta = similar(phi)
     theta .= π/2 # 2D
 
     trj = kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay)

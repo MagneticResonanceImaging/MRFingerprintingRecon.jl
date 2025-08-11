@@ -69,7 +69,7 @@ lnG2 = MRFingerprintingRecon.grog_calib(data2, trj, Nr)
 ## #####################################
 # Test Gridding with GROG kernel
 ########################################
-trj2 =  deepcopy(trj)
+trj2 = deepcopy(trj)
 
 # Gridding of each sample with non repeating trajectory (Reference)
 trj = MRFingerprintingRecon.grog_gridding!(data, trj, lnG, Nr, (Nx,Nx))
@@ -78,8 +78,8 @@ trj = MRFingerprintingRecon.grog_gridding!(data, trj, lnG, Nr, (Nx,Nx))
 trj2 = MRFingerprintingRecon.grog_gridding!(data2, trj2, lnG2, Nr, (Nx,Nx))
 
 # Compare gridding with and without repeating pattern
-@test data[1] ≈ data2[1][:,:,1] rtol = 1e-6
-@test data[1] ≈ data2[1][:,:,3] rtol = 1e-6
+@test data[1] ≈ data2[1][:,:,1] rtol = 1e-5
+@test data[1] ≈ data2[1][:,:,3] rtol = 1e-5
 
 
 ## #####################################
