@@ -85,15 +85,18 @@ struct _NFFTNormalOp{S,T,N,E,F,G}
 end
 
 function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}) where T
-    p = NonuniformFFTs.NFFTPlan(hcat(trj...), img_shape_os .÷ 2).p
-    vp = (ones(Complex{T}, size(p.points[1])),) # values to spread across Cartesian grid
-    NonuniformFFTs.spread_from_points!(p.backend, NUFFTCallbacks().nonuniform, p.point_transform_fold, p.blocks, p.kernels, p.kernel_evalmode, p.data.us, p.points, vp)
+    @assert all([i .== nextprod((2, 3, 5), i) for i ∈ img_shape_os]) "img_shape_os has to be composed of the prime factors 2, 3, and 5 (cf. NonuniformFFTs.jl documentation)."
+
+    p = PlanNUFFT(Complex{T}, img_shape_os; σ=1, kernel=GaussianKernel()) # default is without fftshift
+    set_points!(p, NonuniformFFTs._transform_point_convention.(reduce(hcat, trj)))
+
+    S = ones(Complex{T}, size(p.points[1]))
+    NonuniformFFTs.spread_from_points!(p.backend, NUFFTCallbacks().nonuniform, p.point_transform_fold, p.blocks, p.kernels, p.kernel_evalmode, p.data.us, p.points, (S,))
     kmask_indcs = findall(vec(p.data.us[1] .!= 0))
     return kmask_indcs
 end
 
 function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractArray{Tc}; verbose = false) where {T, Tc <: Complex{T}}
-
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))
@@ -106,7 +109,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
 
     trj_idx = cumsum([size(trj[it],2) for it in eachindex(trj)])
     S  = Vector{Complex{T}}(undef, trj_idx[end])
- 
+
     fftplan  = plan_fft(λ; flags=FFTW.MEASURE, num_threads=Threads.nthreads())
     nfftplan = PlanNUFFT(Complex{T}, img_shape_os) # default is without fftshift
     set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reduce(hcat, trj)))
@@ -138,7 +141,6 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
 end
 
 function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractArray{T}; verbose=false) where {T <: Real}
-
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))
@@ -169,7 +171,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
 
                 exec_type1!(λ2, nfftplan, vec(S))
                 λ2 .= conj.(λ2) # conjugate input to flip the sign of the exponential in brfft
-                mul!(λ, brfftplan, λ2) 
+                mul!(λ, brfftplan, λ2)
 
                 Threads.@threads for it ∈ eachindex(kmask_indcs)
                     @inbounds Λ[ic2,ic1,it] = λ[kmask_indcs[it]]
@@ -179,7 +181,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
             verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
         end
     end
-    return Λ, kmask_indcs
+    return Λ, kmask_indcs, img_shape_os
 end
 
 function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) where {T}

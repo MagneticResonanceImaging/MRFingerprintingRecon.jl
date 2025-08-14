@@ -147,7 +147,7 @@ function calculateCoilwiseCG(data::AbstractVector{<:AbstractArray{cT}}, trj::Abs
     xbp = calculateBackProjection(data, trj, img_shape; U=U[:, 1], verbose)
     x = zeros(cT, img_shape..., Ncoil)
 
-    for icoil = 1:Ncoil
+    for icoil ∈ axes(xbp, length(img_shape) + 2)
         bi = vec(@view xbp[CartesianIndices(img_shape), 1, icoil])
         xi = vec(@view x[CartesianIndices(img_shape), icoil])
         cg!(xi, AᴴA, bi; maxiter, verbose, reltol=0)
@@ -162,7 +162,7 @@ function calculateCoilwiseCG(data::AbstractVector{<:AbstractArray{cT}}, trj::Abs
     xbp = calculateBackProjection(data, trj, img_shape; U=U[:, 1])
     x = zeros(cT, img_shape..., Ncoil)
 
-    for icoil = 1:Ncoil
+    for icoil ∈ axes(xbp, length(img_shape) + 2)
         bi = vec(@view xbp[CartesianIndices(img_shape), 1, icoil])
         xi = vec(@view x[CartesianIndices(img_shape), icoil])
         cg!(xi, AᴴA, bi; maxiter, verbose) # maxiter <8 to avoid diverging
@@ -173,7 +173,6 @@ end
 ## ##########################################################################
 # Internal use
 #############################################################################
-
 function applyDensityCompensation!(data, trj; density_compensation=:radial_3D)
     if density_compensation == :radial_3D
         data .*= transpose(sum(abs2, trj, dims=1))
