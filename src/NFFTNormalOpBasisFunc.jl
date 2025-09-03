@@ -181,7 +181,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
             verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
         end
     end
-    return Λ, kmask_indcs, img_shape_os
+    return Λ, kmask_indcs
 end
 
 function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) where {T}
