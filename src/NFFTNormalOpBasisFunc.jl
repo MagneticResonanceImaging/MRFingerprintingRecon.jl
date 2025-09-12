@@ -136,30 +136,16 @@ struct _NFFTNormalOp{S,E,F,G,H,I,J,K}
     cmaps::K
 end
 
-function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}) where T
+function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:Union{AbstractMatrix{T}, CuArray{T}}}) where T
     @assert all([i .== nextprod((2, 3, 5), i) for i ∈ img_shape_os]) "img_shape_os has to be composed of the prime factors 2, 3, and 5 (cf. NonuniformFFTs.jl documentation)."
 
-    p = PlanNUFFT(Complex{T}, img_shape_os; σ=1, kernel=GaussianKernel()) # default is without fftshift
+    backend = eltype(trj) <: CuArray ? CUDABackend() : CPU()
+    p = PlanNUFFT(Complex{T}, img_shape_os; σ=1, kernel=GaussianKernel(), backend=backend) # default is without fftshift
     set_points!(p, NonuniformFFTs._transform_point_convention.(reduce(hcat, trj)))
 
-    S = ones(Complex{T}, size(p.points[1]))
+    S = eltype(trj) <: CuArray ? CUDA.ones(Complex{T}, size(p.points[1])) : ones(Complex{T}, size(p.points[1]))
     NonuniformFFTs.spread_from_points!(p.backend, NUFFTCallbacks().nonuniform, p.point_transform_fold, p.blocks, p.kernels, p.kernel_evalmode, p.data.us, p.points, (S,))
     kmask_indcs = findall(vec(p.data.us[1] .!= 0))
-    return kmask_indcs
-end
-
-function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:CuArray{T}}) where T
-    img_shape = Int.(img_shape_os ./ 2)
-    trj_v = reduce(hcat, trj)
-    nfftplan = NonuniformFFTs.NFFTPlan(trj_v, img_shape)
-    p = nfftplan.p
-    (; backend, points, kernels, data, blocks, index_map,) = p
-    (; us,) = data
-    vp = (CuArray(ones(Complex{T}, size(trj_v, 2))),)
-    callback = NonuniformFFTs.NUFFTCallbacks()
-    NonuniformFFTs.spread_from_points!(backend, callback.nonuniform, p.point_transform_fold, blocks, kernels, p.kernel_evalmode, us, points, vp)
-    kmask = (us[1] .!= 0)
-    kmask_indcs = findall(vec(kmask))
     return kmask_indcs
 end
 
@@ -272,7 +258,8 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArra
 
     # Prep plans
     fftplan  = plan_fft(λ)
-    nfftplan = NonuniformFFTs.NFFTPlan(reduce(hcat, trj), img_shape_os)
+    nfftplan = PlanNUFFT(Complex{T}, img_shape_os; backend=CUDABackend()) # use plan specific to real inputs
+    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reduce(hcat, trj)))
 
     # Kernel helpers
     Uc = conj(U)
@@ -296,8 +283,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:CuArra
          
                 @cuda threads=threads blocks=blocks kernel_uprod!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
 
-                mul!(λ, adjoint(nfftplan), vec(S)) 
-                fftshift!(λ2, λ) 
+                exec_type1!(λ2, nfftplan, vec(S))
                 mul!(λ, fftplan, λ2)
 
                 @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)

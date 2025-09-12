@@ -1,13 +1,13 @@
 using CUDA
-using LinearAlgebra
 using MRFingerprintingRecon
+using LinearAlgebra
 using BenchmarkTools
 using Test
 using FFTW
 using IterativeSolvers 
 using ImagePhantoms
-using NFFT
 using Random
+using NonuniformFFTs
 
 Random.seed!(42)
 
@@ -49,8 +49,7 @@ theta = Float32.(0 * (1:Nt*Ncyc) .+ pi/2)
 phi = reshape(phi, Ncyc, Nt)
 theta = reshape(theta, Ncyc, Nt)
 
-delay = (3.0/Nx, 1.0/Nx, 0.0)
-trj = kooshball(2Nx, theta, phi; delay)
+trj = kooshball(2Nx, theta, phi)
 trj = [trj[i][1:2,:] for i ∈ eachindex(trj)]
 
 ## set up basis functions
@@ -58,18 +57,16 @@ U = randn(T, Nt, Nc)
 U,_,_ = svd(U)
 
 ## simulate data
-data = Array{Complex{T}}(undef, size(trj[1], 2), Nt, Ncoil)
-data = [data[:,it,:] for it = 1:Nt]
-
-nfftplan = plan_nfft(trj[1], (Nx,Nx))
+data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
+nfftplan = PlanNUFFT(Complex{T}, (Nx,Nx); fftshift=true)
 xcoil = copy(x)
 for icoil ∈ 1:Ncoil
     xcoil .= x
     xcoil .*= cmaps[icoil]
     for it ∈ axes(data,1)
-        nodes!(nfftplan, trj[it])
+        set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[it]))
         xt = reshape(reshape(xcoil, :, Nc) * U[it,:], Nx, Nx)
-        @views mul!(data[it][:,icoil], nfftplan, xt)
+        @views exec_type2!(data[it][:,icoil], nfftplan, xt)
     end
 end
 
@@ -103,6 +100,7 @@ xr = cg(A, vec(b), maxiter=50)
 xr = reshape(xr, img_shape..., Nc)
 
 ## GPU
+k = MRFingerprintingRecon.calculate_kmask_indcs(2 .* img_shape, trj_d)
 A_d = NFFTNormalOp(img_shape, trj_d, U_d; cmaps=cmaps_d)
 b_d = calculateBackProjection(data_d, trj_d, cmaps_d; U=U_d)
 xr_d = cg(A_d, vec(b_d), maxiter=50)
