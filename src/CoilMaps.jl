@@ -24,23 +24,20 @@ Estimate coil sensitivity maps using ESPIRiT [1].
 # References
 [1] Uecker, M., Lai, P., Murphy, M.J., Virtue, P., Elad, M., Pauly, J.M., Vasanawala, S.S. and Lustig, M. (2014), ESPIRiT—an eigenvalue approach to autocalibrating parallel MRI: Where SENSE meets GRAPPA. Magn. Reson. Med., 71: 990-1001. https://doi.org/10.1002/mrm.24751
 """
-function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=ones(Complex{T},length(data)), kernel_size=ntuple(_ -> 6, N), calib_size=img_shape.÷(img_shape[1]÷32), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose=false) where {N,T}
-    Ncoil = size(data[1], 2)
-    Ndims = length(img_shape)
-    imdims = ntuple(i -> i, Ndims)
-    Nt = length(trj)
-
+function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=ones(Complex{T}, length(data)), kernel_size=ntuple(_ -> 6, N), calib_size=ntuple(i -> nextprod((2, 3, 5), img_shape[i] ÷ (maximum(img_shape) ÷ 32)), length(img_shape)), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose=false) where {N,T}
+    @assert all([icalib .== nextprod((2, 3, 5), icalib) for icalib ∈ calib_size]) "calib_size has to be composed of the prime factors 2, 3, and 5 (cf. NonuniformFFTs.jl documentation)."
     calib_scale = img_shape ./ calib_size
 
-    trj_calib = Vector{Matrix{T}}(undef, Nt)
-    data_calib = Vector{Matrix{Complex{T}}}(undef, Nt)
+    trj_calib = Vector{Matrix{T}}(undef, length(trj))
+    data_calib = Vector{Matrix{Complex{T}}}(undef, length(data))
     Threads.@threads for it ∈ eachindex(trj)
         trj_idx = [all(abs.(trj[it][:, i] .* calib_scale) .< T(0.5)) for i ∈ axes(trj[it], 2)]
         trj_calib[it] = trj[it][:, trj_idx] .* calib_scale
         data_calib[it] = data[it][trj_idx, :]
     end
     x = calculateCoilwiseCG(data_calib, trj_calib, calib_size; U)
-    
+
+    imdims = ntuple(i -> i, length(img_shape))
     kbp = fftshift(x, imdims)
     fft!(kbp, imdims)
     kbp = fftshift(kbp, imdims)
@@ -50,18 +47,13 @@ function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::A
     end
     verbose && println("espirit: $t s")
 
-    cmaps = [cmaps[CartesianIndices(img_shape), ic, in] for ic = 1:Ncoil, in = (nmaps == 1 ? 1 : 1:nmaps)]
+    cmaps = [cmaps[CartesianIndices(img_shape), ic, in] for ic ∈ axes(cmaps, length(img_shape) + 1), in = (nmaps == 1 ? 1 : 1:nmaps)]
     return cmaps
 end
 
-function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, img_shape::NTuple{N,Int}; U=ones(Complex{T},length(data)), kernel_size=ntuple(_ -> 6, N), calib_size=img_shape.÷(img_shape[1]÷32), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose=false) where {N,T}
-    Ncoil = size(data[1], 2)
-    Ndims = length(img_shape)
-    imdims = ntuple(i -> i, Ndims)
-    Nt = length(trj)
-
-    trj_calib = Vector{Matrix{Integer}}(undef, Nt)
-    data_calib = Vector{Matrix{Complex{T}}}(undef, Nt)
+function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, img_shape::NTuple{N,Int}; U=ones(Complex{T}, length(data)), kernel_size=ntuple(_ -> 6, N), calib_size=img_shape .÷ (img_shape[1] ÷ 32), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose=false) where {N,T}
+    trj_calib = Vector{Matrix{Integer}}(undef, length(trj))
+    data_calib = Vector{Matrix{Complex{T}}}(undef, length(data))
 
     lower_bound = @. Int(ceil((img_shape - calib_size) / 2))
     upper_bound = @. lower_bound + calib_size + 1
@@ -74,6 +66,7 @@ function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::A
 
     x = calculateCoilwiseCG(data_calib, trj_calib, calib_size; U)
 
+    imdims = ntuple(i -> i, length(img_shape))
     kbp = fftshift(x, imdims)
     fft!(kbp, imdims)
     kbp = fftshift(kbp, imdims)
@@ -83,7 +76,7 @@ function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::A
     end
     verbose && println("espirit: $t s")
 
-    cmaps = [cmaps[CartesianIndices(img_shape), ic, in] for ic = 1:Ncoil, in = (nmaps == 1 ? 1 : 1:nmaps)]
+    cmaps = [cmaps[CartesianIndices(img_shape), ic, in] for ic ∈ axes(cmaps, length(img_shape) + 1), in = (nmaps == 1 ? 1 : 1:nmaps)]
     return cmaps
 end
 
