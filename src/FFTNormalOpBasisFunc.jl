@@ -76,13 +76,12 @@ end
 function calculateKernelBasis(img_shape, trj, U)
     Ncoeff = size(U, 2)
     Λ = zeros(eltype(U), Ncoeff, Ncoeff, img_shape...)
-    for it ∈ axes(U, 1)
-        for ix ∈ axes(trj[it], 2)
+
+    Threads.@threads for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
+        for it ∈ axes(U, 1), ix ∈ axes(trj[it], 2), irep ∈ axes(U, 3)
             k_idx = ntuple(j -> mod1(Int(trj[it][j, ix]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
             k_idx = CartesianIndex(k_idx)
-            for ic ∈ CartesianIndices((Ncoeff, Ncoeff)), irep ∈ axes(U, 3)
-                Λ[ic[1], ic[2], k_idx] += conj(U[it, ic[1], irep]) * U[it, ic[2], irep]
-            end
+            Λ[ic[1], ic[2], k_idx] += conj(U[it, ic[1], irep]) * U[it, ic[2], irep]
         end
     end
     return Λ
