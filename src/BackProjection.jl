@@ -19,9 +19,7 @@ One of the following arguments needs to be supplied
 - `density_compensation = :none`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type `AbstractVector{<:AbstractVector}`
 - `verbose::Boolean = false`: Verbosity level
 """
-
 function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
-    
     Ncoef = size(U, 2)
 
     trj_v = reduce(hcat, trj)
@@ -54,7 +52,6 @@ function calculateBackProjection(data::AbstractVector{<:AbstractArray{cT}}, trj:
 end
 
 function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::AbstractVector{<:CuArray{T}}, img_shape::NTuple{N,Int}; U=I(length(data)), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
-
     # General helper variables
     Nt = size(U, 1)
     Ncoef = size(U, 2)
@@ -122,7 +119,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
             end
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
             exec_type1!(xtmp, p, data_temp)
-            @views xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
+            xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
         verbose && println("coefficient = $icoef: t = $t s")
         flush(stdout)
@@ -131,7 +128,6 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
 end
 
 function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::AbstractVector{<:CuArray{T}}, cmaps::AbstractVector{<:CuArray{cT, N}}; U=I(length(data)), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
-
     # Run check on array sizes
     test_dimension(data, trj, U, cmaps)
 
