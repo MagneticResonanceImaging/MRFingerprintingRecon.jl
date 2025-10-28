@@ -122,7 +122,7 @@ function calculateBackProjection(data::AbstractVector{<:AbstractMatrix{cT}}, trj
             end
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
             exec_type1!(xtmp, p, data_temp)
-            xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
+            @views xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
         verbose && println("coefficient = $icoef: t = $t s")
         flush(stdout)
@@ -154,8 +154,10 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
     threads = (threads_x, threads_y) 
     blocks = ceil.(Int, (maximum(trj_l), Nt) ./ threads)
 
-    # Plan NFFT
-    p = NonuniformFFTs.NFFTPlan(trj_v, img_shape)
+    # Plan NFFT 
+    p = PlanNUFFT(Complex{T}, img_shape; fftshift=true, backend=CUDABackend())
+    set_points!(p, NonuniformFFTs._transform_point_convention.(trj_v))
+
     img_idx = CartesianIndices(img_shape)
     xbp = CUDA.zeros(cT, img_shape..., Ncoef)
     xtmp = CuArray{cT}(undef, img_shape)
@@ -170,7 +172,7 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
 
             # Bottleneck: >99% of computation time spent on mul! op for full-scale BP, irrespective of kernel_bp! design
-            mul!(xtmp, adjoint(p), data_temp)
+            exec_type1!(xtmp, p, data_temp)
             xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
         verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
