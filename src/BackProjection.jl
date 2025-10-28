@@ -65,10 +65,10 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
     trj_l = CuArray(trj_l)
 
     # Threads-and-blocks settings for kernel_bp!
-    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK) 
-    threads_x = min(max_threads, maximum(trj_l)) 
-    threads_y = min(max_threads ÷ threads_x, Nt) 
-    threads = (threads_x, threads_y) 
+    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
+    threads_x = min(max_threads, maximum(trj_l))
+    threads_y = min(max_threads ÷ threads_x, Nt)
+    threads = (threads_x, threads_y)
     blocks = ceil.(Int, (maximum(trj_l), Nt) ./ threads) # samples as inner index
 
     # Plan NFFT
@@ -77,7 +77,7 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
     xbp = CUDA.zeros(cT, img_shape..., Ncoef, Ncoil)
     data = reduce(vcat, data)
     data_temp = CuArray{cT}(undef, sum(trj_l))
-    
+
     # Perform backprojection
     verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U, 2)
@@ -144,13 +144,13 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
     trj_l = CuArray(trj_l)
 
     # Threads-and-blocks settings for kernel_bp!
-    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK) 
-    threads_x = min(max_threads, maximum(trj_l)) 
-    threads_y = min(max_threads ÷ threads_x, Nt) 
-    threads = (threads_x, threads_y) 
+    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
+    threads_x = min(max_threads, maximum(trj_l))
+    threads_y = min(max_threads ÷ threads_x, Nt)
+    threads = (threads_x, threads_y)
     blocks = ceil.(Int, (maximum(trj_l), Nt) ./ threads)
 
-    # Plan NFFT 
+    # Plan NFFT
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true, backend=CUDABackend())
     set_points!(p, NonuniformFFTs._transform_point_convention.(trj_v))
 
@@ -159,11 +159,62 @@ function calculateBackProjection(data::AbstractVector{<:CuArray{cT}}, trj::Abstr
     xtmp = CuArray{cT}(undef, img_shape)
     data = reduce(vcat, data)
     data_temp = CuArray{cT}(undef, sum(trj_l))
-    
+
     # Perform backprojection
     verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U, 2)
-        t = @elapsed for icoil ∈ eachindex(cmaps)
+        t = @elapsed CUDA.@sync for icoil ∈ eachindex(cmaps)
+            @cuda threads=threads blocks=blocks kernel_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
+            applyDensityCompensation!(data_temp, trj_v; density_compensation)
+
+            # Bottleneck: >99% of computation time spent on mul! op for full-scale BP, irrespective of kernel_bp! design
+            exec_type1!(xtmp, p, data_temp)
+            xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
+        end
+        verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
+    end
+    return xbp
+end
+
+
+function calculateBackProjection(data::CuArray{cT}, trj::CuArray{T}, trj_l, cmaps::AbstractVector{<:CuArray{cT, N}}; U, density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
+    # Run check on array sizes
+    # test_dimension(data, trj, U, cmaps)
+
+
+    # General helper variables
+    Nt = size(U, 1)
+    Ncoef = size(U, 2)
+    img_shape = size(cmaps[1])
+    trj_v = trj
+    Uc = conj(U)
+
+    # Kernel helper arrays
+    # trj_l = [size(trj[it], 2) for it in eachindex(trj)]
+    trj_c = CuArray([0; cumsum(trj_l[1:end-1])])
+    # trj_l = CuArray(trj_l)
+
+    # Threads-and-blocks settings for kernel_bp!
+    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
+    threads_x = min(max_threads, maximum(trj_l))
+    threads_y = min(max_threads ÷ threads_x, Nt)
+    threads = (threads_x, threads_y)
+    blocks = ceil.(Int, (maximum(trj_l), Nt) ./ threads)
+
+    # Plan NFFT
+    p = PlanNUFFT(Complex{T}, img_shape; fftshift=false, backend=CUDABackend())
+    set_points!(p, NonuniformFFTs._transform_point_convention.(trj_v))
+
+    img_idx = CartesianIndices(img_shape)
+    xbp = CUDA.zeros(cT, img_shape..., Ncoef)
+    xtmp = CuArray{cT}(undef, img_shape)
+    # data = reduce(vcat, data)
+    data_temp = CuArray{cT}(undef, sum(trj_l))
+
+    # # Perform backprojection
+    verbose && println("test calculating backprojection..."); flush(stdout)
+    for icoef ∈ axes(U, 2)
+        t = @elapsed CUDA.@sync for icoil ∈ eachindex(cmaps)
             @cuda threads=threads blocks=blocks kernel_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
 
@@ -322,7 +373,7 @@ end
 function kernel_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
 
     # ik_sub ≡ sample index within time frame it
-    ik_sub = (blockIdx().x - 1) * blockDim().x + threadIdx().x 
+    ik_sub = (blockIdx().x - 1) * blockDim().x + threadIdx().x
 
     # it ≡ current time index
     it = (blockIdx().y - 1) * blockDim().y + threadIdx().y
