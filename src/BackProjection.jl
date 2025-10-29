@@ -202,7 +202,7 @@ function calculateBackProjection(data::CuArray{cT}, trj::CuArray{T}, trj_l, cmap
     blocks = ceil.(Int, (maximum(trj_l), Nt) ./ threads)
 
     # Plan NFFT
-    p = PlanNUFFT(Complex{T}, img_shape; fftshift=false, backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200))
+    p = PlanNUFFT(Complex{T}, img_shape; fftshift=true, backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200))
     set_points!(p, NonuniformFFTs._transform_point_convention.(trj_v))
 
     img_idx = CartesianIndices(img_shape)
@@ -212,9 +212,9 @@ function calculateBackProjection(data::CuArray{cT}, trj::CuArray{T}, trj_l, cmap
     data_temp = CuArray{cT}(undef, sum(trj_l))
 
     # # Perform backprojection
-    verbose && println("test calculating backprojection..."); flush(stdout)
+    verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U, 2)
-        t = @elapsed CUDA.@sync for icoil ∈ eachindex(cmaps)
+        for icoil ∈ eachindex(cmaps)
             @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
             applyDensityCompensation!(data_temp, trj_v; density_compensation)
 
@@ -222,7 +222,6 @@ function calculateBackProjection(data::CuArray{cT}, trj::CuArray{T}, trj_l, cmap
             exec_type1!(xtmp, p, data_temp)
             xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
-        verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
     end
     return xbp
 end

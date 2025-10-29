@@ -69,7 +69,7 @@ function NFFTNormalOp(
     fftplan  = plan_fft!(ktmp; flags = FFTW.MEASURE, num_threads=num_fft_threads)
     ifftplan = plan_ifft!(ktmp; flags = FFTW.MEASURE, num_threads=num_fft_threads)
 
-    A = _NFFTNormalOp(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps)
+    A = _NFFTNormalOp(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps, nothing, nothing, nothing)
 
 	return LinearOperator(
         Complex{T},
@@ -94,17 +94,33 @@ function NFFTNormalOp(
     @assert all(kmask_indcs .> 0)
     @assert all(kmask_indcs .<= prod(2 .* img_shape))
 
-    packed_length = size(Λ, 1) # derive Ncoeff from length of packed axis using quadratic eqn
-    Ncoeff = Int(0.5 * (-1 + sqrt(8 * packed_length + 1)))
+    # derive Ncoeff from length of packed axis using quadratic eqn
+    Ncoeff = (isqrt(8 * size(Λ, 1) + 1) - 1) ÷ 2
 
     img_shape_os = 2 .* img_shape
     kL1 = CuArray{Complex{T}}(undef, img_shape_os..., Ncoeff)
     kL2 = CuArray{Complex{T}}(undef, img_shape_os..., Ncoeff)
 
-    fftplan  = plan_fft!(kL1, Vector(1:length(img_shape_os)))
-    ifftplan = plan_ifft!(kL2, Vector(1:length(img_shape_os)))
+    fftplan  = plan_fft!( kL1, 1:length(img_shape_os))
+    ifftplan = plan_ifft!(kL2, 1:length(img_shape_os))
 
-    A = _NFFTNormalOp(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps)
+    # indexing into the upper triangluar matrix
+    ind_lookup = CuArray([j<k ? j+k*(k-1)÷2 : k+j*(j-1)÷2 for j ∈ 1:Ncoeff, k ∈ 1:Ncoeff])
+
+    # set up the threading for the GPU
+    kL1_rs = reshape(kL1, :, Ncoeff)
+    kL2_rs = reshape(kL2, :, Ncoeff)
+    kernel = @cuda launch=false kernel_mul!(kL2_rs, Λ, kL1_rs, kmask_indcs, ind_lookup)
+    config = launch_configuration(kernel.fun)
+
+    threads_x = min(config.threads ÷ Ncoeff, length(kL2_rs))
+    threads_y = min(config.threads, Ncoeff)
+    threads = (threads_x, threads_y)
+    blocks = cld.((length(kmask_indcs), Ncoeff), threads)
+    @info threads, blocks
+
+    # Set up the actual object
+    A = _NFFTNormalOp(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps, ind_lookup, threads, blocks)
 
     return LinearOperator(
         Complex{T},
@@ -123,7 +139,7 @@ end
 #############################################################################
 # Internal use
 #############################################################################
-struct _NFFTNormalOp{S,E,F,G,H,I,J,K}
+struct _NFFTNormalOp{S,E,F,G,H,I,J,K,L,M,N}
     shape::S
     Ncoeff::Int
     fftplan::E
@@ -133,6 +149,9 @@ struct _NFFTNormalOp{S,E,F,G,H,I,J,K}
     kL1::I
     kL2::J
     cmaps::K
+    ind_lookup::L
+    threads::M
+    blocks::N
 end
 
 function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}) where T
@@ -305,7 +324,6 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, trj_l, U::C
 end
 
 function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) where {T}
-
     idx = CartesianIndices(S.shape)
     idxos = CartesianIndices(2 .* S.shape)
 
@@ -348,7 +366,6 @@ function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) w
 end
 
 function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
-
     b = reshape(b, S.shape..., S.Ncoeff)
     if β == 0
         x .= 0
@@ -360,25 +377,18 @@ function LinearAlgebra.mul!(x::CuArray, S::_NFFTNormalOp, b, α, β)
     idx = CartesianIndices(S.shape)
     idxos = CartesianIndices(2 .* S.shape)
 
-    opt_threads = 768 # threads optimized for an NVIDIA A100 and our usual data arrays using CUDA.launch_configuration()
-    max_threads = min(opt_threads, attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK))
-    threads_x = min(max_threads, length(S.kmask_indcs))
-    threads_y = min(max_threads ÷ threads_x, S.Ncoeff)
-    threads = (threads_x, threads_y)
-    blocks = ceil.(Int, (length(S.kmask_indcs), S.Ncoeff) ./ threads)
-    ind_lookup = CuArray([j<k ? j+k*(k-1)÷2 : k+j*(j-1)÷2 for j ∈ 1:S.Ncoeff, k ∈ 1:S.Ncoeff])
-
     for cmap ∈ S.cmaps
-        S.kL1[idxos, :] .= 0
-        @views S.kL1[idx, :] .= cmap .* b[idx, :]
+        fill!(S.kL1, 0)
+        fill!(S.kL2, 0)
+        S.kL1[idx, :] .= cmap .* b
         S.fftplan * S.kL1
 
         kL1_rs = reshape(S.kL1, :, S.Ncoeff)
-        kL2_rs = reshape(S.kL2, :, S.Ncoeff) .= 0
-        @cuda threads=threads blocks=blocks kernel_mul!(kL2_rs, S.Λ, kL1_rs, S.kmask_indcs, S.Ncoeff, ind_lookup)
+        kL2_rs = reshape(S.kL2, :, S.Ncoeff)
+        @cuda threads=S.threads blocks=S.blocks kernel_mul!(kL2_rs, S.Λ, kL1_rs, S.kmask_indcs, S.ind_lookup)
 
         S.ifftplan * S.kL2
-        @views xr[idx, :] .+= α .* conj.(cmap) .* S.kL2[idx, :]
+        @views xr .+= α .* conj.(cmap) .* S.kL2[idx, :]
     end
     return x
 end
@@ -409,19 +419,20 @@ function kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
     return
 end
 
-function kernel_mul!(kL2_rs, Λ, kL1_rs, kmask_indcs, Ncoeff, ind_lookup)
-
+function kernel_mul!(kL2_rs, Λ, kL1_rs, kmask_indcs, ind_lookup)
     i = (blockIdx().x-1) * blockDim().x + threadIdx().x
     j = (blockIdx().y-1) * blockDim().y + threadIdx().y
 
-    # Parallelize across kmask and row index j
     if i <= length(kmask_indcs) && j <= size(kL2_rs, 2)
-
         ind = kmask_indcs[i]
-        for k in 1:Ncoeff
-            ind_packed = ind_lookup[j,k]
-            kL2_rs[ind, j] += Λ[ind_packed, i] * kL1_rs[ind, k]
+        acc = zero(eltype(kL2_rs))
+
+        @inbounds for k ∈ axes(ind_lookup, 2)
+            ind_packed = ind_lookup[j, k]
+            acc += Λ[ind_packed, i] * kL1_rs[ind, k]
         end
+
+        kL2_rs[ind, j] = acc
     end
     return
 end
