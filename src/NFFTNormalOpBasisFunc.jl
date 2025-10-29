@@ -269,7 +269,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, trj_l, U::C
 
     # Prep plans
     fftplan  = plan_fft(λ)
-    nfftplan = PlanNUFFT(Complex{T}, img_shape_os; backend=CUDABackend()) # use plan specific to real inputs
+    nfftplan = PlanNUFFT(Complex{T}, img_shape_os; backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200)) # use plan specific to real inputs
     set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj))
 
     # Kernel helpers
