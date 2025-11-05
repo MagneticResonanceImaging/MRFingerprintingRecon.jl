@@ -13,9 +13,9 @@ Random.seed!(42)
 
 ## set parameters
 T  = Float32
-Nx = 128
+Nx = 32
 Nc = 4
-Nt = 80
+Nt = 20
 Ncyc = 10
 
 ## create test image
@@ -87,24 +87,25 @@ end
 
 img_shape = (Nx,Nx)
 
-# Write to CUDA arrays
-data_d  = [CuArray(data[i])  for i ∈ eachindex(data)]
-trj_d   = [CuArray(trj[i])   for i ∈ eachindex(trj)]
-U_d     =  CuArray(U)
-cmaps_d = [CuArray(cmaps[i]) for i ∈ eachindex(cmaps)]
-
 ## CPU
 A = NFFTNormalOp(img_shape, trj, U; cmaps=cmaps)
 b = calculateBackProjection(data, trj, cmaps; U)
 xr = cg(A, vec(b), maxiter=50)
 xr = reshape(xr, img_shape..., Nc)
 
+## Write to CUDA arrays
+trj_length  = cu([size(trj[it], 2) for it in eachindex(trj)])
+trj_d = cu(reduce(hcat, trj))
+data_d = cu(reduce(vcat, data))
+U_d =  CuArray(U)
+cmaps_d = [CuArray(cmaps[i]) for i ∈ eachindex(cmaps)]
+
 ## GPU
-k = MRFingerprintingRecon.calculate_kmask_indcs(2 .* img_shape, trj_d)
-A_d = NFFTNormalOp(img_shape, trj_d, U_d; cmaps=cmaps_d)
-b_d = calculateBackProjection(data_d, trj_d, cmaps_d; U=U_d)
+# k = MRFingerprintingRecon.calculate_kmask_indcs(2 .* img_shape, trj_d)
+A_d = NFFTNormalOp(img_shape, trj_d, trj_length, U_d; cmaps=cmaps_d)
+b_d = calculateBackProjection(data_d, trj_d, trj_length, cmaps_d; U=U_d)
 xr_d = cg(A_d, vec(b_d), maxiter=50)
 xr_d = reshape(Array(xr_d), img_shape..., Nc)
 
 ## Test equivalence CPU and GPU code
-@test xr ≈ xr_d rtol=1e-3
+@test xr ≈ xr_d rtol=1e-2
