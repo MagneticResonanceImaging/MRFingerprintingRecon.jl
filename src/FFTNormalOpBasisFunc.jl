@@ -5,7 +5,7 @@
 """
     FFTNormalOp(img_shape, trj, U; cmaps)
     FFTNormalOp(M, U; cmaps)
-    FFTNormalOp(Λ; cmaps)
+    FFTNormalOp(Λ; cmaps, eltype_x)
 
 Create normal operator of FFT operator.
 Differentiate between functions exploiting a pre-calculated kernel basis `Λ` and the functions which calculate Λ based on a passed trajectory `trj` or mask `M`.
@@ -17,7 +17,8 @@ Differentiate between functions exploiting a pre-calculated kernel basis `Λ` an
 - `cmaps::Matrix{ComplexF32}`: Coil sensitivities
 - `M::Vector{Matrix{Float32}}`: Mask
 - `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
-- `num_fft_threads::Int` = `round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1)): Number of Threads for FFT
+- `num_fft_threads::Int = round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1)): Number of Threads for FFT
+- `eltype_x=eltype(Λ)` define the type of `x` (in the product `FFTNormalOp(Λ) * x`). The default is the same eltype as `Λ`
 """
 function FFTNormalOp(img_shape, trj, U; cmaps=(1,), num_fft_threads = round(Int, Threads.nthreads()/size(U, 2)))
     Λ = calculateKernelBasis(img_shape, trj, U)
@@ -29,10 +30,10 @@ function FFTNormalOp(M, U; cmaps=(1,), num_fft_threads = round(Int, Threads.nthr
     return FFTNormalOp(Λ; cmaps, num_fft_threads )
 end
 
-function FFTNormalOp(Λ; cmaps=(1,), num_fft_threads = round(Int, Threads.nthreads()/size(Λ, 1)))
+function FFTNormalOp(Λ; cmaps=(1,), num_fft_threads = round(Int, Threads.nthreads()/size(Λ, 1)), eltype_x=eltype(Λ))
     Ncoeff = size(Λ, 1)
     img_shape = size(Λ)[3:end]
-    kL1 = Array{eltype(Λ)}(undef, img_shape..., Ncoeff)
+    kL1 = Array{eltype_x}(undef, img_shape..., Ncoeff)
     kL2 = similar(kL1)
 
     @views kmask = (Λ[1, 1, CartesianIndices(img_shape)] .!= 0)
@@ -46,7 +47,7 @@ function FFTNormalOp(Λ; cmaps=(1,), num_fft_threads = round(Int, Threads.nthrea
     A = _FFTNormalOp(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps)
 
     return LinearOperator(
-        eltype(Λ),
+        eltype_x,
         prod(A.shape) * A.Ncoeff,
         prod(A.shape) * A.Ncoeff,
         true,
@@ -60,13 +61,12 @@ end
 #############################################################################
 # Internal use
 #############################################################################
-
-struct _FFTNormalOp{S,T,N,E,F,G}
+struct _FFTNormalOp{S,ΛType,T,N,E,F,G}
     shape::S
     Ncoeff::Int
     fftplan::E
     ifftplan::F
-    Λ::Array{Complex{T},3}
+    Λ::ΛType
     kmask_indcs::Vector{Int}
     kL1::Array{Complex{T},N}
     kL2::Array{Complex{T},N}
