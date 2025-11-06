@@ -33,7 +33,7 @@ function NFFTNormalOp(
     fftplan  = plan_fft!( kL1, 1:length(img_shape_os))
     ifftplan = plan_ifft!(kL2, 1:length(img_shape_os))
 
-    # indexing into the upper triangluar matrix
+    # indexing into the upper triangular matrix
     ind_lookup = CuArray([j<k ? j+k*(k-1)÷2 : k+j*(j-1)÷2 for j ∈ 1:Ncoeff, k ∈ 1:Ncoeff])
 
     # set up the threading for the GPU
@@ -46,7 +46,6 @@ function NFFTNormalOp(
     threads_y = min(config.threads, Ncoeff)
     threads = (threads_x, threads_y)
     blocks = cld.((length(kmask_indcs), Ncoeff), threads)
-    @info threads, blocks
 
     # Set up the actual object
     A = MRFingerprintingRecon._NFFTNormalOp(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps, ind_lookup, threads, blocks)
@@ -97,7 +96,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, trj_length,
     λ2 = similar(λ)
     Λ  = CuArray{T}(undef, Int(Ncoeff*(Ncoeff+1)/2), length(kmask_indcs))
 
-    S = CuArray{Complex{T}}(undef, sum(trj_l))
+    S = CuArray{Complex{T}}(undef, sum(trj_length))
 
     # Prep plans
     fftplan  = plan_fft(λ)
@@ -106,15 +105,14 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, trj_length,
 
     # Kernel helpers
     Uc = conj(U)
-    trj_c = CuArray([0; cumsum(trj_l[1:end-1])])
-    trj_l = CuArray(trj_l)
+    trj_c = CuArray([0; cumsum(trj_length[1:end-1])])
 
     # Params for kernel_uprod!
     max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
-    threads_y = min(max_threads, maximum(trj_l))
+    threads_y = min(max_threads, maximum(trj_length))
     threads_x = min(max_threads ÷ threads_y, Nt)
     threads = (threads_x, threads_y)
-    blocks = ceil.(Int, (Nt, maximum(trj_l)) ./ threads)
+    blocks = ceil.(Int, (Nt, maximum(trj_length)) ./ threads)
 
     # Params for kernel_sort!
     threads_sort = min(max_threads, length(kmask_indcs))
@@ -123,7 +121,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, trj_length,
     for ic2 ∈ 1:Ncoeff, ic1 ∈ 1:Ncoeff
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
-                @cuda threads=threads blocks=blocks kernel_uprod!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
+                @cuda threads=threads blocks=blocks kernel_uprod!(S, Uc, U, trj_length, trj_c, Nt, ic1, ic2)
 
                 exec_type1!(λ2, nfftplan, vec(S))
                 mul!(λ, fftplan, λ2)
@@ -146,7 +144,6 @@ function LinearAlgebra.mul!(x::CuArray, S::MRFingerprintingRecon._NFFTNormalOp, 
     xr = reshape(x, S.shape..., S.Ncoeff)
 
     idx = CartesianIndices(S.shape)
-    idxos = CartesianIndices(2 .* S.shape)
 
     for cmap ∈ S.cmaps
         fill!(S.kL1, 0)
@@ -164,14 +161,14 @@ function LinearAlgebra.mul!(x::CuArray, S::MRFingerprintingRecon._NFFTNormalOp, 
     return x
 end
 
-function kernel_uprod!(S, Uc, U, trj_l, trj_c, Nt, ic1, ic2)
+function kernel_uprod!(S, Uc, U, trj_length, trj_c, Nt, ic1, ic2)
 
     it = (blockIdx().x - 1) * blockDim().x + threadIdx().x # time index
     ik = (blockIdx().y - 1) * blockDim().y + threadIdx().y # sample index
 
     if it <= Nt
         Uprod = Uc[it, ic1] * U[it, ic2]
-        if ik <= trj_l[it]
+        if ik <= trj_length[it]
             S[trj_c[it] + ik] = Uprod
             return
         end

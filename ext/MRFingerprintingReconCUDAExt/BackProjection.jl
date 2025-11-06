@@ -31,7 +31,7 @@ function MRFingerprintingRecon.calculateBackProjection(data::AbstractVector{<:Cu
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ axes(data, 2)
             @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
-            applyDensityCompensation!(data_temp, trj_v; density_compensation)
+            MRFingerprintingRecon.applyDensityCompensation!(data_temp, trj_v; density_compensation)
 
             # Bottleneck: >99% of computation time spent on mul! op for full-scale BP, irrespective of kernel_bp! design
             @views mul!(xbp[img_idx, icoef, icoil], adjoint(p), data_temp)
@@ -80,7 +80,7 @@ function MRFingerprintingRecon.calculateBackProjection(data::AbstractVector{<:Cu
     for icoef ∈ axes(U, 2)
         t = @elapsed CUDA.@sync for icoil ∈ eachindex(cmaps)
             @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
-            applyDensityCompensation!(data_temp, trj_v; density_compensation)
+            MRFingerprintingRecon.applyDensityCompensation!(data_temp, trj_v; density_compensation)
 
             # Bottleneck: >99% of computation time spent on mul! op for full-scale BP, irrespective of kernel_bp! design
             exec_type1!(xtmp, p, data_temp)
@@ -131,7 +131,7 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT}, trj::C
     for icoef ∈ axes(U, 2)
         for icoil ∈ eachindex(cmaps)
             @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data, Uc, trj_l, trj_c, Nt, icoef, icoil)
-            applyDensityCompensation!(data_temp, trj_v; density_compensation)
+            MRFingerprintingRecon.applyDensityCompensation!(data_temp, trj_v; density_compensation)
 
             # Bottleneck: >99% of computation time spent on mul! op for full-scale BP, irrespective of kernel_bp! design
             exec_type1!(xtmp, p, data_temp)
