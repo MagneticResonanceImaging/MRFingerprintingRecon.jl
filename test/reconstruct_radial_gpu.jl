@@ -1,5 +1,5 @@
-using CUDA
 using MRFingerprintingRecon
+using CUDA
 using LinearAlgebra
 using BenchmarkTools
 using Test
@@ -101,11 +101,16 @@ U_d =  CuArray(U)
 cmaps_d = [CuArray(cmaps[i]) for i ∈ eachindex(cmaps)]
 
 ## GPU
-# k = MRFingerprintingRecon.calculate_kmask_indcs(2 .* img_shape, trj_d)
 A_d = NFFTNormalOp(img_shape, trj_d, trj_length, U_d; cmaps=cmaps_d)
 b_d = calculateBackProjection(data_d, trj_d, trj_length, cmaps_d; U=U_d)
 xr_d = cg(A_d, vec(b_d), maxiter=50)
 xr_d = reshape(Array(xr_d), img_shape..., Nc)
 
 ## Test equivalence CPU and GPU code
-@test xr ≈ xr_d rtol=1e-2
+@test xr ≈ xr_d rtol=1e-3
+
+## Test that GPU code is indeed faster than CPU for cg
+t_gpu = @belapsed cg(A_d, vec(b_d), maxiter=50)
+t_cpu = @belapsed cg(A,   vec(b),   maxiter=50)
+
+@test t_gpu < t_cpu
