@@ -1,9 +1,14 @@
 module MRFingerprintingReconCUDAExt
 
-using MRFingerprintingRecon, MRFingerprintingRecon.LinearAlgebra, MRFingerprintingRecon.NonuniformFFTs, MRFingerprintingRecon.FFTW, MRFingerprintingRecon.IterativeSolvers, MRFingerprintingRecon.LinearOperators
+using MRFingerprintingRecon, MRFingerprintingRecon.MRICoilSensitivities
+using MRFingerprintingRecon.LinearAlgebra, MRFingerprintingRecon.LinearOperators
+using MRFingerprintingRecon.NonuniformFFTs, MRFingerprintingRecon.FFTW
+using MRFingerprintingRecon.IterativeSolvers
+
 using CUDA
 
 include("NFFTNormalOpBasisFunc.jl")
 include("BackProjection.jl")
+include("CoilMaps.jl")
 
 end # module

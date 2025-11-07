@@ -1,13 +1,13 @@
 function MRFingerprintingRecon.NFFTNormalOp(
     img_shape,
     trj::CuArray{T},
-    trj_length,
+    nsamp_t,
     U::CuArray{Tc};
     cmaps = [CUDA.ones(T, img_shape)],
     verbose = false
     ) where {T, Tc <:Union{T, Complex{T}}}
 
-    Λ, kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, trj_length, U; verbose=verbose)
+    Λ, kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, nsamp_t, U; verbose=verbose)
 
     return NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps)
 end
@@ -67,7 +67,6 @@ end
 #############################################################################
 # Internal use
 #############################################################################
-
 function calculate_kmask_indcs(img_shape_os, trj::CuArray{T}) where T
     @assert all([i .== nextprod((2, 3, 5), i) for i ∈ img_shape_os]) "img_shape_os has to be composed of the prime factors 2, 3, and 5 (cf. NonuniformFFTs.jl documentation)."
 
@@ -81,7 +80,7 @@ function calculate_kmask_indcs(img_shape_os, trj::CuArray{T}) where T
     return kmask_indcs
 end
 
-function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, trj_length, U::CuArray{Tc}; verbose = false) where {T, Tc <: Union{T, Complex{T}}}
+function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, nsamp_t, U::CuArray{Tc}; verbose = false) where {T, Tc <: Union{T, Complex{T}}}
 
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
 
@@ -96,7 +95,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, trj_length,
     λ2 = similar(λ)
     Λ  = CuArray{T}(undef, Int(Ncoeff*(Ncoeff+1)/2), length(kmask_indcs))
 
-    S = CuArray{Complex{T}}(undef, sum(trj_length))
+    S = CuArray{Complex{T}}(undef, sum(nsamp_t))
 
     # Prep plans
     fftplan  = plan_fft(λ)
@@ -105,14 +104,14 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, trj_length,
 
     # Kernel helpers
     Uc = conj(U)
-    trj_c = CuArray([0; cumsum(trj_length[1:end-1])])
+    trj_c = CuArray([0; cumsum(nsamp_t[1:end-1])])
 
     # Params for kernel_uprod!
     max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
-    threads_y = min(max_threads, maximum(trj_length))
+    threads_y = min(max_threads, maximum(nsamp_t))
     threads_x = min(max_threads ÷ threads_y, Nt)
     threads = (threads_x, threads_y)
-    blocks = ceil.(Int, (Nt, maximum(trj_length)) ./ threads)
+    blocks = ceil.(Int, (Nt, maximum(nsamp_t)) ./ threads)
 
     # Params for kernel_sort!
     threads_sort = min(max_threads, length(kmask_indcs))
@@ -121,7 +120,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, trj_length,
     for ic2 ∈ 1:Ncoeff, ic1 ∈ 1:Ncoeff
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
-                @cuda threads=threads blocks=blocks kernel_uprod!(S, Uc, U, trj_length, trj_c, Nt, ic1, ic2)
+                @cuda threads=threads blocks=blocks kernel_uprod!(S, Uc, U, nsamp_t, trj_c, Nt, ic1, ic2)
 
                 exec_type1!(λ2, nfftplan, vec(S))
                 mul!(λ, fftplan, λ2)
@@ -161,14 +160,14 @@ function LinearAlgebra.mul!(x::CuArray, S::MRFingerprintingRecon._NFFTNormalOp, 
     return x
 end
 
-function kernel_uprod!(S, Uc, U, trj_length, trj_c, Nt, ic1, ic2)
+function kernel_uprod!(S, Uc, U, nsamp_t, trj_c, Nt, ic1, ic2)
 
     it = (blockIdx().x - 1) * blockDim().x + threadIdx().x # time index
     ik = (blockIdx().y - 1) * blockDim().y + threadIdx().y # sample index
 
     if it <= Nt
         Uprod = Uc[it, ic1] * U[it, ic2]
-        if ik <= trj_length[it]
+        if ik <= nsamp_t[it]
             S[trj_c[it] + ik] = Uprod
             return
         end
