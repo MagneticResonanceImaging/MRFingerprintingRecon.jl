@@ -1,13 +1,13 @@
 function MRFingerprintingRecon.NFFTNormalOp(
     img_shape,
     trj::CuArray{T},
-    nsamp_t,
+    nsamp_t::CuArray{<:Integer},
     U::CuArray{Tc};
     cmaps = [CUDA.ones(T, img_shape)],
     verbose = false
     ) where {T, Tc <:Union{T, Complex{T}}}
 
-    Λ, kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, nsamp_t, U; verbose=verbose)
+    Λ, kmask_indcs = MRFingerprintingRecon.calculateToeplitzKernelBasis(2 .* img_shape, trj, nsamp_t, U; verbose=verbose)
 
     return NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps)
 end
@@ -80,7 +80,7 @@ function calculate_kmask_indcs(img_shape_os, trj::CuArray{T}) where T
     return kmask_indcs
 end
 
-function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, nsamp_t, U::CuArray{Tc}; verbose = false) where {T, Tc <: Union{T, Complex{T}}}
+function MRFingerprintingRecon.calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, nsamp_t::CuArray{<:Integer}, U::CuArray{T}; verbose = false) where {T}
 
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
 
@@ -88,12 +88,11 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, nsamp_t, U:
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
     Ncoeff = size(U, 2)
-    Nt = size(U,1)
 
     # Allocate kernel arrays, write Λ as packed storage arrays
     λ  = CuArray{Complex{T}}(undef, img_shape_os)
     λ2 = similar(λ)
-    Λ  = CuArray{T}(undef, Int(Ncoeff*(Ncoeff+1)/2), length(kmask_indcs))
+    Λ  = CuArray{T}(undef, Int(Ncoeff*(Ncoeff+1)/2), length(kmask_indcs)) # requires basis U to be real
 
     S = CuArray{Complex{T}}(undef, sum(nsamp_t))
 
@@ -103,15 +102,14 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, nsamp_t, U:
     set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj))
 
     # Kernel helpers
-    Uc = conj(U)
-    trj_c = CuArray([0; cumsum(nsamp_t[1:end-1])])
+    cumsum_nsamp = cumsum(nsamp_t[1:end-1]) |> x -> cat(CUDA.zeros(eltype(x), 1), x; dims=1);
 
     # Params for kernel_uprod!
     max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
     threads_y = min(max_threads, maximum(nsamp_t))
-    threads_x = min(max_threads ÷ threads_y, Nt)
+    threads_x = min(max_threads ÷ threads_y, length(nsamp_t))
     threads = (threads_x, threads_y)
-    blocks = ceil.(Int, (Nt, maximum(nsamp_t)) ./ threads)
+    blocks = ceil.(Int, (length(nsamp_t), maximum(nsamp_t)) ./ threads)
 
     # Params for kernel_sort!
     threads_sort = min(max_threads, length(kmask_indcs))
@@ -120,14 +118,14 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, nsamp_t, U:
     for ic2 ∈ 1:Ncoeff, ic1 ∈ 1:Ncoeff
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
-                @cuda threads=threads blocks=blocks kernel_uprod!(S, Uc, U, nsamp_t, trj_c, Nt, ic1, ic2)
+                @cuda threads=threads blocks=blocks kernel_uprod!(S, U, nsamp_t, cumsum_nsamp, ic1, ic2)
 
                 exec_type1!(λ2, nfftplan, vec(S))
                 mul!(λ, fftplan, λ2)
 
                 @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
             end
-            verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
+            verbose && (CUDA.synchronize(); println("ic = ($ic1, $ic2): t = $t s"); flush(stdout))
         end
     end
     return Λ, kmask_indcs
@@ -160,28 +158,26 @@ function LinearAlgebra.mul!(x::CuArray, S::MRFingerprintingRecon._NFFTNormalOp, 
     return x
 end
 
-function kernel_uprod!(S, Uc, U, nsamp_t, trj_c, Nt, ic1, ic2)
+function kernel_uprod!(S, U, nsamp_t, cumsum_nsamp, ic1, ic2)
+    it = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    ik = (blockIdx().y - 1) * blockDim().y + threadIdx().y
 
-    it = (blockIdx().x - 1) * blockDim().x + threadIdx().x # time index
-    ik = (blockIdx().y - 1) * blockDim().y + threadIdx().y # sample index
-
-    if it <= Nt
-        Uprod = Uc[it, ic1] * U[it, ic2]
+    if it <= length(nsamp_t)
+        Uprod = U[it, ic1] * U[it, ic2]
         if ik <= nsamp_t[it]
-            S[trj_c[it] + ik] = Uprod
+            S[cumsum_nsamp[it] + ik] = Uprod
             return
         end
     end
 end
 
 function kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
-
     i = (blockIdx().x-1) * blockDim().x + threadIdx().x
 
     # Packed storage of Λ by columns
-    ind_pack = ic1 + ic2 * (ic2-1) ÷ 2
+    ind_packed = ic1 + ic2 * (ic2-1) ÷ 2
     if i <= length(kmask_indcs)
-        Λ[ind_pack, i] = real(λ[kmask_indcs[i]])
+        Λ[ind_packed, i] = real(λ[kmask_indcs[i]]) # assumes basis U is real
     end
     return
 end

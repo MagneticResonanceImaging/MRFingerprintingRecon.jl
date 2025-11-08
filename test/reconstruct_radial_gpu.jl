@@ -18,8 +18,10 @@ Nc = 4
 Nt = 20
 Ncyc = 10
 
+img_shape = (Nx,Nx)
+
 ## create test image
-x = zeros(Complex{T}, Nx, Nx, Nc)
+x = zeros(Complex{T}, img_shape..., Nc)
 x[:,:,1] = transpose(shepp_logan(Nx))
 [x[i,:,1] .*= exp( 1im * π * i/Nx) for i ∈ axes(x,1)]
 x[1:end÷2,:,1] .*= exp(1im * π/3)
@@ -27,7 +29,7 @@ x[:,:,2] = shepp_logan(Nx)
 
 ## coil maps
 Ncoil = 9
-cmaps = ones(Complex{T}, Nx, Nx, Ncoil)
+cmaps = ones(Complex{T}, img_shape..., Ncoil)
 [cmaps[i,:,2] .*= exp( 1im * π * i/Nx) for i ∈ axes(cmaps,1)]
 [cmaps[i,:,3] .*= exp(-1im * π * i/Nx) for i ∈ axes(cmaps,1)]
 [cmaps[:,i,4] .*= exp( 1im * π * i/Nx) for i ∈ axes(cmaps,2)]
@@ -58,7 +60,7 @@ U,_,_ = svd(U)
 
 ## simulate data
 data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
-nfftplan = PlanNUFFT(Complex{T}, (Nx,Nx); fftshift=true)
+nfftplan = PlanNUFFT(Complex{T}, img_shape; fftshift=true)
 xcoil = copy(x)
 for icoil ∈ 1:Ncoil
     xcoil .= x
@@ -85,8 +87,6 @@ for it ∈ 1:Nt
     trj[it] = trj[it][:,maskDataSelection[it]] 
 end
 
-img_shape = (Nx,Nx)
-
 ## CPU
 A = NFFTNormalOp(img_shape, trj, U; cmaps=cmaps)
 b = calculateBackProjection(data, trj, cmaps; U)
@@ -108,4 +108,3 @@ xr_d = reshape(Array(xr_d), img_shape..., Nc)
 
 ## Test equivalence CPU and GPU code
 @test xr ≈ xr_d rtol=1e-3
-

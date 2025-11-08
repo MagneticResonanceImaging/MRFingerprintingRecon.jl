@@ -1,65 +1,40 @@
-function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT}, trj::CuArray{T}, nsamp_t, img_shape; U, density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T}}
+function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT}, trj::CuArray{T}, nsamp_t::CuArray{<:Integer}, img_shape; U, density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T}}
 
-    # General helper variables
-    Nt = size(U, 1)
     Ncoef = size(U, 2)
     Ncoil = size(data, 2)
-    trj_v = trj
     Uc = conj(U)
+    cumsum_nsamp = cumsum(nsamp_t[1:end-1]) |> x -> cat(CUDA.zeros(eltype(x), 1), x; dims=1);
 
-    # Kernel helper arrays
-    trj_c = CuArray([0; cumsum(nsamp_t[1:end-1])])
-
-    # Threads-and-blocks settings for kernel_bp!
-    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
-    threads_x = min(max_threads, maximum(nsamp_t))
-    threads_y = min(max_threads ÷ threads_x, Nt)
-    threads = (threads_x, threads_y)
-    blocks = ceil.(Int, (maximum(nsamp_t), Nt) ./ threads) # samples as inner index
-
-    # Plan non-uniform FFT
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true, backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200))
-    set_points!(p, NonuniformFFTs._transform_point_convention.(trj_v))
+    set_points!(p, NonuniformFFTs._transform_point_convention.(trj))
 
     img_idx = CartesianIndices(img_shape)
     xbp = CUDA.zeros(cT, img_shape..., Ncoef, Ncoil)
     data_temp = CuArray{cT}(undef, sum(nsamp_t))
 
-    # Perform backprojection
-    verbose && println("calculating backprojection..."); flush(stdout)
+    threads, blocks = default_kernel_config(nsamp_t)
+    verbose && (CUDA.synchronize(); println("calculating backprojection..."); flush(stdout))
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ axes(data, 2)
-            @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data, Uc, nsamp_t, trj_c, Nt, icoef, icoil)
-            MRFingerprintingRecon.applyDensityCompensation!(data_temp, trj_v; density_compensation)
+            @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
+            MRFingerprintingRecon.applyDensityCompensation!(data_temp, trj; density_compensation)
             @views exec_type1!(xbp[img_idx, icoef, icoil], p, data_temp) 
         end
-        verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
+        verbose && (CUDA.synchronize(); println("coefficient = $icoef: t = $t s"); flush(stdout))
     end
     return xbp
 end
 
-function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT}, trj::CuArray{T}, nsamp_t, cmaps::AbstractVector{<:CuArray{cT,N}}; U, density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
+function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT}, trj::CuArray{T}, nsamp_t::CuArray{<:Integer}, cmaps::AbstractVector{<:CuArray{cT,N}}; U, density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
 
-    # General helper variables
-    Nt = size(U, 1)
     Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
-    trj_v = trj
     Uc = conj(U)
-
-    # Kernel helper arrays
-    trj_c = CuArray([0; cumsum(nsamp_t[1:end-1])])
-
-    # Threads-and-blocks settings for kernel_bp!
-    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
-    threads_x = min(max_threads, maximum(nsamp_t))
-    threads_y = min(max_threads ÷ threads_x, Nt)
-    threads = (threads_x, threads_y)
-    blocks = ceil.(Int, (maximum(nsamp_t), Nt) ./ threads)
+    cumsum_nsamp = cumsum(nsamp_t[1:end-1]) |> x -> cat(CUDA.zeros(eltype(x), 1), x; dims=1);
 
     # Plan NFFT
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true, backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200))
-    set_points!(p, NonuniformFFTs._transform_point_convention.(trj_v))
+    set_points!(p, NonuniformFFTs._transform_point_convention.(trj))
 
     img_idx = CartesianIndices(img_shape)
     xbp = CUDA.zeros(cT, img_shape..., Ncoef)
@@ -67,19 +42,21 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT}, trj::C
     data_temp = CuArray{cT}(undef, sum(nsamp_t))
 
     ## Perform backprojection
-    verbose && println("calculating backprojection..."); flush(stdout)
+    threads, blocks = default_kernel_config(nsamp_t)
+    verbose && (CUDA.synchronize(); println("calculating backprojection..."); flush(stdout))
     for icoef ∈ axes(U, 2)
-        for icoil ∈ eachindex(cmaps)
-            @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data, Uc, nsamp_t, trj_c, Nt, icoef, icoil)
-            MRFingerprintingRecon.applyDensityCompensation!(data_temp, trj_v; density_compensation)
+        t = @elapsed for icoil ∈ eachindex(cmaps)
+            @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
+            MRFingerprintingRecon.applyDensityCompensation!(data_temp, trj; density_compensation)
             exec_type1!(xtmp, p, data_temp)
             xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
+        verbose && (CUDA.synchronize(); println("coefficient = $icoef: t = $t s"); flush(stdout))
     end
     return xbp
 end
 
-function MRFingerprintingRecon.calculateCoilwiseCG(data::CuArray{cT}, trj::CuArray{T}, nsamp_t, img_shape::NTuple{N,Int}; U=I(length(data)), maxiter=100, verbose=false) where {T<:Real,cT<:Complex{T},N}
+function MRFingerprintingRecon.calculateCoilwiseCG(data::CuArray{cT}, trj::CuArray{T}, nsamp_t::CuArray{<:Integer}, img_shape::NTuple{N,Int}; U=I(length(data)), maxiter=100, verbose=false) where {T<:Real,cT<:Complex{T},N}
     Ncoil = size(data, 2)
 
     AᴴA = MRFingerprintingRecon.NFFTNormalOp(img_shape, trj, nsamp_t, U[:, 1]; verbose)
@@ -97,20 +74,25 @@ end
 ## ##########################################################################
 # Internal use
 #############################################################################
-function kernel_bp!(data_temp, data, Uc, nsamp_t, trj_c, Nt, icoef, icoil)
-
-    # ik_sub ≡ sample index within time frame it
-    ik_sub = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-
-    # it ≡ current time index
+function kernel_bp!(data_temp, data, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
+    ik = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     it = (blockIdx().y - 1) * blockDim().y + threadIdx().y
 
     # Multiply data by basis elements
-    if it <= Nt
-        if ik_sub <= nsamp_t[it]
-            ik = trj_c[it] + ik_sub # absolute sample index
-            data_temp[ik] = data[ik, icoil] * Uc[it, icoef]
+    if it <= length(nsamp_t)
+        if ik <= nsamp_t[it]
+            ik_abs = cumsum_nsamp[it] + ik # absolute sample index
+            data_temp[ik_abs] = data[ik_abs, icoil] * Uc[it, icoef]
             return
         end
     end
+end
+
+function default_kernel_config(nsamp_t)
+    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
+    threads_x = min(max_threads, maximum(nsamp_t))
+    threads_y = min(max_threads ÷ threads_x, length(nsamp_t))
+    threads = (threads_x, threads_y)
+    blocks = ceil.(Int, (maximum(nsamp_t), length(nsamp_t)) ./ threads) # samples as inner index
+    return threads, blocks
 end

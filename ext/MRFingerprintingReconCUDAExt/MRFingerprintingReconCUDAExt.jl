@@ -1,9 +1,12 @@
 module MRFingerprintingReconCUDAExt
 
-using MRFingerprintingRecon, MRFingerprintingRecon.MRICoilSensitivities
-using MRFingerprintingRecon.LinearAlgebra, MRFingerprintingRecon.LinearOperators
-using MRFingerprintingRecon.NonuniformFFTs, MRFingerprintingRecon.FFTW
+using MRFingerprintingRecon
+using MRFingerprintingRecon.FFTW
 using MRFingerprintingRecon.IterativeSolvers
+using MRFingerprintingRecon.LinearAlgebra
+using MRFingerprintingRecon.LinearOperators
+using MRFingerprintingRecon.MRICoilSensitivities
+using MRFingerprintingRecon.NonuniformFFTs
 
 using CUDA
 
