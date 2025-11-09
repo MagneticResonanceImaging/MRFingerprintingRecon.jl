@@ -6,7 +6,7 @@ function MRFingerprintingRecon.calcCoilMaps(data::CuArray{Complex{T}}, trj::CuAr
     trj_idx = vec(all(abs.(trj) .* calib_scale .< 0.5; dims=1))
 
     data_calib = data[trj_idx, :]
-    cumsum_nsamp = trj[:, trj_idx] .* calib_scale
+    trj_calib = trj[:, trj_idx] .* calib_scale
 
     # launch kernel to count masked samples per frame
     cumsum_nsamp = cu([0; cumsum(nsamp_t[1:end-1])])
@@ -20,7 +20,7 @@ function MRFingerprintingRecon.calcCoilMaps(data::CuArray{Complex{T}}, trj::CuAr
     
     @cuda threads=threads blocks=blocks count_samples!(nsamp_t_calib, nsamp_t, cumsum_nsamp, trj_idx)
 
-    x = MRFingerprintingRecon.calculateCoilwiseCG(data_calib, cumsum_nsamp, nsamp_t_calib, calib_size; U)
+    x = MRFingerprintingRecon.calculateCoilwiseCG(data_calib, trj_calib, nsamp_t_calib, calib_size; U)
 
     imdims = ntuple(i -> i, length(img_shape))
     kbp = fftshift(x, imdims)
