@@ -76,9 +76,3 @@ xr = reshape(xr, Nx, Nx, Nc)
 ## test equivalence
 mask = abs.(x[:,:,1]) .> 0
 @test xr[mask,:] ≈ x[mask,:] rtol = 1e-3
-
-##
-# using Plots
-# plotlyjs(bg = RGBA(31/255,36/255,36/255,1.0), ticks=:native); #hide
-# heatmap(abs.(cat(reshape(x, Nx, :), reshape(xr, Nx, :), dims=1)), clim=(0.75, 1.25), size=(1200,600))
-# heatmap(angle.(cat(reshape(x, Nx, :), reshape(xr, Nx, :), dims=1)), size=(1200,600))

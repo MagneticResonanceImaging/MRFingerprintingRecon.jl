@@ -1,3 +1,6 @@
+# test kernel calculation with real basis and use an asymmetric trajectory for
+# tests with a complex point spread function
+
 using BenchmarkTools
 using MRFingerprintingRecon
 using ImagePhantoms
@@ -47,26 +50,26 @@ theta = Float32.(0 * (1:Nt*Ncyc) .+ pi/2)
 phi = reshape(phi, Ncyc, Nt)
 theta = reshape(theta, Ncyc, Nt)
 
-trj = reduce(hcat, kooshball(2Nx, theta, phi))[1:2, :]
-trj = reshape(trj, 2, 2Nx, Nt*Ncyc)
-trj = reshape(trj[:, 1:Nx, :], 2, Nx*Ncyc, Nt)
-trj = [trj[:,:,i] for i ∈ 1:20]
+trj = kooshball(2Nx, theta, phi)[1:2, :, :]
+trj = reshape(trj, 2, 2Nx, Ncyc, Nt)
+trj = reshape(trj[:, 1:Nx, :, :], 2, Nx*Ncyc, Nt)
 
 ## set up real basis functions
 U = randn(T, Nt, Nc)
 U,_,_ = svd(U)
 
 ## simulate data
-data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
-nfftplan = PlanNUFFT(Complex{T}, (Nx, Nx); fftshift=true) 
-xcoil = copy(x)
-for icoil ∈ 1:Ncoil
+data = Array{Complex{T}, 3}(undef, Nx*Ncyc, Nt, Ncoil);
+nfftplan = PlanNUFFT(Complex{T}, img_shape; fftshift=true);
+xcoil = copy(x);
+
+for icoil ∈ axes(data, 3)
     xcoil .= x
     xcoil .*= cmaps[icoil]
-    for it ∈ eachindex(data)
-        set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[it]))
+    for it ∈ axes(data, 2)
+        set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reshape(trj[:,:,it], 2, :)))
         xt = reshape(reshape(xcoil, :, Nc) * U[it,:], Nx, Nx)
-        @views exec_type2!(data[it][:,icoil], nfftplan, xt)
+        @views exec_type2!(vec(data[:,it,icoil]), nfftplan, xt)
     end
 end
 

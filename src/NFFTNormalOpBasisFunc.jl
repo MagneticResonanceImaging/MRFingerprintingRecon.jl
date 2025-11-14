@@ -8,12 +8,13 @@
 
 Create normal operator of NFFT operator.
 Differentiate between functions exploiting a pre-calculated Toeplitz kernel basis `Λ` and the function which calculates Λ based on a passed trajectory `trj`.
+When the basis functions `U` are real-valued, a real-only NUFFT is used to compute `Λ`, reducing the data volume for the spreading and interpolation steps by half.
 
 # Arguments
 - `img_shape::Tuple{Int}`: Image dimensions
-- `traj::AbstractVector{<:AbstractMatrix{T}}`: Trajectory
+- `trj::AbstractArray{T}`: Trajectory, use `CuArray` as input type to use CUDA code.
 - `U::AbstractMatrix{Tc}`: Basis coefficients of subspace
-- `cmaps::AbstractVector{Matrix{ComplexF32}}`=`[ones(T, img_shape)]`: Coil sensitivities
+- `cmaps::AbstractVector{Matrix{cT,N}}`=`[ones(T, img_shape)]`: Coil sensitivities, use `AbstractVector{CuArray{cT,N}}` as type for use with CUDA code.
 - `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
 - `kmask_indcs::Vector{Int}`: Sampling indices of Toeplitz mask
 - `verbose::Boolean`=`false`: Verbose level
@@ -21,14 +22,15 @@ Differentiate between functions exploiting a pre-calculated Toeplitz kernel basi
 """
 function NFFTNormalOp(
     img_shape,
-    trj::AbstractVector{<:AbstractMatrix{T}},
-    U::AbstractArray{Tc};
+    trj::AbstractArray{T,3},
+    U::AbstractArray{Tc,2};
     cmaps=[ones(T, img_shape)],
+    mask=trues(size(trj)[2:end]),
     verbose = false,
     num_fft_threads = round(Int, Threads.nthreads()/size(U, 2)),
     ) where {T, Tc <: Union{T, Complex{T}}}
 
-    Λ, kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; verbose=verbose)
+    Λ, kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; mask=mask, verbose=verbose)
 
     return NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps, num_fft_threads=num_fft_threads)
 end
@@ -36,7 +38,7 @@ end
 function NFFTNormalOp(
     img_shape,
     Λ::Array{Tc,3},
-    kmask_indcs;
+    kmask_indcs::Vector{<:Integer};
     cmaps=[ones(T, img_shape)],
     num_fft_threads = round(Int, Threads.nthreads()/size(Λ, 1))
     ) where {T, Tc <:Union{T, Complex{T}}}
@@ -88,12 +90,12 @@ struct _NFFTNormalOp{S,E,F,G,H,I,J,K,L,M,N}
     blocks::N
 end
 
-function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}) where T
+function calculate_kmask_indcs(img_shape_os, trj::AbstractArray{T}; mask=trues(size(trj)[2:end])) where {T}
     @assert all([i .== nextprod((2, 3, 5), i) for i ∈ img_shape_os]) "img_shape_os has to be composed of the prime factors 2, 3, and 5 (cf. NonuniformFFTs.jl documentation)."
 
     backend = CPU()
     p = PlanNUFFT(Complex{T}, img_shape_os; σ=1, kernel=GaussianKernel(), backend=backend) # default is without fftshift
-    set_points!(p, NonuniformFFTs._transform_point_convention.(reduce(hcat, trj)))
+    set_points!(p, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
 
     S = ones(Complex{T}, size(p.points[1]))
     NonuniformFFTs.spread_from_points!(p.backend, NUFFTCallbacks().nonuniform, p.point_transform_fold, p.blocks, p.kernels, p.kernel_evalmode, p.data.us, p.points, (S,))
@@ -101,23 +103,23 @@ function calculate_kmask_indcs(img_shape_os, trj::AbstractVector{<:AbstractMatri
     return kmask_indcs
 end
 
-function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractArray{Tc}; verbose = false) where {T, Tc <: Complex{T}}
-    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
+function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray{T,3}, U::AbstractArray{Tc}; mask=trues(size(trj)[2:end]), verbose=false) where {T, Tc <: Complex{T}}
+    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
+    nsamp_t = sum(mask, dims=1) |> vec
+    cumsum_nsamp = cumsum(nsamp_t)
     Ncoeff = size(U, 2)
 
     λ  = Array{Complex{T}}(undef, img_shape_os)
     λ2 = similar(λ)
     Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
-
-    trj_idx = cumsum([size(trj[it],2) for it in eachindex(trj)])
-    S  = Vector{Complex{T}}(undef, trj_idx[end])
+    S = Array{Complex{T}}(undef, sum(nsamp_t))
 
     fftplan  = plan_fft(λ; flags=FFTW.MEASURE, num_threads=Threads.nthreads())
     nfftplan = PlanNUFFT(Complex{T}, img_shape_os) # default is without fftshift
-    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reduce(hcat, trj)))
+    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
 
     # Evaluating only the upper triangular matrix assumes that the PSF from the rightmost voxel to the leftmost voxel is the adjoint of the PSF in the opposite direction.
     # For the outmost voxel, this is not correct, but the resulting images are virtually identical in our test cases.
@@ -126,8 +128,8 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
                 @simd for it ∈ axes(U,1)
-                    idx1 = (it == 1) ? 1 : trj_idx[it-1] + 1
-                    idx2 = trj_idx[it]
+                    idx1 = (it == 1) ? 1 : cumsum_nsamp[it-1] + 1
+                    idx2 = cumsum_nsamp[it]
                     @inbounds S[idx1:idx2] .= conj(U[it,ic1]) * U[it,ic2]
                 end
 
@@ -145,23 +147,24 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
     return Λ, kmask_indcs
 end
 
-function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:AbstractMatrix{T}}, U::AbstractArray{T}; verbose=false) where {T <: Real}
-    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
+function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray, U::AbstractArray{T}; mask=trues(size(trj)[2:end]), verbose=false) where {T <: Real}
+    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
+    nsamp_t = sum(mask, dims=1) |> vec
+    cumsum_nsamp = cumsum(nsamp_t)
     Ncoeff = size(U, 2)
 
     λ  = Array{T}(undef, img_shape_os)
     λ2 = Array{Complex{T}}(undef, img_shape_os[1] ÷ 2 + 1, Base.tail(img_shape_os)...)
     Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
 
-    trj_idx = cumsum([size(trj[it],2) for it in eachindex(trj)])
-    S  = Vector{T}(undef, trj_idx[end])
+    S = Array{T}(undef, sum(nsamp_t))
 
     brfftplan = plan_brfft(λ2, img_shape_os[1]; flags=FFTW.MEASURE, num_threads=Threads.nthreads())
     nfftplan = PlanNUFFT(T, img_shape_os) # use plan specific to real inputs
-    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reduce(hcat, trj)))
+    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
 
     # Evaluating only the upper triangular matrix assumes that the PSF from the rightmost voxel to the leftmost voxel is the adjoint of the PSF in the opposite direction.
     # For the outmost voxel, this is not correct, but the resulting images are virtually identical in our test cases.
@@ -169,13 +172,13 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractVector{<:Abstra
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
                 @simd for it ∈ axes(U,1)
-                    idx1 = (it == 1) ? 1 : trj_idx[it-1] + 1
-                    idx2 = trj_idx[it]
+                    idx1 = (it == 1) ? 1 : cumsum_nsamp[it-1] + 1
+                    idx2 = cumsum_nsamp[it]
                     @inbounds S[idx1:idx2] .= U[it,ic1] * U[it,ic2]
                 end
 
                 exec_type1!(λ2, nfftplan, vec(S))
-                λ2 .= conj.(λ2) # conjugate input to flip the sign of the exponential in brfft
+                λ2 .= conj.(λ2) # conjugate input to flip the sign of the exponential in brfft (FFTW and NonuniformFFTs differ in convention)
                 mul!(λ, brfftplan, λ2)
 
                 Threads.@threads for it ∈ eachindex(kmask_indcs)
@@ -229,4 +232,11 @@ function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) w
         BLAS.set_num_threads(bthreads)
     end
     return x
+end
+
+# wrapper for 4D data arrays
+function NFFTNormalOp(img_shape, trj::AbstractArray{T,4}, U::AbstractArray{Tc,2}; mask=trues(size(trj)[2:end]), kwargs...) where {T, Tc <: Union{T, Complex{T}}}
+    trj = reshape(trj, size(trj, 1), :, size(trj,4))
+    mask = reshape(mask, :, size(mask,3))
+    return NFFTNormalOp(img_shape, trj, U; kwargs..., mask)
 end

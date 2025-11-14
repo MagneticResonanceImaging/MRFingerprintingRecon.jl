@@ -1,23 +1,26 @@
-function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT}, trj::CuArray{T}, nsamp_t::CuArray{<:Integer}, img_shape; U, density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T}}
+function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,3}, trj::CuArray{T,3}, img_shape; U=cu(I(size(trj)[end])), mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T}}
+    nsamp_t = dropdims(sum(mask; dims=1); dims=1) # Nr of samples per time frame
 
     Ncoef = size(U, 2)
-    Ncoil = size(data, 2)
+    Ncoil = size(data, 3)
     Uc = conj(U)
     cumsum_nsamp = cumsum(nsamp_t[1:end-1]) |> x -> cat(CUDA.zeros(eltype(x), 1), x; dims=1);
 
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true, backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200))
-    set_points!(p, NonuniformFFTs._transform_point_convention.(trj))
+    trj_rs = trj[:, mask] # select subset of trj
+    set_points!(p, NonuniformFFTs._transform_point_convention.(trj_rs)) # transform matrix to tuples and change sign of FT exponent
 
     img_idx = CartesianIndices(img_shape)
     xbp = CUDA.zeros(cT, img_shape..., Ncoef, Ncoil)
     data_temp = CuArray{cT}(undef, sum(nsamp_t))
 
+    data_rs = data[mask, :]
     threads, blocks = default_kernel_config(nsamp_t)
     verbose && (CUDA.synchronize(); println("calculating backprojection..."); flush(stdout))
     for icoef ∈ axes(U, 2)
-        t = @elapsed for icoil ∈ axes(data, 2)
-            @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
-            MRFingerprintingRecon.applyDensityCompensation!(data_temp, trj; density_compensation)
+        t = @elapsed for icoil ∈ axes(data, 3)
+            @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data_rs, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
+            MRFingerprintingRecon.applyDensityCompensation!(data_temp, trj_rs; density_compensation)
             @views exec_type1!(xbp[img_idx, icoef, icoil], p, data_temp) 
         end
         verbose && (CUDA.synchronize(); println("coefficient = $icoef: t = $t s"); flush(stdout))
@@ -25,8 +28,8 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT}, trj::C
     return xbp
 end
 
-function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT}, trj::CuArray{T}, nsamp_t::CuArray{<:Integer}, cmaps::AbstractVector{<:CuArray{cT,N}}; U, density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
-
+function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,3}, trj::CuArray{T,3}, cmaps::AbstractVector{<:CuArray{cT,N}}; U=cu(I(size(trj)[end])), mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
+    nsamp_t = dropdims(sum(mask; dims=1); dims=1) # Nr of samples per time frame
     Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
     Uc = conj(U)
@@ -34,7 +37,8 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT}, trj::C
 
     # Plan NFFT
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true, backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200))
-    set_points!(p, NonuniformFFTs._transform_point_convention.(trj))
+    trj_rs = trj[:, mask]
+    set_points!(p, NonuniformFFTs._transform_point_convention.(trj_rs))
 
     img_idx = CartesianIndices(img_shape)
     xbp = CUDA.zeros(cT, img_shape..., Ncoef)
@@ -42,12 +46,13 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT}, trj::C
     data_temp = CuArray{cT}(undef, sum(nsamp_t))
 
     ## Perform backprojection
+    data_rs = data[mask, :]
     threads, blocks = default_kernel_config(nsamp_t)
     verbose && (CUDA.synchronize(); println("calculating backprojection..."); flush(stdout))
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
-            @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
-            MRFingerprintingRecon.applyDensityCompensation!(data_temp, trj; density_compensation)
+            @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data_rs, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
+            MRFingerprintingRecon.applyDensityCompensation!(data_temp, trj_rs; density_compensation)
             exec_type1!(xtmp, p, data_temp)
             xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
@@ -56,11 +61,11 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT}, trj::C
     return xbp
 end
 
-function MRFingerprintingRecon.calculateCoilwiseCG(data::CuArray{cT}, trj::CuArray{T}, nsamp_t::CuArray{<:Integer}, img_shape::NTuple{N,Int}; U=I(length(data)), maxiter=100, verbose=false) where {T<:Real,cT<:Complex{T},N}
-    Ncoil = size(data, 2)
+function calculateCoilwiseCG(data::CuArray{cT,3}, trj::CuArray{T,3}, img_shape; U=CUDA.ones(T, size(trj)[end]), mask=CUDA.ones(Bool, size(trj)[2:end]), maxiter=100, verbose=false) where {T<:Real,cT<:Complex{T}}
+    Ncoil = size(data, 3)
 
-    AᴴA = MRFingerprintingRecon.NFFTNormalOp(img_shape, trj, nsamp_t, U[:, 1]; verbose)
-    xbp = MRFingerprintingRecon.calculateBackProjection(data, trj, nsamp_t, img_shape; U=U[:, 1], verbose)
+    AᴴA = MRFingerprintingRecon.NFFTNormalOp(img_shape, trj, U[:, 1]; mask=mask, verbose)
+    xbp = MRFingerprintingRecon.calculateBackProjection(data, trj, img_shape; U=U[:, 1], mask=mask, verbose)
     x = CUDA.zeros(cT, img_shape..., Ncoil)
 
     for icoil = 1:Ncoil
@@ -95,4 +100,12 @@ function default_kernel_config(nsamp_t)
     threads = (threads_x, threads_y)
     blocks = ceil.(Int, (maximum(nsamp_t), length(nsamp_t)) ./ threads) # samples as inner index
     return threads, blocks
+end
+
+# wrappers for use with 4D arrays: nr of ADC samples per readout is separate at dims=2
+function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,4}, trj::CuArray{T,4}, arg3; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T,cT<:Complex}
+    data = reshape(data, :, size(data,3), size(data,4))
+    trj = reshape(trj, size(trj, 1), :, size(trj,4))
+    mask = reshape(mask, :, size(mask,3))
+    return MRFingerprintingRecon.calculateBackProjection(data, trj, arg3; kwargs..., mask)
 end

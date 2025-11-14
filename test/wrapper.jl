@@ -1,3 +1,5 @@
+# test wrapped method calls
+
 using BenchmarkTools
 using MRFingerprintingRecon
 using ImagePhantoms
@@ -10,12 +12,13 @@ using Test
 using Random
 Random.seed!(42)
 
-## set parameters
+##
 T  = Float32
-Nx = 32
+Nx = 128
 Nc = 4
 Nt = 20
 Ncyc = 10
+
 img_shape = (Nx, Nx)
 
 ## create test image
@@ -36,6 +39,7 @@ cmaps = ones(Complex{T}, Nx, Nx, Ncoil)
 [cmaps[:,i,8] .*= exp( 2im * π * i/Nx) for i ∈ axes(cmaps,2)]
 [cmaps[:,i,9] .*= exp(-2im * π * i/Nx) for i ∈ axes(cmaps,2)]
 
+## Set up new data format
 for i ∈ CartesianIndices(@view cmaps[:,:,1])
     cmaps[i,:] ./= norm(cmaps[i,:])
 end
@@ -47,6 +51,7 @@ phi = Float32.(α_g * (1:Nt*Ncyc))
 theta = Float32.(0 * (1:Nt*Ncyc) .+ pi/2)
 phi = reshape(phi, Ncyc, Nt)
 theta = reshape(theta, Ncyc, Nt)
+
 trj = kooshball(2Nx, theta, phi)
 trj = trj[1:2, :, :]
 
@@ -69,31 +74,22 @@ for icoil ∈ axes(data, 3)
     end
 end
 
-## create sampling mask
-it_rm = 1
-icyc_rm = 5
-mask = trues(2Nx, Ncyc, Nt)
-mask[:, icyc_rm, it_rm] .= false
-mask = reshape(mask, 2Nx*Ncyc, Nt)
+## reconstruct with 3D format
+@assert ndims(trj) == 3 && ndims(data) == 3
+b = calculateBackProjection(data, trj, cmaps; U)
+A = NFFTNormalOp((Nx,Nx), trj, U, cmaps=cmaps)
+xr3d = cg(A, vec(b), maxiter=20)
+xr3d = reshape(xr3d, Nx, Nx, Nc)
 
-## Test BackProjection 
-b = calculateBackProjection(data, trj, cmaps; U, mask)
+## transform inputs to 4D arrays and reconstruct
+trj = reshape(trj, 2, 2Nx, Ncyc, Nt)
+data = reshape(data, 2Nx, Ncyc, Nt, Ncoil)
 
-## construct forward operator
-A = NFFTNormalOp((Nx,Nx), trj, U; cmaps, mask)
-
-## reconstruct
+@assert ndims(trj) == 4 && ndims(data) == 4
+b = calculateBackProjection(data, trj, cmaps; U)
+A = NFFTNormalOp((Nx,Nx), trj, U, cmaps=cmaps)
 xr = cg(A, vec(b), maxiter=20)
-xr = reshape(xr, Nx, Nx, Nc)
-
-## crop x
-xc = fftshift(fft(x, 1:2), 1:2)
-for i ∈ CartesianIndices(xc)
-    if (i[1] - Nx/2)^2 + (i[2] - Nx/2)^2 > (Nx/2)^2
-        xc[i] = 0
-    end
-end
-xc = ifft(ifftshift(xc, 1:2), 1:2)
+xr4d = reshape(xr, Nx, Nx, Nc)
 
 ##
-@test xr ≈ xc rtol = 1e-1
+@test xr3d ≈ xr4d rtol = 1e-4

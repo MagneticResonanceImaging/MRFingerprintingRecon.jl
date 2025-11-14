@@ -52,59 +52,52 @@ phi = reshape(phi, Ncyc, Nt)
 theta = reshape(theta, Ncyc, Nt)
 
 trj = kooshball(2Nx, theta, phi)
-trj = [trj[i][1:2,:] for i ∈ eachindex(trj)]
+trj = trj[1:2, :, :]
 
 ## set up basis functions
 U = randn(T, Nt, Nc)
 U,_,_ = svd(U)
 
 ## simulate data
-data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
-nfftplan = PlanNUFFT(Complex{T}, img_shape; fftshift=true)
-xcoil = copy(x)
-for icoil ∈ 1:Ncoil
+data = Array{Complex{T}, 3}(undef, 2Nx*Ncyc, Nt, Ncoil);
+nfftplan = PlanNUFFT(Complex{T}, img_shape; fftshift=true);
+xcoil = copy(x);
+
+for icoil ∈ axes(data, 3)
     xcoil .= x
     xcoil .*= cmaps[icoil]
-    for it ∈ axes(data,1)
-        set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[it]))
+    for it ∈ axes(data, 2)
+        set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reshape(trj[:,:,it], 2, :)))
         xt = reshape(reshape(xcoil, :, Nc) * U[it,:], Nx, Nx)
-        @views exec_type2!(data[it][:,icoil], nfftplan, xt)
+        @views exec_type2!(data[:,it,icoil], nfftplan, xt)
     end
 end
 
 # create mask with false value to remove
 it_rm = 1
 icyc_rm = 5
-maskDataSelection = trues(2Nx, Ncyc, Nt)
-maskDataSelection[:, icyc_rm, it_rm] .= false
-
-maskDataSelection = reshape(maskDataSelection,:,Nt)
-maskDataSelection = [vec(maskDataSelection[:,i]) for i in axes(maskDataSelection,2)]
-
-# remove data
-for it ∈ 1:Nt
-    data[it] = data[it][maskDataSelection[it],:] 
-    trj[it] = trj[it][:,maskDataSelection[it]] 
-end
+mask = trues(2Nx, Ncyc, Nt)
+mask[:, icyc_rm, it_rm] .= false
+mask = reshape(mask, :, Nt)
 
 ## CPU
-A = NFFTNormalOp(img_shape, trj, U; cmaps=cmaps)
-b = calculateBackProjection(data, trj, cmaps; U)
+A = NFFTNormalOp(img_shape, trj, U; cmaps, mask)
+b = calculateBackProjection(data, trj, cmaps; U, mask)
 xr = cg(A, vec(b), maxiter=50)
 xr = reshape(xr, img_shape..., Nc)
 
 ## Write to CUDA arrays
-nsamp_t = cu([size(trj[it], 2) for it in eachindex(trj)])
-trj_d = cu(reduce(hcat, trj))
-data_d = cu(reduce(vcat, data))
+trj_d = cu(trj)
+data_d = cu(data)
 U_d = cu(U)
 cmaps_d = [cu(cmaps[i]) for i ∈ eachindex(cmaps)]
+mask_d = cu(mask)
 
 ## GPU
-A_d = NFFTNormalOp(img_shape, trj_d, nsamp_t, U_d; cmaps=cmaps_d)
-b_d = calculateBackProjection(data_d, trj_d, nsamp_t, cmaps_d; U=U_d)
+A_d = NFFTNormalOp(img_shape, trj_d, U_d; cmaps=cmaps_d, mask=mask_d) # kernels are expected to slightly differ between CPU/GPU
+b_d = calculateBackProjection(data_d, trj_d, cmaps_d; U=U_d, mask=mask_d)
 xr_d = cg(A_d, vec(b_d), maxiter=50)
-xr_d = reshape(Array(xr_d), img_shape..., Nc)
+xr_d = reshape(Array(xr_d), img_shape..., Nc) # end results should be equivalent
 
-## Test equivalence CPU and GPU code
+## Test equivalence CPU & GPU CG reconstruction
 @test xr ≈ xr_d rtol=1e-3

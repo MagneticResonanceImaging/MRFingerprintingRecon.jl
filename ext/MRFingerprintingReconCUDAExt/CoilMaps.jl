@@ -1,26 +1,12 @@
-function MRFingerprintingRecon.calcCoilMaps(data::CuArray{Complex{T}}, trj::CuArray{T}, nsamp_t::CuArray{<:Integer}, img_shape::NTuple{N,Int}; U=CUDA.ones(Complex{T}, length(nsamp_t)), kernel_size=ntuple(_ -> 6, N), calib_size=ntuple(i -> nextprod((2, 3, 5), img_shape[i] ÷ (maximum(img_shape) ÷ 32)), length(img_shape)), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose=false) where {N,T}
+function MRFingerprintingRecon.calculateCoilMaps(data::CuArray{Complex{T}}, trj::CuArray{T}, img_shape::NTuple{N,Int}; U=CUDA.ones(T, size(trj)[end]), mask=CUDA.ones(Bool, size(trj)[2:end]), kernel_size=ntuple(_ -> 6, N), calib_size=ntuple(i -> nextprod((2, 3, 5), img_shape[i] ÷ (maximum(img_shape) ÷ 32)), length(img_shape)), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose=false) where {N,T}
     @assert all([icalib .== nextprod((2, 3, 5), icalib) for icalib ∈ calib_size]) "calib_size has to be composed of the prime factors 2, 3, and 5 (cf. NonuniformFFTs.jl documentation)."
-   
-    # mask data and trj for coil map estimates
+
     calib_scale = cu(collect(img_shape ./ calib_size))
-    trj_idx = vec(all(abs.(trj) .* calib_scale .< 0.5; dims=1))
+    trj_idx = reshape(all(abs.(trj) .* calib_scale .< 0.5; dims=1), size(trj, 2), :)
+    mask .&= trj_idx # update mask to only take calib region of k-space in CoilwiseCG
+    trj  .*= calib_scale # scale trj for correct image dims
 
-    data_calib = data[trj_idx, :]
-    trj_calib = trj[:, trj_idx] .* calib_scale
-
-    # launch kernel to count masked samples per frame
-    cumsum_nsamp = cu([0; cumsum(nsamp_t[1:end-1])])
-    nsamp_t_calib = CUDA.zeros(eltype(nsamp_t), size(nsamp_t))
-
-    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
-    threads_x = min(max_threads, maximum(nsamp_t))
-    threads_y = min(max_threads ÷ threads_x, length(nsamp_t))
-    threads = (threads_x, threads_y)
-    blocks = ceil.(Int, (maximum(nsamp_t), length(nsamp_t)) ./ threads)
-    
-    @cuda threads=threads blocks=blocks count_samples!(nsamp_t_calib, nsamp_t, cumsum_nsamp, trj_idx)
-
-    x = MRFingerprintingRecon.calculateCoilwiseCG(data_calib, trj_calib, nsamp_t_calib, calib_size; U)
+    x = MRFingerprintingRecon.calculateCoilwiseCG(data, trj, calib_size; U, mask)
 
     imdims = ntuple(i -> i, length(img_shape))
     kbp = fftshift(x, imdims)
@@ -36,18 +22,10 @@ function MRFingerprintingRecon.calcCoilMaps(data::CuArray{Complex{T}}, trj::CuAr
     return cmaps
 end
 
-## ##########################################################################
-# Internal use
-#############################################################################
-function count_samples!(nsamp_t_calib, nsamp_t, cumsum_nsamp, trj_idx)
-    ik = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-    it = (blockIdx().y - 1) * blockDim().y + threadIdx().y
-
-    if it <= length(nsamp_t)
-        ik_abs = cumsum_nsamp[it] + ik
-        if ik <= nsamp_t[it] && trj_idx[ik_abs] != 0
-            @inbounds CUDA.@atomic nsamp_t_calib[it] += 1
-            return
-        end
-    end
+# wrapper for 4D data arrays
+function MRFingerprintingRecon.calculateCoilMaps(data::CuArray{cT,4}, trj::CuArray{T,4}, img_shape::NTuple{N,Int}; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {N,T,cT<:Complex}
+    data = reshape(data, :, size(data,3), size(data,4))
+    trj = reshape(trj, size(trj, 1), :, size(trj,4))
+    mask = reshape(mask, :, size(mask,3))
+    return calculateCoilMaps(data, trj, img_shape; kwargs..., mask)
 end

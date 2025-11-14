@@ -1,14 +1,12 @@
 function MRFingerprintingRecon.NFFTNormalOp(
     img_shape,
-    trj::CuArray{T},
-    nsamp_t::CuArray{<:Integer},
-    U::CuArray{Tc};
+    trj::CuArray{T,3},
+    U::CuArray{T,2};
     cmaps = [CUDA.ones(T, img_shape)],
+    mask = CUDA.ones(Bool, size(trj)[2:end]),
     verbose = false
-    ) where {T, Tc <:Union{T, Complex{T}}}
-
-    Λ, kmask_indcs = MRFingerprintingRecon.calculateToeplitzKernelBasis(2 .* img_shape, trj, nsamp_t, U; verbose=verbose)
-
+    ) where {T <: Real}
+    Λ, kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; mask, verbose)
     return NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps)
 end
 
@@ -17,8 +15,7 @@ function NFFTNormalOp(
     Λ::CuArray{T},
     kmask_indcs;
     cmaps=[CuArray(ones(T, img_shape))]
-    ) where {T}
-
+    ) where {T <: Real}
     @assert length(kmask_indcs) == size(Λ, length(size(Λ))) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`
     @assert all(kmask_indcs .> 0)
     @assert all(kmask_indcs .<= prod(2 .* img_shape))
@@ -67,12 +64,12 @@ end
 #############################################################################
 # Internal use
 #############################################################################
-function calculate_kmask_indcs(img_shape_os, trj::CuArray{T}) where T
+function calculate_kmask_indcs(img_shape_os, trj::CuArray{T,3}; mask=CUDA.ones(Bool, size(trj)[2:end])) where {T}
     @assert all([i .== nextprod((2, 3, 5), i) for i ∈ img_shape_os]) "img_shape_os has to be composed of the prime factors 2, 3, and 5 (cf. NonuniformFFTs.jl documentation)."
 
     backend = CUDABackend()
     p = PlanNUFFT(Complex{T}, img_shape_os; σ=1, kernel=GaussianKernel(), backend=backend) # default is without fftshift
-    set_points!(p, NonuniformFFTs._transform_point_convention.(trj))
+    set_points!(p, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
 
     S = CUDA.ones(Complex{T}, size(p.points[1]))
     NonuniformFFTs.spread_from_points!(p.backend, NUFFTCallbacks().nonuniform, p.point_transform_fold, p.blocks, p.kernels, p.kernel_evalmode, p.data.us, p.points, (S,))
@@ -80,13 +77,14 @@ function calculate_kmask_indcs(img_shape_os, trj::CuArray{T}) where T
     return kmask_indcs
 end
 
-function MRFingerprintingRecon.calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T}, nsamp_t::CuArray{<:Integer}, U::CuArray{T}; verbose = false) where {T}
-
-    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj)
+# kernel is assumed to be real-valued (method only works with real basis U)
+function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T,3}, U::CuArray{T}; mask=CUDA.ones(Bool, size(trj)[2:end]), verbose=false) where {T <: Real}
+    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
 
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
+    nsamp_t = cu(sum(mask, dims=1))
     Ncoeff = size(U, 2)
 
     # Allocate kernel arrays, write Λ as packed storage arrays
@@ -99,7 +97,7 @@ function MRFingerprintingRecon.calculateToeplitzKernelBasis(img_shape_os, trj::C
     # Prep plans
     fftplan  = plan_fft(λ)
     nfftplan = PlanNUFFT(Complex{T}, img_shape_os; backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200)) # use plan specific to real inputs
-    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj))
+    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
 
     # Kernel helpers
     cumsum_nsamp = cumsum(nsamp_t[1:end-1]) |> x -> cat(CUDA.zeros(eltype(x), 1), x; dims=1);
@@ -198,4 +196,11 @@ function kernel_mul!(kL2_rs, Λ, kL1_rs, kmask_indcs, ind_lookup)
         kL2_rs[ind, j] = acc
     end
     return
+end
+
+# wrapper for 4D data arrays
+function MRFingerprintingRecon.NFFTNormalOp(img_shape, trj::CuArray{T,4}, U::CuArray{T}; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T}
+    trj = reshape(trj, size(trj,1), :, size(trj,4))
+    mask = reshape(mask, :, size(mask,3))
+    return MRFingerprintingRecon.NFFTNormalOp(img_shape, trj, U; kwargs..., mask)
 end

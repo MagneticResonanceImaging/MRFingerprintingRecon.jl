@@ -1,3 +1,5 @@
+# test iterative reconstruction with complex basis U
+
 using BenchmarkTools
 using MRFingerprintingRecon
 using ImagePhantoms
@@ -10,12 +12,13 @@ using Test
 using Random
 Random.seed!(42)
 
-## set parameters
 T  = Float32
 Nx = 32
 Nc = 4
 Nt = 20
 Ncyc = 10
+
+img_shape = (Nx, Nx)
 
 ## create test image
 x = zeros(Complex{T}, Nx, Nx, Nc)
@@ -35,6 +38,8 @@ cmaps = ones(Complex{T}, Nx, Nx, Ncoil)
 [cmaps[:,i,8] .*= exp( 2im * π * i/Nx) for i ∈ axes(cmaps,2)]
 [cmaps[:,i,9] .*= exp(-2im * π * i/Nx) for i ∈ axes(cmaps,2)]
 
+
+## Set up new data format
 for i ∈ CartesianIndices(@view cmaps[:,:,1])
     cmaps[i,:] ./= norm(cmaps[i,:])
 end
@@ -48,23 +53,24 @@ phi = reshape(phi, Ncyc, Nt)
 theta = reshape(theta, Ncyc, Nt)
 
 trj = kooshball(2Nx, theta, phi)
-trj = [trj[i][1:2,:] for i ∈ eachindex(trj)]
+trj = trj[1:2, :, :]
 
 ## set up basis functions
 U = randn(Complex{T}, Nt, Nc)
 U,_,_ = svd(U)
 
 ## simulate data
-data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
-nfftplan = PlanNUFFT(Complex{T}, (Nx, Nx); fftshift=true)
-xcoil = copy(x)
-for icoil ∈ 1:Ncoil
+data = Array{Complex{T}, 3}(undef, 2Nx*Ncyc, Nt, Ncoil);
+nfftplan = PlanNUFFT(Complex{T}, img_shape; fftshift=true);
+xcoil = copy(x);
+
+for icoil ∈ axes(data, 3)
     xcoil .= x
     xcoil .*= cmaps[icoil]
-    for it ∈ eachindex(data)
-        set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[it]))
+    for it ∈ axes(data, 2)
+        set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reshape(trj[:,:,it], 2, :)))
         xt = reshape(reshape(xcoil, :, Nc) * U[it,:], Nx, Nx)
-        @views exec_type2!(data[it][:,icoil], nfftplan, xt)
+        @views exec_type2!(data[:,it,icoil], nfftplan, xt)
     end
 end
 

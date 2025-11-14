@@ -10,7 +10,7 @@ using LinearOperators
 using ExponentialUtilities
 using IterativeSolvers
 
-export NFFTNormalOp, calcCoilMaps, calculateBackProjection, kooshball, kooshballGA, calcFilteredBackProjection
+export NFFTNormalOp, calculateCoilMaps, calculateBackProjection, kooshball, kooshballGA
 export FFTNormalOp, radial_grog!
 
 function __init__()
@@ -26,6 +26,5 @@ include("NFFTNormalOpBasisFunc.jl")
 include("CoilMaps.jl")
 include("BackProjection.jl")
 include("Trajectories.jl")
-include("deprecated.jl")
 
 end # module

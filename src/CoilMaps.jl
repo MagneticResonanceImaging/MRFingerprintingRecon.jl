@@ -4,8 +4,8 @@
 Estimate coil sensitivity maps using ESPIRiT [1].
 
 # Arguments
-- `data::AbstractVector{<:AbstractMatrix{Complex{T}}}`: Complex dataset either as AbstractVector of matrices or single matrix. The optional outer vector defines different time frames that are combined using the subspace defined in `U`
-- `trj::AbstractVector{<:AbstractMatrix{T}}`: Trajectory with samples corresponding to the dataset either as AbstractVector of matrices or single matrix.
+- `data::AbstractArray{Complex{T}}`: Complex dataset with axes (samples, time frames, channels). Time frames are reconstructed using the subspace defined in U. . Use `CuArray` as input type to use CUDA code.
+- `trj::AbstractArray{T}`: Trajectory with sample coordinates corresponding to the dataset Use `CuArray` as input type to use GPU code.
 - `img_shape::NTuple{N,Int}`: Shape of image
 
 # Keyword Arguments
@@ -24,18 +24,15 @@ Estimate coil sensitivity maps using ESPIRiT [1].
 # References
 [1] Uecker, M., Lai, P., Murphy, M.J., Virtue, P., Elad, M., Pauly, J.M., Vasanawala, S.S. and Lustig, M. (2014), ESPIRiT—an eigenvalue approach to autocalibrating parallel MRI: Where SENSE meets GRAPPA. Magn. Reson. Med., 71: 990-1001. https://doi.org/10.1002/mrm.24751
 """
-function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::AbstractVector{<:AbstractMatrix{T}}, img_shape::NTuple{N,Int}; U=ones(Complex{T}, length(data)), kernel_size=ntuple(_ -> 6, N), calib_size=ntuple(i -> nextprod((2, 3, 5), img_shape[i] ÷ (maximum(img_shape) ÷ 32)), length(img_shape)), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose=false) where {N,T}
+function calculateCoilMaps(data::AbstractArray{Complex{T}}, trj::AbstractArray{T}, img_shape::NTuple{N,Int}; U=ones(Complex{T}, size(trj)[end]), mask=trues(size(trj)[2:end]), kernel_size=ntuple(_ -> 6, N), calib_size=ntuple(i -> nextprod((2, 3, 5), img_shape[i] ÷ (maximum(img_shape) ÷ 32)), length(img_shape)), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, Niter=100, verbose=false) where {N,T}
     @assert all([icalib .== nextprod((2, 3, 5), icalib) for icalib ∈ calib_size]) "calib_size has to be composed of the prime factors 2, 3, and 5 (cf. NonuniformFFTs.jl documentation)."
+    
     calib_scale = img_shape ./ calib_size
+    mask_calib = reshape(all(abs.(trj) .* calib_scale .< 0.5; dims=1), size(trj, 2), :)
+    mask_calib .&= mask # new mask only takes data within calib region
+    trj_calib = trj .* convert.(T, calib_scale) # scale trj for correct image dims
 
-    trj_calib = Vector{Matrix{T}}(undef, length(trj))
-    data_calib = Vector{Matrix{Complex{T}}}(undef, length(data))
-    Threads.@threads for it ∈ eachindex(trj)
-        trj_idx = [all(abs.(trj[it][:, i] .* calib_scale) .< T(0.5)) for i ∈ axes(trj[it], 2)]
-        trj_calib[it] = trj[it][:, trj_idx] .* calib_scale
-        data_calib[it] = data[it][trj_idx, :]
-    end
-    x = calculateCoilwiseCG(data_calib, trj_calib, calib_size; U)
+    x = calculateCoilwiseCG(data, trj_calib, calib_size; U, mask=mask_calib, Niter)
 
     imdims = ntuple(i -> i, length(img_shape))
     kbp = fftshift(x, imdims)
@@ -51,20 +48,13 @@ function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::A
     return cmaps
 end
 
-function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::AbstractVector{<:AbstractMatrix{<:Integer}}, img_shape::NTuple{N,Int}; U=ones(Complex{T}, length(data)), kernel_size=ntuple(_ -> 6, N), calib_size=img_shape .÷ (img_shape[1] ÷ 32), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose=false) where {N,T}
-    trj_calib = Vector{Matrix{Integer}}(undef, length(trj))
-    data_calib = Vector{Matrix{Complex{T}}}(undef, length(data))
-
+function calculateCoilMaps(data::AbstractArray{Complex{T}}, trj::AbstractArray{<:Integer}, img_shape::NTuple{N,Int}; U=ones(Complex{T}, size(data, 2)), mask=trues(size(trj)[2:end]), kernel_size=ntuple(_ -> 6, N), calib_size=img_shape .÷ (img_shape[1] ÷ 32), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, Niter=5, verbose=false) where {N,T}
     lower_bound = @. Int(ceil((img_shape - calib_size) / 2))
     upper_bound = @. lower_bound + calib_size + 1
+    mask_calib = dropdims(all(trj .> lower_bound; dims=1) .& all(trj .< upper_bound; dims=1); dims=1)
+    mask_calib .&= mask
 
-    Threads.@threads for it ∈ eachindex(trj)
-        trj_idx = [all(trj[it][:, is] .> lower_bound) && all(trj[it][:, is] .< upper_bound) for is ∈ axes(trj[it], 2)]
-        trj_calib[it] = trj[it][:, trj_idx] .- lower_bound
-        data_calib[it] = data[it][trj_idx, :]
-    end
-
-    x = calculateCoilwiseCG(data_calib, trj_calib, calib_size; U)
+    x = calculateCoilwiseCG(data, trj, calib_size; U, mask=mask_calib, Niter=Niter)
 
     imdims = ntuple(i -> i, length(img_shape))
     kbp = fftshift(x, imdims)
@@ -80,6 +70,10 @@ function calcCoilMaps(data::AbstractVector{<:AbstractMatrix{Complex{T}}}, trj::A
     return cmaps
 end
 
-function calcCoilMaps(data::AbstractMatrix{Complex{T}}, trj::AbstractMatrix{T}, img_shape::NTuple{N,Int}; kernel_size=ntuple(_ -> 6, N), calib_size=ntuple(_ -> 24, N), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, verbose=false) where {N,T}
-    calcCoilMaps([data], [trj], img_shape; U=I(1), kernel_size, calib_size, eigThresh_1, eigThresh_2, nmaps, verbose)
+# wrappers for use with 4D arrays where the nr of ADC samples per readout is within a separate 2ⁿᵈ axis
+function calculateCoilMaps(data::AbstractArray{cT,4}, trj::AbstractArray{T,4}, img_shape::NTuple{N,Int}; mask=trues(size(trj)[2:end]), kwargs...) where {T,cT<:Complex,N}
+    data = reshape(data, :, size(data,3), size(data,4))
+    trj = reshape(trj, size(trj, 1), :, size(trj,4))
+    mask = reshape(mask, :, size(mask,3))
+    return calculateCoilMaps(data, trj, img_shape; kwargs..., mask)
 end

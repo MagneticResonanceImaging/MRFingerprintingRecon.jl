@@ -14,11 +14,13 @@ Random.seed!(42)
 T  = Float32
 Nx = 32
 Nr = 2Nx
-Nspokes = 100
+Ncyc = 100
 Ncoil = 9
+Nt = 1
+img_shape = (Nx,Nx)
 
 ## Create trajectory
-trj = MRFingerprintingRecon.traj_2d_radial_goldenratio(Nr, Nspokes, 1; N=1)
+trj = MRFingerprintingRecon.traj_2d_radial_goldenratio(Nr, Ncyc, Nt)
 
 ## Create phantom geometry
 x = shepp_logan(Nx)
@@ -42,23 +44,24 @@ end
 cmaps = [cmaps[:,:,ic] for ic=1:Ncoil]
 
 ## Simulate data
-data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil)]
-nfftplan = plan_nfft(trj[1], (Nx,Nx))
-xcoil = similar(x, Complex{T})
-for icoil ∈ 1:Ncoil
+data = Array{Complex{T}, 3}(undef, Nr*Ncyc, Nt, Ncoil);
+nfftplan = PlanNUFFT(Complex{T}, img_shape; fftshift=true);
+xcoil = Complex{T}.(copy(x));
+
+for icoil ∈ axes(data, 3)
     xcoil .= x
     xcoil .*= cmaps[icoil]
-    for it ∈ eachindex(data)
-        set_points!(nfftplan.p, trj[it])
-        @views mul!(data[it][:,icoil], nfftplan, xcoil)
+    for it ∈ axes(data, 2)
+        set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reshape(trj[:,:,it], 2, :)))
+        @views exec_type2!(data[:,it,icoil], nfftplan, xcoil)
     end
 end
 
 ## Test GROG kernels for some spokes in golden ratio based trajectory
 lnG = MRFingerprintingRecon.grog_calib(data, trj, Nr)
 
-data_r = reshape(data[1], Nr, Nspokes, Ncoil)
-trj_r = reshape(trj[1], 2, Nr, Nspokes)
+data_r = reshape(data, Nr, Ncyc*Nt, Ncoil)
+trj_r = reshape(trj, 2, Nr, Ncyc*Nt)
 for ispoke ∈ rand(axes(trj_r, 3), 42) # test randomly 42 time frames
     # Distance matrix θn
     nm = dropdims(diff(trj_r[:, 1:2, ispoke],dims=2),dims=2) .* Nr
@@ -68,4 +71,3 @@ for ispoke ∈ rand(axes(trj_r, 3), 42) # test randomly 42 time frames
     # FIXME: Relative tolerance the best choice?
     @test d1_shifted ≈ d2 rtol = 3e-1
 end
-
