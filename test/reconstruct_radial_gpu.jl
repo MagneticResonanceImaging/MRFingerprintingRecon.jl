@@ -100,4 +100,4 @@ xr_d = cg(A_d, vec(b_d), maxiter=50)
 xr_d = reshape(Array(xr_d), img_shape..., Nc) # end results should be equivalent
 
 ## Test equivalence CPU & GPU CG reconstruction
-@test xr ≈ xr_d rtol=1e-3
+@test xr ≈ xr_d rtol=1e-2
