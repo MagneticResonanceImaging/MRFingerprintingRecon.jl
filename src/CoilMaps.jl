@@ -9,8 +9,8 @@ Estimate coil sensitivity maps using ESPIRiT [1].
 - `img_shape::NTuple{N,Int}`: Shape of image
 
 # Keyword Arguments
-- `U::Matrix` = N==3 ? ones(size(data,1)) : I(1): Basis coefficients of subspace (only defined if `data` and `trj` are vectors of matrices)
-- `density_compensation`=:`radial_3D`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractVector{<:AbstractVector}`
+- `U::Matrix` = ones(T, size(trj)[end]) : I(1): Basis coefficients of subspace
+- `density_compensation`=:`radial_3D`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractArray{T}`
 - `kernel_size`=`ntuple(_ -> 6, N)`: Kernel size
 - `calib_size`=`ntuple(_ -> 24, N)`: Size of calibration region
 - `eigThresh_1`=0.01: Threshold of first eigenvalue

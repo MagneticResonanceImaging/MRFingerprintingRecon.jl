@@ -1,7 +1,7 @@
 function MRFingerprintingRecon.NFFTNormalOp(
     img_shape,
     trj::CuArray{T,3},
-    U::CuArray{T,2};
+    U::CuArray{T};
     cmaps = [CUDA.ones(T, img_shape)],
     mask = CUDA.ones(Bool, size(trj)[2:end]),
     verbose = false
@@ -87,14 +87,14 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T,3}, U::CuArra
     nsamp_t = cu(sum(mask, dims=1))
     Ncoeff = size(U, 2)
 
-    # Allocate kernel arrays, write Λ as packed storage arrays
+    # Allocate kernel arrays, write Λ as packed storage arrays (https://www.netlib.org/lapack/lug/node123.html)
     λ  = CuArray{Complex{T}}(undef, img_shape_os)
     λ2 = similar(λ)
     Λ  = CuArray{T}(undef, Int(Ncoeff*(Ncoeff+1)/2), length(kmask_indcs)) # requires basis U to be real
 
     S = CuArray{Complex{T}}(undef, sum(nsamp_t))
 
-    # Prep plans
+    # Prep FFT and NUFFT plans
     fftplan  = plan_fft(λ)
     nfftplan = PlanNUFFT(Complex{T}, img_shape_os; backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200)) # use plan specific to real inputs
     set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
@@ -118,7 +118,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T,3}, U::CuArra
             t = @elapsed begin
                 @cuda threads=threads blocks=blocks kernel_uprod!(S, U, nsamp_t, cumsum_nsamp, ic1, ic2)
 
-                exec_type1!(λ2, nfftplan, vec(S))
+                exec_type1!(λ2, nfftplan, vec(S)) # type 1: non-uniform points to uniform grid
                 mul!(λ, fftplan, λ2)
 
                 @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
@@ -160,6 +160,7 @@ function kernel_uprod!(S, U, nsamp_t, cumsum_nsamp, ic1, ic2)
     it = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     ik = (blockIdx().y - 1) * blockDim().y + threadIdx().y
 
+    # Multiply signal vector by basis, accounting for varying number of samples per time frame
     if it <= length(nsamp_t)
         Uprod = U[it, ic1] * U[it, ic2]
         if ik <= nsamp_t[it]
@@ -169,6 +170,7 @@ function kernel_uprod!(S, U, nsamp_t, cumsum_nsamp, ic1, ic2)
     end
 end
 
+# Place non-zero elements of kernel as real values in Λ
 function kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
     i = (blockIdx().x-1) * blockDim().x + threadIdx().x
 
@@ -198,7 +200,7 @@ function kernel_mul!(kL2_rs, Λ, kL1_rs, kmask_indcs, ind_lookup)
     return
 end
 
-# wrapper for 4D data arrays
+# Wrapper for 4D data arrays
 function MRFingerprintingRecon.NFFTNormalOp(img_shape, trj::CuArray{T,4}, U::CuArray{T}; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T}
     trj = reshape(trj, size(trj,1), :, size(trj,4))
     mask = reshape(mask, :, size(mask,3))

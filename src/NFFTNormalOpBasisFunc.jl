@@ -19,11 +19,17 @@ When the basis functions `U` are real-valued, a real-only NUFFT is used to compu
 - `kmask_indcs::Vector{Int}`: Sampling indices of Toeplitz mask
 - `verbose::Boolean`=`false`: Verbose level
 - `num_fft_threads::Int`=`round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1))`: Number of threads for FFT
+
+# References
+[1] Wajer, F.T.A.W., Pruessmann, K.P. “Major Speedup of Reconstruction for Sensitivity Encoding with Arbitrary Trajectories”. In: Proc. Intl. Soc. Mag. Reson. Med 9 (2001).
+[2] Fessler, J.A. et al. "Toeplitz-Based Iterative Image Reconstruction for MRI With Correction for Magnetic Field Inhomogeneity". IEEE Trans. Signal Process., 53.9 (2006).
+[3] Mani, M. et al. “Fast iterative algorithm for the reconstruction of multishot non-cartesian diffusion data”. Magn Reson Med. 74.4 (2015), pp. 1086–1094. doi: 10.1002/mrm.25486.
+[4] Uecker, M., Zhang, S., Frahm, J. “Nonlinear inverse reconstruction for real-time MRI of the human heart using undersampled radial FLASH". Magn Res Med. 63 (2010), pp. 1456–1462. doi: 10.1002/mrm.22453.
 """
 function NFFTNormalOp(
     img_shape,
     trj::AbstractArray{T,3},
-    U::AbstractArray{Tc,2};
+    U::AbstractArray{Tc};
     cmaps=[ones(T, img_shape)],
     mask=trues(size(trj)[2:end]),
     verbose = false,
@@ -103,23 +109,27 @@ function calculate_kmask_indcs(img_shape_os, trj::AbstractArray{T}; mask=trues(s
     return kmask_indcs
 end
 
+# calculation for complex-valued basis U
 function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray{T,3}, U::AbstractArray{Tc}; mask=trues(size(trj)[2:end]), verbose=false) where {T, Tc <: Complex{T}}
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
-    nsamp_t = sum(mask, dims=1) |> vec
+    # count the number of samples per time frame using the mask
+    nsamp_t = sum(mask; dims=1) |> vec
     cumsum_nsamp = cumsum(nsamp_t)
-    Ncoeff = size(U, 2)
+    prepend!(cumsum_nsamp, 1)
 
+    Ncoeff = size(U, 2)
     λ  = Array{Complex{T}}(undef, img_shape_os)
     λ2 = similar(λ)
     Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
     S = Array{Complex{T}}(undef, sum(nsamp_t))
 
+    # Prep FFT and NUFFT plans
     fftplan  = plan_fft(λ; flags=FFTW.MEASURE, num_threads=Threads.nthreads())
     nfftplan = PlanNUFFT(Complex{T}, img_shape_os) # default is without fftshift
-    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
+    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask])) # transform matrix to tuples, change sign of FT exponent, change range to (0,2π)
 
     # Evaluating only the upper triangular matrix assumes that the PSF from the rightmost voxel to the leftmost voxel is the adjoint of the PSF in the opposite direction.
     # For the outmost voxel, this is not correct, but the resulting images are virtually identical in our test cases.
@@ -128,12 +138,12 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray{T,3}, U::
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
                 @simd for it ∈ axes(U,1)
-                    idx1 = (it == 1) ? 1 : cumsum_nsamp[it-1] + 1
-                    idx2 = cumsum_nsamp[it]
+                    idx1 = cumsum_nsamp[it]
+                    idx2 = cumsum_nsamp[it + 1]
                     @inbounds S[idx1:idx2] .= conj(U[it,ic1]) * U[it,ic2]
                 end
 
-                exec_type1!(λ2, nfftplan, vec(S))
+                exec_type1!(λ2, nfftplan, vec(S)) # type 1: non-uniform points to uniform grid
                 mul!(λ, fftplan, λ2)
 
                 Threads.@threads for it ∈ eachindex(kmask_indcs)
@@ -147,23 +157,27 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray{T,3}, U::
     return Λ, kmask_indcs
 end
 
+# kernel is assumed to be real-valued for faster computation, highly accurate if U is a set of real basis functions
 function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray, U::AbstractArray{T}; mask=trues(size(trj)[2:end]), verbose=false) where {T <: Real}
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
-    nsamp_t = sum(mask, dims=1) |> vec
+    # count the number of samples per time frame using the mask
+    nsamp_t = sum(mask; dims=1) |> vec
     cumsum_nsamp = cumsum(nsamp_t)
-    Ncoeff = size(U, 2)
+    prepend!(cumsum_nsamp, 1)
 
+    Ncoeff = size(U, 2)
     λ  = Array{T}(undef, img_shape_os)
     λ2 = Array{Complex{T}}(undef, img_shape_os[1] ÷ 2 + 1, Base.tail(img_shape_os)...)
     Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
 
     S = Array{T}(undef, sum(nsamp_t))
 
+    # Prep FFT and NUFFT plans specific to real non-uniform data
     brfftplan = plan_brfft(λ2, img_shape_os[1]; flags=FFTW.MEASURE, num_threads=Threads.nthreads())
-    nfftplan = PlanNUFFT(T, img_shape_os) # use plan specific to real inputs
+    nfftplan = PlanNUFFT(T, img_shape_os)
     set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
 
     # Evaluating only the upper triangular matrix assumes that the PSF from the rightmost voxel to the leftmost voxel is the adjoint of the PSF in the opposite direction.
@@ -172,8 +186,8 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray, U::Abstr
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
                 @simd for it ∈ axes(U,1)
-                    idx1 = (it == 1) ? 1 : cumsum_nsamp[it-1] + 1
-                    idx2 = cumsum_nsamp[it]
+                    idx1 = cumsum_nsamp[it]
+                    idx2 = cumsum_nsamp[it + 1]
                     @inbounds S[idx1:idx2] .= U[it,ic1] * U[it,ic2]
                 end
 

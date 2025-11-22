@@ -38,7 +38,6 @@ cmaps = ones(Complex{T}, Nx, Nx, Ncoil)
 [cmaps[:,i,8] .*= exp( 2im * π * i/Nx) for i ∈ axes(cmaps,2)]
 [cmaps[:,i,9] .*= exp(-2im * π * i/Nx) for i ∈ axes(cmaps,2)]
 
-
 ## Set up new data format
 for i ∈ CartesianIndices(@view cmaps[:,:,1])
     cmaps[i,:] ./= norm(cmaps[i,:])

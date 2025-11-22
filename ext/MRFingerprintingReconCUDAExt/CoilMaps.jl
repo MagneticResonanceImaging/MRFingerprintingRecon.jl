@@ -4,7 +4,7 @@ function MRFingerprintingRecon.calculateCoilMaps(data::CuArray{Complex{T}}, trj:
     calib_scale = cu(collect(img_shape ./ calib_size))
     trj_idx = reshape(all(abs.(trj) .* calib_scale .< 0.5; dims=1), size(trj, 2), :)
     mask .&= trj_idx # update mask to only take calib region of k-space in CoilwiseCG
-    trj  .*= calib_scale # scale trj for correct image dims
+    trj  .*= calib_scale # scale trj for correct FOV
 
     x = MRFingerprintingRecon.calculateCoilwiseCG(data, trj, calib_size; U, mask)
 
@@ -22,10 +22,10 @@ function MRFingerprintingRecon.calculateCoilMaps(data::CuArray{Complex{T}}, trj:
     return cmaps
 end
 
-# wrapper for 4D data arrays
+# wrapper for 4D data arrays with readout lines in separate axis
 function MRFingerprintingRecon.calculateCoilMaps(data::CuArray{cT,4}, trj::CuArray{T,4}, img_shape::NTuple{N,Int}; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {N,T,cT<:Complex}
     data = reshape(data, :, size(data,3), size(data,4))
-    trj = reshape(trj, size(trj, 1), :, size(trj,4))
+    trj = reshape(trj, size(trj,1), :, size(trj,4))
     mask = reshape(mask, :, size(mask,3))
     return calculateCoilMaps(data, trj, img_shape; kwargs..., mask)
 end

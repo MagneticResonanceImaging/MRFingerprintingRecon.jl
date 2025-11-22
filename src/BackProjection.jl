@@ -21,12 +21,15 @@ One of the following arguments needs to be supplied
 """
 function calculateBackProjection(data::AbstractArray{cT,3}, trj::AbstractArray{T,3}, img_shape; U=I(size(trj)[end]), mask=trues(size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T}}
     Ncoef = size(U, 2)
-    nsamp_t = sum(mask, dims=1) |> vec
+    
+    # count the number of samples per time frame using the mask
+    nsamp_t = sum(mask; dims=1) |> vec
     cumsum_nsamp = cumsum(nsamp_t)
+    prepend!(cumsum_nsamp, 1)
 
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true)
     trj_rs = trj[:, mask]
-    set_points!(p, NonuniformFFTs._transform_point_convention.(trj_rs))
+    set_points!(p, NonuniformFFTs._transform_point_convention.(trj_rs)) # transform matrix to tuples, change sign of FT exponent, change range to (0,2π)
 
     Ncoil = size(data, 3)
     xbp = Array{cT}(undef, img_shape..., Ncoef, Ncoil)
@@ -37,16 +40,15 @@ function calculateBackProjection(data::AbstractArray{cT,3}, trj::AbstractArray{T
     img_idx = CartesianIndices(img_shape)
     verbose && println("calculating backprojection...")
     flush(stdout)
-
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ axes(data, 3)
             for it ∈ axes(data, 2)
-                idx1 = (it == 1) ? 1 : cumsum_nsamp[it-1] + 1
-                idx2 = cumsum_nsamp[it]
+                idx1 = cumsum_nsamp[it]
+                idx2 = cumsum_nsamp[it + 1]
                 data_temp[idx1:idx2] .= data_rs[idx1:idx2,icoil] .* conj(U[it,icoef])
             end
             applyDensityCompensation!(data_temp, trj_rs; density_compensation)
-            @views exec_type1!(xbp[img_idx, icoef, icoil], p, data_temp)
+            @views exec_type1!(xbp[img_idx, icoef, icoil], p, data_temp) # type 1: non-uniform points to uniform grid
         end
         verbose && println("coefficient = $icoef: t = $t s")
         flush(stdout)
@@ -60,8 +62,10 @@ function calculateBackProjection(data::AbstractArray{cT,3}, trj::AbstractArray{T
     Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
 
-    nsamp_t = sum(mask, dims=1) |> vec
+    # Count the number of samples per time frame using the mask
+    nsamp_t = sum(mask; dims=1) |> vec
     cumsum_nsamp = cumsum(nsamp_t)
+    prepend!(cumsum_nsamp, 1)
 
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true)
     trj_rs = trj[:, mask]
@@ -78,12 +82,12 @@ function calculateBackProjection(data::AbstractArray{cT,3}, trj::AbstractArray{T
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
              @simd for it ∈ axes(data, 2)
-                idx1 = (it == 1) ? 1 : cumsum_nsamp[it-1] + 1
-                idx2 = cumsum_nsamp[it]
+                idx1 = cumsum_nsamp[it]
+                idx2 = cumsum_nsamp[it + 1]
                 @views data_temp[idx1:idx2] .= data_rs[idx1:idx2,icoil] .* conj(U[it,icoef])
             end
             applyDensityCompensation!(data_temp, trj_rs; density_compensation)
-            exec_type1!(xtmp, p, data_temp)
+            exec_type1!(xtmp, p, data_temp) # type 1: non-uniform points to uniform grid
             xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
         verbose && println("coefficient = $icoef: t = $t s")
@@ -103,7 +107,6 @@ function calculateBackProjection(data::AbstractArray{cT}, trj::AbstractArray{<:I
     Threads.@threads for icoef ∈ axes(U, 2)
         for icoil ∈ axes(data, 3)
             dataU[img_idx, icoef] .= 0
-
             for it ∈ axes(data, 2), is ∈ axes(data, 1)
                 if mask[is, it] # only incorporate samples within the mask
                     k_idx = ntuple(j -> mod1(trj[j, is, it] - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
@@ -150,7 +153,7 @@ end
 function calculateCoilwiseCG(data::AbstractArray{cT,3}, trj::AbstractArray{T,3}, img_shape; U=I(size(trj)[end]), mask=trues(size(trj)[2:end]), Niter=100, verbose=false) where {T<:Real,cT<:Complex{T}}
     Ncoil = size(data, 3)
 
-    AᴴA = NFFTNormalOp(img_shape, trj, U[:, 1:1]; mask=mask, verbose)
+    AᴴA = NFFTNormalOp(img_shape, trj, U[:, 1]; mask=mask, verbose)
     xbp = calculateBackProjection(data, trj, img_shape; U=U[:, 1], mask, verbose)
     x = zeros(cT, img_shape..., Ncoil)
 
@@ -165,7 +168,7 @@ end
 function calculateCoilwiseCG(data::AbstractArray{cT,3}, trj::AbstractArray{<:Integer,3}, img_shape; U=CUDA.ones(T, size(trj)[end]), mask=trues(size(trj)[2:end]), Niter=5, verbose=false) where {cT<:Complex}
     Ncoil = size(data, 3)
 
-    AᴴA = FFTNormalOp(img_shape, trj, U[:, 1]; mask)
+    AᴴA = FFTNormalOp(img_shape, trj, U[:, 1:1]; mask)
     xbp = calculateBackProjection(data, trj, img_shape; U=U[:, 1], mask)
     x = zeros(cT, img_shape..., Ncoil)
 
@@ -185,10 +188,7 @@ function applyDensityCompensation!(data, trj; density_compensation=:radial_3D)
     if density_compensation == :radial_3D
        data .*= vec(sum(abs2, trj, dims=1))
     elseif density_compensation == :radial_2D
-        a = vec(sqrt.(sum(abs2, trj, dims=1)))
-        println(size(a))
-        println(typeof(a))
-        data .*= a
+        data .*= vec(sqrt.(sum(abs2, trj, dims=1)))
     elseif density_compensation == :none
         # do nothing here
     elseif isa(density_compensation, AbstractArray)
@@ -209,15 +209,12 @@ function test_dimension(data, trj, U, cmaps)
     size(trj, 1) != length(img_shape) && throw(ArgumentError(
         "`cmaps` contains $(length(img_shape)) image plus one coil dimension, yet the 1ˢᵗ dimension of each trj is of length $(size(trj,1)). They should match and reflect the dimensionality of the image (2D vs 3D).",
     ))
-
     size(trj, 2) != size(data, 1) && throw(ArgumentError(
         "The 2ⁿᵈ dimension of each `trj` is $(size(trj,2)) and the 1ˢᵗ dimension of `data` is $(size(data,1)). They should match and reflect the number of k-space samples.",
     ))
-
     size(trj, 3) != size(data, 2) && throw(ArgumentError(
         "`trj` contains $(size(trj, 3)) time frames, while data consists of $(size(data,2)). They should match and reflect the number of time points.",
     ))
-
     Ncoil != size(data, 3) && throw(ArgumentError(
         "The last dimension of `cmaps` is $(Ncoil) and the 3ⁿᵈ dimension of data is $(size(data,3)). They should match and reflect the number of coils.",
     ))
@@ -226,7 +223,7 @@ end
 # wrappers for use with 4D arrays where the nr of ADC samples per readout is within a separate 2ⁿᵈ axis
 function calculateBackProjection(data::AbstractArray{cT,4}, trj::AbstractArray{T,4}, arg3; mask=trues(size(trj)[2:end]), kwargs...) where {T,cT<:Complex}
     data = reshape(data, :, size(data,3), size(data,4))
-    trj = reshape(trj, size(trj, 1), :, size(trj,4))
+    trj = reshape(trj, size(trj,1), :, size(trj,4))
     mask = reshape(mask, :, size(mask,3))
     return calculateBackProjection(data, trj, arg3; mask, kwargs...)
 end

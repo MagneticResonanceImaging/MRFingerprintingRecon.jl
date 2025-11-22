@@ -1,19 +1,21 @@
 function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,3}, trj::CuArray{T,3}, img_shape; U=cu(I(size(trj)[end])), mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T}}
-    nsamp_t = dropdims(sum(mask; dims=1); dims=1) # Nr of samples per time frame
-
+    nsamp_t = dropdims(sum(mask; dims=1); dims=1) # number of samples per time frame
     Ncoef = size(U, 2)
     Ncoil = size(data, 3)
     Uc = conj(U)
-    cumsum_nsamp = cumsum(nsamp_t[1:end-1]) |> x -> cat(CUDA.zeros(eltype(x), 1), x; dims=1);
+
+    # Compute the last index per time frame, and insert zero at position 1
+    cumsum_nsamp = cumsum(nsamp_t[1:end-1]) |> x -> cat(CUDA.zeros(eltype(x), 1), x; dims=1)
 
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true, backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200))
     trj_rs = trj[:, mask] # select subset of trj
-    set_points!(p, NonuniformFFTs._transform_point_convention.(trj_rs)) # transform matrix to tuples and change sign of FT exponent
+    set_points!(p, NonuniformFFTs._transform_point_convention.(trj_rs)) # transform matrix to tuples, change sign of FT exponent, change range to (0,2π)
 
     img_idx = CartesianIndices(img_shape)
     xbp = CUDA.zeros(cT, img_shape..., Ncoef, Ncoil)
     data_temp = CuArray{cT}(undef, sum(nsamp_t))
 
+    # Apply sampling mask to data and perform backprojection
     data_rs = data[mask, :]
     threads, blocks = default_kernel_config(nsamp_t)
     verbose && (CUDA.synchronize(); println("calculating backprojection..."); flush(stdout))
@@ -21,7 +23,7 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,3}, trj:
         t = @elapsed for icoil ∈ axes(data, 3)
             @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data_rs, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
             MRFingerprintingRecon.applyDensityCompensation!(data_temp, trj_rs; density_compensation)
-            @views exec_type1!(xbp[img_idx, icoef, icoil], p, data_temp) 
+            @views exec_type1!(xbp[img_idx, icoef, icoil], p, data_temp) # type 1: non-uniform points to uniform grid
         end
         verbose && (CUDA.synchronize(); println("coefficient = $icoef: t = $t s"); flush(stdout))
     end
@@ -29,13 +31,14 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,3}, trj:
 end
 
 function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,3}, trj::CuArray{T,3}, cmaps::AbstractVector{<:CuArray{cT,N}}; U=cu(I(size(trj)[end])), mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
-    nsamp_t = dropdims(sum(mask; dims=1); dims=1) # Nr of samples per time frame
+    nsamp_t = dropdims(sum(mask; dims=1); dims=1) # number of samples per time frame
     Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
     Uc = conj(U)
-    cumsum_nsamp = cumsum(nsamp_t[1:end-1]) |> x -> cat(CUDA.zeros(eltype(x), 1), x; dims=1);
+    
+    # Compute the last index per time frame, and insert zero at position 1
+    cumsum_nsamp = cumsum(nsamp_t[1:end-1]) |> x -> cat(CUDA.zeros(eltype(x), 1), x; dims=1)
 
-    # Plan NFFT
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true, backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200))
     trj_rs = trj[:, mask]
     set_points!(p, NonuniformFFTs._transform_point_convention.(trj_rs))
@@ -45,7 +48,7 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,3}, trj:
     xtmp = CuArray{cT}(undef, img_shape)
     data_temp = CuArray{cT}(undef, sum(nsamp_t))
 
-    ## Perform backprojection
+    # Apply sampling mask to data and perform backprojection
     data_rs = data[mask, :]
     threads, blocks = default_kernel_config(nsamp_t)
     verbose && (CUDA.synchronize(); println("calculating backprojection..."); flush(stdout))
@@ -53,7 +56,7 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,3}, trj:
         t = @elapsed for icoil ∈ eachindex(cmaps)
             @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data_rs, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
             MRFingerprintingRecon.applyDensityCompensation!(data_temp, trj_rs; density_compensation)
-            exec_type1!(xtmp, p, data_temp)
+            exec_type1!(xtmp, p, data_temp) # type 1: non-uniform points to uniform grid
             xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
         verbose && (CUDA.synchronize(); println("coefficient = $icoef: t = $t s"); flush(stdout))
@@ -83,7 +86,7 @@ function kernel_bp!(data_temp, data, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
     ik = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     it = (blockIdx().y - 1) * blockDim().y + threadIdx().y
 
-    # Multiply data by basis elements
+    # Multiply data by basis, accounting for varying number of samples per time frame
     if it <= length(nsamp_t)
         if ik <= nsamp_t[it]
             ik_abs = cumsum_nsamp[it] + ik # absolute sample index
@@ -93,6 +96,7 @@ function kernel_bp!(data_temp, data, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
     end
 end
 
+# Default threading for backprojection
 function default_kernel_config(nsamp_t)
     max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
     threads_x = min(max_threads, maximum(nsamp_t))
@@ -102,10 +106,10 @@ function default_kernel_config(nsamp_t)
     return threads, blocks
 end
 
-# wrappers for use with 4D arrays: nr of ADC samples per readout is separate at dims=2
+# Wrapper for use with 4D arrays, where nr of ADC samples per readout is in a separate at 2ⁿᵈ dim
 function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,4}, trj::CuArray{T,4}, arg3; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T,cT<:Complex}
     data = reshape(data, :, size(data,3), size(data,4))
-    trj = reshape(trj, size(trj, 1), :, size(trj,4))
+    trj = reshape(trj, size(trj,1), :, size(trj,4))
     mask = reshape(mask, :, size(mask,3))
     return MRFingerprintingRecon.calculateBackProjection(data, trj, arg3; kwargs..., mask)
 end
