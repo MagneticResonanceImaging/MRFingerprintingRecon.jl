@@ -1,19 +1,20 @@
-function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,3}, trj::CuArray{T,3}, img_shape; U=cu(I(size(trj)[end])), mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T}}
+function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,3}, trj::CuArray{T,3}, img_shape; U=cu(I(size(trj)[end])), mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,Tc<:Complex{T}}
     nsamp_t = dropdims(sum(mask; dims=1); dims=1) # number of samples per time frame
     Ncoef = size(U, 2)
     Ncoil = size(data, 3)
     Uc = conj(U)
 
     # Compute the last index per time frame, and insert zero at position 1
-    cumsum_nsamp = cumsum(nsamp_t[1:end-1]) |> x -> cat(CUDA.zeros(eltype(x), 1), x; dims=1)
+    cumsum_nsamp = CUDA.zeros(eltype(nsamp_t), size(nsamp_t)) 
+    cumsum_nsamp[2:end] = cumsum(nsamp_t[1:end-1]) # cumulative sum indicates to which time frame a sample belongs
 
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true, backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200))
     trj_rs = trj[:, mask] # select subset of trj
     set_points!(p, NonuniformFFTs._transform_point_convention.(trj_rs)) # transform matrix to tuples, change sign of FT exponent, change range to (0,2π)
 
     img_idx = CartesianIndices(img_shape)
-    xbp = CUDA.zeros(cT, img_shape..., Ncoef, Ncoil)
-    data_temp = CuArray{cT}(undef, sum(nsamp_t))
+    xbp = CUDA.zeros(Tc, img_shape..., Ncoef, Ncoil)
+    data_temp = CuArray{Tc}(undef, sum(nsamp_t))
 
     # Apply sampling mask to data and perform backprojection
     data_rs = data[mask, :]
@@ -30,23 +31,24 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,3}, trj:
     return xbp
 end
 
-function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,3}, trj::CuArray{T,3}, cmaps::AbstractVector{<:CuArray{cT,N}}; U=cu(I(size(trj)[end])), mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
+function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,3}, trj::CuArray{T,3}, cmaps::AbstractVector{<:CuArray{Tc,N}}; U=cu(I(size(trj)[end])), mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,Tc<:Complex{T},N}
     nsamp_t = dropdims(sum(mask; dims=1); dims=1) # number of samples per time frame
     Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
     Uc = conj(U)
     
     # Compute the last index per time frame, and insert zero at position 1
-    cumsum_nsamp = cumsum(nsamp_t[1:end-1]) |> x -> cat(CUDA.zeros(eltype(x), 1), x; dims=1)
+    cumsum_nsamp = CUDA.zeros(eltype(nsamp_t), size(nsamp_t))
+    cumsum_nsamp[2:end] = cumsum(nsamp_t[1:end-1]) # cumulative sum indicates to which time frame a sample belongs
 
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true, backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200))
     trj_rs = trj[:, mask]
     set_points!(p, NonuniformFFTs._transform_point_convention.(trj_rs))
 
     img_idx = CartesianIndices(img_shape)
-    xbp = CUDA.zeros(cT, img_shape..., Ncoef)
-    xtmp = CuArray{cT}(undef, img_shape)
-    data_temp = CuArray{cT}(undef, sum(nsamp_t))
+    xbp = CUDA.zeros(Tc, img_shape..., Ncoef)
+    xtmp = CuArray{Tc}(undef, img_shape)
+    data_temp = CuArray{Tc}(undef, sum(nsamp_t))
 
     # Apply sampling mask to data and perform backprojection
     data_rs = data[mask, :]
@@ -64,12 +66,12 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,3}, trj:
     return xbp
 end
 
-function calculateCoilwiseCG(data::CuArray{cT,3}, trj::CuArray{T,3}, img_shape; U=CUDA.ones(T, size(trj)[end]), mask=CUDA.ones(Bool, size(trj)[2:end]), maxiter=100, verbose=false) where {T<:Real,cT<:Complex{T}}
+function calculateCoilwiseCG(data::CuArray{Tc,3}, trj::CuArray{T,3}, img_shape; U=CUDA.ones(T, size(trj)[end]), mask=CUDA.ones(Bool, size(trj)[2:end]), maxiter=100, verbose=false) where {T<:Real,Tc<:Complex{T}}
     Ncoil = size(data, 3)
 
     AᴴA = MRFingerprintingRecon.NFFTNormalOp(img_shape, trj, U[:, 1]; mask=mask, verbose)
     xbp = MRFingerprintingRecon.calculateBackProjection(data, trj, img_shape; U=U[:, 1], mask=mask, verbose)
-    x = CUDA.zeros(cT, img_shape..., Ncoil)
+    x = CUDA.zeros(Tc, img_shape..., Ncoil)
 
     for icoil = 1:Ncoil
         bi = vec(@view xbp[CartesianIndices(img_shape), 1, icoil])
@@ -107,7 +109,7 @@ function default_kernel_config(nsamp_t)
 end
 
 # Wrapper for use with 4D arrays, where nr of ADC samples per readout is in a separate at 2ⁿᵈ dim
-function MRFingerprintingRecon.calculateBackProjection(data::CuArray{cT,4}, trj::CuArray{T,4}, arg3; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T,cT<:Complex}
+function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,4}, trj::CuArray{T,4}, arg3; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T,Tc<:Complex}
     data = reshape(data, :, size(data,3), size(data,4))
     trj = reshape(trj, size(trj,1), :, size(trj,4))
     mask = reshape(mask, :, size(mask,3))

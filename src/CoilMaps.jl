@@ -71,7 +71,7 @@ function calculateCoilMaps(data::AbstractArray{Complex{T}}, trj::AbstractArray{<
 end
 
 # wrappers for use with 4D arrays where the nr of ADC samples per readout is within a separate 2ⁿᵈ axis
-function calculateCoilMaps(data::AbstractArray{cT,4}, trj::AbstractArray{T,4}, img_shape::NTuple{N,Int}; mask=trues(size(trj)[2:end]), kwargs...) where {T,cT<:Complex,N}
+function calculateCoilMaps(data::AbstractArray{Tc,4}, trj::AbstractArray{T,4}, img_shape::NTuple{N,Int}; mask=trues(size(trj)[2:end]), kwargs...) where {T, Tc <: Complex, N}
     data = reshape(data, :, size(data,3), size(data,4))
     trj = reshape(trj, size(trj, 1), :, size(trj,4))
     mask = reshape(mask, :, size(mask,3))

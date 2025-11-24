@@ -23,7 +23,7 @@ function MRFingerprintingRecon.calculateCoilMaps(data::CuArray{Complex{T}}, trj:
 end
 
 # wrapper for 4D data arrays with readout lines in separate axis
-function MRFingerprintingRecon.calculateCoilMaps(data::CuArray{cT,4}, trj::CuArray{T,4}, img_shape::NTuple{N,Int}; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {N,T,cT<:Complex}
+function MRFingerprintingRecon.calculateCoilMaps(data::CuArray{Tc,4}, trj::CuArray{T,4}, img_shape::NTuple{N,Int}; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {N,T,Tc<:Complex}
     data = reshape(data, :, size(data,3), size(data,4))
     trj = reshape(trj, size(trj,1), :, size(trj,4))
     mask = reshape(mask, :, size(mask,3))

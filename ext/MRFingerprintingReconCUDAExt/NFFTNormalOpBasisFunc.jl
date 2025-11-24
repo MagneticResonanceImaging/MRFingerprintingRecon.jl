@@ -1,21 +1,23 @@
 function MRFingerprintingRecon.NFFTNormalOp(
     img_shape,
     trj::CuArray{T,3},
-    U::CuArray{T};
-    cmaps = [CUDA.ones(T, img_shape)],
-    mask = CUDA.ones(Bool, size(trj)[2:end]),
-    verbose = false
-    ) where {T <: Real}
+    U::CuArray{Tc};
+    cmaps=[CUDA.ones(T, img_shape)],
+    mask=CUDA.ones(Bool, size(trj)[2:end]),
+    verbose=false
+    ) where {T <: Real, Tc <: Union{T, Complex{T}}}
+    
     Λ, kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; mask, verbose)
+    
     return NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps)
 end
 
 function NFFTNormalOp(
     img_shape,
-    Λ::CuArray{T},
+    Λ::CuArray{Tc},
     kmask_indcs;
     cmaps=[CuArray(ones(T, img_shape))]
-    ) where {T <: Real}
+    ) where {T <: Real, Tc <: Union{T, Complex{T}}}
     @assert length(kmask_indcs) == size(Λ, length(size(Λ))) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`
     @assert all(kmask_indcs .> 0)
     @assert all(kmask_indcs .<= prod(2 .* img_shape))
@@ -61,7 +63,7 @@ function NFFTNormalOp(
 
 end
 
-#############################################################################
+## ##########################################################################
 # Internal use
 #############################################################################
 function calculate_kmask_indcs(img_shape_os, trj::CuArray{T,3}; mask=CUDA.ones(Bool, size(trj)[2:end])) where {T}
@@ -79,12 +81,13 @@ end
 
 # kernel is assumed to be real-valued (method only works with real basis U)
 function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T,3}, U::CuArray{T}; mask=CUDA.ones(Bool, size(trj)[2:end]), verbose=false) where {T <: Real}
+    @info "correct kernal call"
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
 
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
-    nsamp_t = cu(sum(mask, dims=1))
+    nsamp_t = cu(sum(mask, dims=1)) # number of samples per time frame
     Ncoeff = size(U, 2)
 
     # Allocate kernel arrays, write Λ as packed storage arrays (https://www.netlib.org/lapack/lug/node123.html)
@@ -99,8 +102,63 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T,3}, U::CuArra
     nfftplan = PlanNUFFT(Complex{T}, img_shape_os; backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200)) # use plan specific to real inputs
     set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
 
-    # Kernel helpers
-    cumsum_nsamp = cumsum(nsamp_t[1:end-1]) |> x -> cat(CUDA.zeros(eltype(x), 1), x; dims=1);
+    # The cumulative sum indicates in which time frame each sample is contained
+    cumsum_nsamp = CUDA.zeros(eltype(nsamp_t), size(nsamp_t))
+    cumsum_nsamp[2:end] = cumsum(nsamp_t[1:end-1])
+
+    # Params for kernel_uprod!
+    max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
+    threads_y = min(max_threads, maximum(nsamp_t))
+    threads_x = min(max_threads ÷ threads_y, length(nsamp_t))
+    threads = (threads_x, threads_y)
+    blocks = ceil.(Int, (length(nsamp_t), maximum(nsamp_t)) ./ threads)
+
+    # Params for kernel_sort!
+    threads_sort = min(max_threads, length(kmask_indcs))
+    blocks_sort = ceil.(Int, length(kmask_indcs) ./ threads_sort)
+
+    for ic2 ∈ 1:Ncoeff, ic1 ∈ 1:Ncoeff
+        if ic2 >= ic1 # eval. only upper triangular matrix
+            t = @elapsed begin
+                @cuda threads=threads blocks=blocks kernel_uprod!(S, U, nsamp_t, cumsum_nsamp, ic1, ic2)
+
+                exec_type1!(λ2, nfftplan, vec(S)) # type 1: non-uniform points to uniform grid
+                mul!(λ, fftplan, λ2)
+
+                @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
+            end
+            verbose && (CUDA.synchronize(); println("ic = ($ic1, $ic2): t = $t s"); flush(stdout))
+        end
+    end
+    return Λ, kmask_indcs
+end
+
+# kernel is complex-valued (for complex basis matrix U)
+function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T,3}, U::CuArray{Tc}; mask=CUDA.ones(Bool, size(trj)[2:end]), verbose=false) where {T <: Real, Tc <: Complex{T}}
+    @info "correct complex kernel call"
+    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
+
+    @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
+    @assert all(kmask_indcs .<= prod(img_shape_os))
+
+    nsamp_t = cu(sum(mask, dims=1)) # number of samples per time frame
+    Ncoeff = size(U, 2)
+
+    # Allocate kernel arrays
+    λ  = CuArray{Complex{T}}(undef, img_shape_os)
+    λ2 = similar(λ)
+    Λ  = CuArray{T}(undef, Int(Ncoeff*(Ncoeff+1)/2), length(kmask_indcs)) # requires basis U to be real
+
+    S = CuArray{Complex{T}}(undef, sum(nsamp_t))
+
+    # Prep FFT and NUFFT plans
+    fftplan  = plan_fft(λ)
+    nfftplan = PlanNUFFT(Complex{T}, img_shape_os; backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200)) # use plan specific to real inputs
+    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
+
+    # The cumulative sum indicates in which time frame each sample is contained
+    cumsum_nsamp = CUDA.zeros(eltype(nsamp_t), size(nsamp_t))
+    cumsum_nsamp[2:end] = cumsum(nsamp_t[1:end-1])
 
     # Params for kernel_uprod!
     max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)

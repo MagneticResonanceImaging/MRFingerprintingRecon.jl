@@ -5,7 +5,7 @@ Perform GROG kernel calibration based on whole radial trajectory and passed data
 Calibration follows the work on self-calibrating radial GROG (https://doi.org/10.1002/mrm.21565).
 
 # Arguments
-- `data::AbstractAbstractArray{cT}`: Complex dataset with dimensions (samples per time frame [Nr], time frames, Rx channels)
+- `data::AbstractAbstractArray{Tc}`: Complex dataset with dimensions (samples per time frame [Nr], time frames, Rx channels)
 - `trj::AbstractArray{T}`: Trajectory with samples corresponding to the dataset, passed as AbstractArray with dimension (dims, samples per time frame, time frames)
 - `Nr::Int`: Number of samples per read out
 """
@@ -54,7 +54,7 @@ end
 Perform gridding of data based on pre-calculated GROG kernel.
 
 # Arguments
-- `data::AbstractVector{<:AbstractMatrix{cT}}`: Complex dataset passed as AbstractVector of matrices
+- `data::AbstractVector{<:AbstractMatrix{Tc}}`: Complex dataset passed as AbstractVector of matrices
 - `trj::AbstractArray{T}}`: Trajectory with samples corresponding to the dataset passed as AbstractVector of matrices with Float32 entries
 - `lnG::AbstractArray{Matrix{T}}`: Natural logarithm of GROG kernel in all dimensions
 - `Nr::Int`: Number of samples per read out
@@ -105,7 +105,7 @@ end
 Perform GROG kernel calibration and gridding [1] of data in-place. The trajectory is returned with integer values.
 
 # Arguments
-- `data::AbstractArray{cT}}`: Complex dataset with dimensions (samples per time frame [Nr], time frames, Rx channels)
+- `data::AbstractArray{Tc}}`: Complex dataset with dimensions (samples per time frame [Nr], time frames, Rx channels)
 - `trj::AbstractArray{T}`: Trajectory with samples corresponding to the dataset, passed as AbstractArray with dimension (dims, samples per time frame, time frames)
 - `Nr::Int`: Number of samples per read out
 - `img_shape::Tuple{Int}`: Image dimensions

@@ -73,7 +73,7 @@ for icoil ∈ axes(data, 3)
     end
 end
 
-# create mask with false value to remove
+# Create sampling mask
 it_rm = 1
 icyc_rm = 5
 mask = trues(2Nx, Ncyc, Nt)

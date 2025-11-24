@@ -14,7 +14,7 @@ When the basis functions `U` are real-valued, a real-only NUFFT is used to compu
 - `img_shape::Tuple{Int}`: Image dimensions
 - `trj::AbstractArray{T}`: Trajectory, use `CuArray` as input type to use CUDA code.
 - `U::AbstractMatrix{Tc}`: Basis coefficients of subspace
-- `cmaps::AbstractVector{Matrix{cT,N}}`=`[ones(T, img_shape)]`: Coil sensitivities, use `AbstractVector{CuArray{cT,N}}` as type for use with CUDA code.
+- `cmaps::AbstractVector{Matrix{Tc,N}}`=`[ones(T, img_shape)]`: Coil sensitivities, use `AbstractVector{CuArray{Tc,N}}` as type for use with CUDA code.
 - `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
 - `kmask_indcs::Vector{Int}`: Sampling indices of Toeplitz mask
 - `verbose::Boolean`=`false`: Verbose level
@@ -32,9 +32,9 @@ function NFFTNormalOp(
     U::AbstractArray{Tc};
     cmaps=[ones(T, img_shape)],
     mask=trues(size(trj)[2:end]),
-    verbose = false,
-    num_fft_threads = round(Int, Threads.nthreads()/size(U, 2)),
-    ) where {T, Tc <: Union{T, Complex{T}}}
+    verbose=false,
+    num_fft_threads=round(Int, Threads.nthreads()/size(U, 2)),
+    ) where {T <: Real, Tc <: Union{T, Complex{T}}}
 
     Λ, kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; mask=mask, verbose=verbose)
 
@@ -46,7 +46,7 @@ function NFFTNormalOp(
     Λ::Array{Tc,3},
     kmask_indcs::Vector{<:Integer};
     cmaps=[ones(T, img_shape)],
-    num_fft_threads = round(Int, Threads.nthreads()/size(Λ, 1))
+    num_fft_threads=round(Int, Threads.nthreads()/size(Λ, 1))
     ) where {T, Tc <:Union{T, Complex{T}}}
 
     @assert length(kmask_indcs) == size(Λ,3) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`

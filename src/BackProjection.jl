@@ -1,6 +1,6 @@
 """
     calculateBackProjection(data, trj, img_shape; U, mask, density_compensation, verbose)
-    calculateBackProjection(data, trj, cmaps::AbstractVector{<:AbstractArray{cT,N}}; U, mask, density_compensation, verbose)
+    calculateBackProjection(data, trj, cmaps::AbstractVector{<:AbstractArray{Tc,N}}; U, mask, density_compensation, verbose)
     calculateBackProjection(data, trj, cmaps_img_shape; U, mask, density_compensation, verbose)
     calculateBackProjection(data, trj, cmaps; U, mask)
 
@@ -12,14 +12,14 @@ Calculate (filtered) backprojection.
 
 One of the following arguments needs to be supplied
 - `img_shape::NTuple{N,Int}`: Shape of image; in this case, the data is reconstructed per coil.
-- `cmaps::::AbstractVector{<:AbstractArray{T}}`: Coil sensitivities; in this case, the coils are added up to a single backprojection. Use `AbstractVector{CuArray{cT,N}}` as type for use with CUDA code.
+- `cmaps::::AbstractVector{<:AbstractArray{Tc}}`: Coil sensitivities; in this case, the coils are added up to a single backprojection. Use `AbstractVector{CuArray{Tc,N}}` as type for use with CUDA code.
 
 # Optional Keyword Arguments
 - `U::Matrix = I(length(data))` or `= I(1)``: Basis coefficients of subspace (only defined if data and trj have different timeframes)
 - `density_compensation = :none`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type `AbstractVector{<:AbstractVector}`
 - `verbose::Boolean = false`: Verbosity level
 """
-function calculateBackProjection(data::AbstractArray{cT,3}, trj::AbstractArray{T,3}, img_shape; U=I(size(trj)[end]), mask=trues(size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T}}
+function calculateBackProjection(data::AbstractArray{Tc,3}, trj::AbstractArray{T,3}, img_shape; U=I(size(trj)[end]), mask=trues(size(trj)[2:end]), density_compensation=:none, verbose=false) where {T <: Real, Tc <: Complex{T}}
     Ncoef = size(U, 2)
     
     # count the number of samples per time frame using the mask
@@ -32,10 +32,10 @@ function calculateBackProjection(data::AbstractArray{cT,3}, trj::AbstractArray{T
     set_points!(p, NonuniformFFTs._transform_point_convention.(trj_rs)) # transform matrix to tuples, change sign of FT exponent, change range to (0,2π)
 
     Ncoil = size(data, 3)
-    xbp = Array{cT}(undef, img_shape..., Ncoef, Ncoil)
+    xbp = Array{Tc}(undef, img_shape..., Ncoef, Ncoil)
 
     data_rs = data[mask, :]
-    data_temp = Array{cT}(undef, sum(mask))
+    data_temp = Array{Tc}(undef, sum(mask))
 
     img_idx = CartesianIndices(img_shape)
     verbose && println("calculating backprojection...")
@@ -56,7 +56,7 @@ function calculateBackProjection(data::AbstractArray{cT,3}, trj::AbstractArray{T
     return xbp
 end
 
-function calculateBackProjection(data::AbstractArray{cT,3}, trj::AbstractArray{T,3}, cmaps::AbstractVector{<:AbstractArray{cT,N}}; U=I(size(trj)[end]), mask=trues(size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,cT<:Complex{T},N}
+function calculateBackProjection(data::AbstractArray{Tc,3}, trj::AbstractArray{T,3}, cmaps::AbstractVector{<:AbstractArray{Tc,N}}; U=I(size(trj)[end]), mask=trues(size(trj)[2:end]), density_compensation=:none, verbose=false) where {T <: Real, Tc <: Complex{T}, N}
     test_dimension(data, trj, U, cmaps)
 
     Ncoef = size(U, 2)
@@ -70,11 +70,11 @@ function calculateBackProjection(data::AbstractArray{cT,3}, trj::AbstractArray{T
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true)
     trj_rs = trj[:, mask]
     set_points!(p, NonuniformFFTs._transform_point_convention.(trj_rs))
-    xbp = zeros(cT, img_shape..., Ncoef)
-    xtmp = Array{cT}(undef, img_shape)
+    xbp = zeros(Tc, img_shape..., Ncoef)
+    xtmp = Array{Tc}(undef, img_shape)
 
     data_rs = data[mask, :]
-    data_temp = Array{cT}(undef, sum(mask))
+    data_temp = Array{Tc}(undef, sum(mask))
     
     img_idx = CartesianIndices(img_shape)
     verbose && println("calculating backprojection...")
@@ -96,7 +96,7 @@ function calculateBackProjection(data::AbstractArray{cT,3}, trj::AbstractArray{T
     return xbp
 end
 
-function calculateBackProjection(data::AbstractArray{cT}, trj::AbstractArray{<:Integer,3}, cmaps::AbstractVector{<:AbstractArray}; U=I(size(trj)[end]), mask=trues(size(trj)[2:end])) where {cT<:Complex}
+function calculateBackProjection(data::AbstractArray{Tc}, trj::AbstractArray{<:Integer,3}, cmaps::AbstractVector{<:AbstractArray}; U=I(size(trj)[end]), mask=trues(size(trj)[2:end])) where {Tc <: Complex}
     Ncoeff = size(U, 2)
     img_shape = size(cmaps[1])
     img_idx = CartesianIndices(img_shape)
@@ -123,7 +123,7 @@ function calculateBackProjection(data::AbstractArray{cT}, trj::AbstractArray{<:I
     return xbp
 end
 
-function calculateBackProjection(data::AbstractArray{cT}, trj::AbstractArray{<:Integer,3}, img_shape; U=I(size(trj)[end]), mask=trues(size(trj)[2:end])) where {cT<:Complex}
+function calculateBackProjection(data::AbstractArray{Tc}, trj::AbstractArray{<:Integer,3}, img_shape; U=I(size(trj)[end]), mask=trues(size(trj)[2:end])) where {Tc <: Complex}
     Ncoeff = size(U, 2)
     Ncoil = size(data, 3)
     img_idx = CartesianIndices(img_shape)
@@ -150,12 +150,12 @@ function calculateBackProjection(data::AbstractArray{cT}, trj::AbstractArray{<:I
     return xbp
 end
 
-function calculateCoilwiseCG(data::AbstractArray{cT,3}, trj::AbstractArray{T,3}, img_shape; U=I(size(trj)[end]), mask=trues(size(trj)[2:end]), Niter=100, verbose=false) where {T<:Real,cT<:Complex{T}}
+function calculateCoilwiseCG(data::AbstractArray{Tc,3}, trj::AbstractArray{T,3}, img_shape; U=I(size(trj)[end]), mask=trues(size(trj)[2:end]), Niter=100, verbose=false) where {T <: Real, Tc <: Complex{T}}
     Ncoil = size(data, 3)
 
     AᴴA = NFFTNormalOp(img_shape, trj, U[:, 1]; mask=mask, verbose)
     xbp = calculateBackProjection(data, trj, img_shape; U=U[:, 1], mask, verbose)
-    x = zeros(cT, img_shape..., Ncoil)
+    x = zeros(Tc, img_shape..., Ncoil)
 
     for icoil ∈ axes(xbp, length(img_shape) + 2)
         bi = vec(@view xbp[CartesianIndices(img_shape), 1, icoil])
@@ -165,12 +165,12 @@ function calculateCoilwiseCG(data::AbstractArray{cT,3}, trj::AbstractArray{T,3},
     return x
 end
 
-function calculateCoilwiseCG(data::AbstractArray{cT,3}, trj::AbstractArray{<:Integer,3}, img_shape; U=CUDA.ones(T, size(trj)[end]), mask=trues(size(trj)[2:end]), Niter=5, verbose=false) where {cT<:Complex}
+function calculateCoilwiseCG(data::AbstractArray{Tc,3}, trj::AbstractArray{<:Integer,3}, img_shape; U=CUDA.ones(T, size(trj)[end]), mask=trues(size(trj)[2:end]), Niter=5, verbose=false) where {Tc <: Complex}
     Ncoil = size(data, 3)
 
     AᴴA = FFTNormalOp(img_shape, trj, U[:, 1:1]; mask)
     xbp = calculateBackProjection(data, trj, img_shape; U=U[:, 1], mask)
-    x = zeros(cT, img_shape..., Ncoil)
+    x = zeros(Tc, img_shape..., Ncoil)
 
     for icoil ∈ axes(xbp, length(img_shape) + 2)
         bi = vec(@view xbp[CartesianIndices(img_shape), 1, icoil])
@@ -221,7 +221,7 @@ function test_dimension(data, trj, U, cmaps)
 end
 
 # wrappers for use with 4D arrays where the nr of ADC samples per readout is within a separate 2ⁿᵈ axis
-function calculateBackProjection(data::AbstractArray{cT,4}, trj::AbstractArray{T,4}, arg3; mask=trues(size(trj)[2:end]), kwargs...) where {T,cT<:Complex}
+function calculateBackProjection(data::AbstractArray{Tc,4}, trj::AbstractArray{T,4}, arg3; mask=trues(size(trj)[2:end]), kwargs...) where {T, Tc <: Complex}
     data = reshape(data, :, size(data,3), size(data,4))
     trj = reshape(trj, size(trj,1), :, size(trj,4))
     mask = reshape(mask, :, size(mask,3))
