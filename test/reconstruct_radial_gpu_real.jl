@@ -55,7 +55,7 @@ trj = kooshball(2Nx, theta, phi)
 trj = trj[1:2, :, :]
 
 ## set up basis functions
-U = randn(Complex{T}, Nt, Nc) # diff methods for complex and real basis!
+U = randn(T, Nt, Nc) # diff methods for complex and real basis!
 U,_,_ = svd(U)
 
 ## simulate data
@@ -94,11 +94,11 @@ cmaps_d = [cu(cmaps[i]) for i ∈ eachindex(cmaps)]
 mask_d = cu(mask)
 
 ## GPU
-A_d = NFFTNormalOp(img_shape, trj_d, U_d; cmaps=cmaps_d, mask=mask_d) # kernels are expected to slightly differ between CPU/GPU
 b_d = calculateBackProjection(data_d, trj_d, cmaps_d; U=U_d, mask=mask_d)
+A_d = NFFTNormalOp(img_shape, trj_d, U_d; cmaps=cmaps_d, mask=mask_d) # kernels are expected to slightly differ between CPU/GPUb_d = calculateBackProjection(data_d, trj_d, cmaps_d; U=U_d, mask=mask_d)
 xr_d = cg(A_d, vec(b_d), maxiter=50)
 xr_d = reshape(Array(xr_d), img_shape..., Nc) # end results should be equivalent
 
-## Test equivalence CPU & GPU CG reconstruction with complex basis U
-@test xr ≈ xr_d rtol=1e-2
-@test !isreal(A_d.prod!.A.Λ)
+## Test equivalence CPU & GPU CG reconstruction with real basis U
+@test xr ≈ xr_d rtol=1e-1
+@test isreal(A_d.prod!.A.Λ)

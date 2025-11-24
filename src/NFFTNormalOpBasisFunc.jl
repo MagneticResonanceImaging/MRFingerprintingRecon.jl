@@ -41,6 +41,13 @@ function NFFTNormalOp(
     return NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps, num_fft_threads=num_fft_threads)
 end
 
+# Wrapper for 4D data arrays
+function NFFTNormalOp(img_shape, trj::AbstractArray{T,4}, U::AbstractArray{Tc,2}; mask=trues(size(trj)[2:end]), kwargs...) where {T, Tc <: Union{T, Complex{T}}}
+    trj = reshape(trj, size(trj, 1), :, size(trj,4))
+    mask = reshape(mask, :, size(mask,3))
+    return NFFTNormalOp(img_shape, trj, U; kwargs..., mask)
+end
+
 function NFFTNormalOp(
     img_shape,
     Λ::Array{Tc,3},
@@ -77,7 +84,6 @@ function NFFTNormalOp(
     )
 end
 
-
 #############################################################################
 # Internal use
 #############################################################################
@@ -109,7 +115,7 @@ function calculate_kmask_indcs(img_shape_os, trj::AbstractArray{T}; mask=trues(s
     return kmask_indcs
 end
 
-# calculation for complex-valued basis U
+# Calculation for complex-valued basis U
 function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray{T,3}, U::AbstractArray{Tc}; mask=trues(size(trj)[2:end]), verbose=false) where {T, Tc <: Complex{T}}
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
@@ -120,10 +126,11 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray{T,3}, U::
     cumsum_nsamp = cumsum(nsamp_t)
     prepend!(cumsum_nsamp, 1)
 
-    Ncoeff = size(U, 2)
     λ  = Array{Complex{T}}(undef, img_shape_os)
     λ2 = similar(λ)
-    Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
+    
+    Ncoeff = size(U, 2)
+    Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
     S = Array{Complex{T}}(undef, sum(nsamp_t))
 
     # Prep FFT and NUFFT plans
@@ -157,7 +164,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray{T,3}, U::
     return Λ, kmask_indcs
 end
 
-# kernel is assumed to be real-valued for faster computation, highly accurate if U is a set of real basis functions
+# Kernel is assumed to be real-valued for faster computation, highly accurate if U is a set of real basis functions
 function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray, U::AbstractArray{T}; mask=trues(size(trj)[2:end]), verbose=false) where {T <: Real}
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
@@ -168,14 +175,15 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray, U::Abstr
     cumsum_nsamp = cumsum(nsamp_t)
     prepend!(cumsum_nsamp, 1)
 
-    Ncoeff = size(U, 2)
     λ  = Array{T}(undef, img_shape_os)
     λ2 = Array{Complex{T}}(undef, img_shape_os[1] ÷ 2 + 1, Base.tail(img_shape_os)...)
-    Λ  = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
 
+    Ncoeff = size(U, 2)
+    Λ = Array{T}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
     S = Array{T}(undef, sum(nsamp_t))
 
     # Prep FFT and NUFFT plans specific to real non-uniform data
+    # Use brfft (and conjugate λ2) because an rfft that maps from complex to real does not exist in FFTW package
     brfftplan = plan_brfft(λ2, img_shape_os[1]; flags=FFTW.MEASURE, num_threads=Threads.nthreads())
     nfftplan = PlanNUFFT(T, img_shape_os)
     set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
@@ -192,7 +200,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray, U::Abstr
                 end
 
                 exec_type1!(λ2, nfftplan, vec(S))
-                λ2 .= conj.(λ2) # conjugate input to flip the sign of the exponential in brfft (FFTW and NonuniformFFTs differ in convention)
+                λ2 .= conj.(λ2) # conjugate input to flip the sign of the exponential in brfft
                 mul!(λ, brfftplan, λ2)
 
                 Threads.@threads for it ∈ eachindex(kmask_indcs)
@@ -246,11 +254,4 @@ function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) w
         BLAS.set_num_threads(bthreads)
     end
     return x
-end
-
-# wrapper for 4D data arrays
-function NFFTNormalOp(img_shape, trj::AbstractArray{T,4}, U::AbstractArray{Tc,2}; mask=trues(size(trj)[2:end]), kwargs...) where {T, Tc <: Union{T, Complex{T}}}
-    trj = reshape(trj, size(trj, 1), :, size(trj,4))
-    mask = reshape(mask, :, size(mask,3))
-    return NFFTNormalOp(img_shape, trj, U; kwargs..., mask)
 end

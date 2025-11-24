@@ -66,6 +66,14 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,3}, trj:
     return xbp
 end
 
+# Wrapper for use with 4D arrays, where nr of ADC samples per readout is in a separate at 2ⁿᵈ dim
+function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,4}, trj::CuArray{T,4}, arg3; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T,Tc<:Complex}
+    data = reshape(data, :, size(data,3), size(data,4))
+    trj = reshape(trj, size(trj,1), :, size(trj,4))
+    mask = reshape(mask, :, size(mask,3))
+    return MRFingerprintingRecon.calculateBackProjection(data, trj, arg3; kwargs..., mask)
+end
+
 function calculateCoilwiseCG(data::CuArray{Tc,3}, trj::CuArray{T,3}, img_shape; U=CUDA.ones(T, size(trj)[end]), mask=CUDA.ones(Bool, size(trj)[2:end]), maxiter=100, verbose=false) where {T<:Real,Tc<:Complex{T}}
     Ncoil = size(data, 3)
 
@@ -106,12 +114,4 @@ function default_kernel_config(nsamp_t)
     threads = (threads_x, threads_y)
     blocks = ceil.(Int, (maximum(nsamp_t), length(nsamp_t)) ./ threads) # samples as inner index
     return threads, blocks
-end
-
-# Wrapper for use with 4D arrays, where nr of ADC samples per readout is in a separate at 2ⁿᵈ dim
-function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,4}, trj::CuArray{T,4}, arg3; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T,Tc<:Complex}
-    data = reshape(data, :, size(data,3), size(data,4))
-    trj = reshape(trj, size(trj,1), :, size(trj,4))
-    mask = reshape(mask, :, size(mask,3))
-    return MRFingerprintingRecon.calculateBackProjection(data, trj, arg3; kwargs..., mask)
 end
