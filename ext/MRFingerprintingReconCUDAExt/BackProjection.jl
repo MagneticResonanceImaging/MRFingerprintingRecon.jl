@@ -19,14 +19,14 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,3}, trj:
     # Apply sampling mask to data and perform backprojection
     data_rs = data[mask, :]
     threads, blocks = default_kernel_config(nsamp_t)
-    verbose && (CUDA.synchronize(); println("calculating backprojection..."); flush(stdout))
+    verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ axes(data, 3)
             @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data_rs, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
             MRFingerprintingRecon.applyDensityCompensation!(data_temp, trj_rs; density_compensation)
             @views exec_type1!(xbp[img_idx, icoef, icoil], p, data_temp) # type 1: non-uniform points to uniform grid
         end
-        verbose && (CUDA.synchronize(); println("coefficient = $icoef: t = $t s"); flush(stdout))
+        verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
     end
     return xbp
 end
@@ -53,7 +53,7 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,3}, trj:
     # Apply sampling mask to data and perform backprojection
     data_rs = data[mask, :]
     threads, blocks = default_kernel_config(nsamp_t)
-    verbose && (CUDA.synchronize(); println("calculating backprojection..."); flush(stdout))
+    verbose && println("calculating backprojection..."); flush(stdout)
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
             @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data_rs, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
@@ -61,7 +61,7 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,3}, trj:
             exec_type1!(xtmp, p, data_temp) # type 1: non-uniform points to uniform grid
             xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
-        verbose && (CUDA.synchronize(); println("coefficient = $icoef: t = $t s"); flush(stdout))
+        verbose && println("coefficient = $icoef: t = $t s"); flush(stdout)
     end
     return xbp
 end

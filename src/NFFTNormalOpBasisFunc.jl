@@ -30,7 +30,7 @@ function NFFTNormalOp(
     img_shape,
     trj::AbstractArray{T,3},
     U::AbstractArray{Tc};
-    cmaps=[ones(T, img_shape)],
+    cmaps=1,
     mask=trues(size(trj)[2:end]),
     verbose=false,
     num_fft_threads=round(Int, Threads.nthreads()/size(U, 2)),
@@ -52,7 +52,7 @@ function NFFTNormalOp(
     img_shape,
     Λ::Array{Tc,3},
     kmask_indcs::Vector{<:Integer};
-    cmaps=[ones(T, img_shape)],
+    cmaps=1,
     num_fft_threads=round(Int, Threads.nthreads()/size(Λ, 1))
     ) where {T, Tc <:Union{T, Complex{T}}}
 

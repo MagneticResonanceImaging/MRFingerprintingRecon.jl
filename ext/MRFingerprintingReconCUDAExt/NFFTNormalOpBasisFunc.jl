@@ -2,7 +2,7 @@ function MRFingerprintingRecon.NFFTNormalOp(
     img_shape,
     trj::CuArray{T,3},
     U::CuArray{Tc};
-    cmaps=[CUDA.ones(T, img_shape)],
+    cmaps=1,
     mask=CUDA.ones(Bool, size(trj)[2:end]),
     verbose=false
     ) where {T <: Real, Tc <: Union{T, Complex{T}}}
@@ -13,7 +13,7 @@ function MRFingerprintingRecon.NFFTNormalOp(
 end
 
 # Wrapper for 4D data arrays
-function MRFingerprintingRecon.NFFTNormalOp(img_shape, trj::CuArray{T,4}, U::CuArray{T}; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T}
+function MRFingerprintingRecon.NFFTNormalOp(img_shape, trj::CuArray{T,4}, U::CuArray{Tc}; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T, Tc <: Union{T, Complex{T}}}
     trj = reshape(trj, size(trj,1), :, size(trj,4))
     mask = reshape(mask, :, size(mask,3))
     return MRFingerprintingRecon.NFFTNormalOp(img_shape, trj, U; kwargs..., mask)
@@ -23,7 +23,7 @@ function MRFingerprintingRecon.NFFTNormalOp(
     img_shape,
     Λ::CuArray{Tc},
     kmask_indcs;
-    cmaps=[CuArray(ones(T, img_shape))]
+    cmaps=1
     ) where {T <: Real, Tc <: Union{T, Complex{T}}}
     @assert length(kmask_indcs) == size(Λ, length(size(Λ))) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`
     @assert all(kmask_indcs .> 0)
@@ -130,7 +130,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T,3}, U::CuArra
 
                 @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
             end
-            verbose && (CUDA.synchronize(); println("ic = ($ic1, $ic2): t = $t s"); flush(stdout))
+            verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
         end
     end
     return Λ, kmask_indcs
@@ -182,7 +182,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T,3}, U::CuArra
 
                 @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
             end
-            verbose && (CUDA.synchronize(); println("ic = ($ic1, $ic2): t = $t s"); flush(stdout))
+            verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
         end
     end
     return Λ, kmask_indcs
