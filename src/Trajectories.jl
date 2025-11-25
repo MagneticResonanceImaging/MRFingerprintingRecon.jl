@@ -46,7 +46,7 @@ Function to calculate  golden means [1] based kooshball trajectory.
 - `delay::Tuple{Float, Float, Float}`= `(0, 0, 0)`: Gradient delays in (HF, AP, LR)
 
 # References
-[1] Chan, R.W., Ramsay, E.A., Cunningham, C.H. and Plewes, D.B. (2009), Temporal stability of adaptive 3D radial MRI using multidimensional golden means. Magn. Reson. Med., 61: 354-363. https://doi.org/10.1002/mrm.21837
+1. Chan RW, Ramsay EA, Cunningham CH, and Plewes DB. "Temporal stability of adaptive 3D radial MRI using multidimensional golden means". Magn. Reson. Med. 61 (2009) pp. 354-363. https://doi.org/10.1002/mrm.21837
 """
 function kooshballGA(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0))
     gm1, gm2 = calculateGoldenMeans()
@@ -75,10 +75,10 @@ By modifying `N` also tiny golden angles [2] are supported.
 - `N::Int` = 1: Number of tiny golden angle
 
 # References
-[1] Winkelmann S, Schaeffter T, Koehler T, Eggers H, Doessel O. An optimal radial profile order based on the Golden Ratio for time-resolved MRI. IEEE TMI 26:68--76 (2007)
-[2] Wundrak S, Paul J, Ulrici J, Hell E, Geibel MA, Bernhardt P, Rottbauer W, Rasche V. Golden ratio sparse MRI using tiny golden angles. Magn Reson Med 75:2372-2378 (2016)
+1. Winkelmann S, Schaeffter T, Koehler T, Eggers H, Doessel O. "An optimal radial profile order based on the Golden Ratio for time-resolved MRI". IEEE TMI 26:68-76 (2007)
+2. Wundrak S, Paul J, Ulrici J, Hell E, Geibel MA, Bernhardt P, Rottbauer W, Rasche V. "Golden ratio sparse MRI using tiny golden angles". Magn. Reson. Med. 75:2372-2378 (2016)
 """
-function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, delay = (0, 0, 0), N = 1, T=Float32)
+function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot=0, phiRot=0, delay=(0, 0, 0), N=1, T=Float32)
     τ = (sqrt(5) + 1) / 2
     angle_GR = T.(π / (τ + N - 1))
     phi = (0:(Ncyc*Nt-1)) .* angle_GR
@@ -87,7 +87,7 @@ function traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot = 0, phiRot = 0, dela
     theta = similar(phi)
     theta .= π/2 # 2D
 
-    trj = kooshball(Nr, theta', phi'; thetaRot = thetaRot, phiRot = phiRot, delay = delay)
+    trj = kooshball(Nr, theta', phi'; thetaRot=thetaRot, phiRot=phiRot, delay=delay)
     trj = trj[1:2, :, :] # remove 3rd dimenion
     return trj
 end
@@ -105,7 +105,7 @@ Function to calculate kooshball trajectory.
 - `phiRot::Float` = 0: Fixed rotation angle along phi
 - `delay::Tuple{Float, Float, Float}` = `(0, 0, 0)`: Gradient delays in (HF, AP, LR)
 """
-function kooshball(Nr, theta, phi; thetaRot = 0, phiRot = 0, delay = (0, 0, 0))
+function kooshball(Nr, theta, phi; thetaRot=0, phiRot=0, delay=(0, 0, 0))
     @assert (eltype(theta) == eltype(phi)) "Mismatch between input types of `theta` and `phi`"
 
     Ncyc, Nt = size(theta)
@@ -159,7 +159,7 @@ end
 Function to calculate 3D golden means [1].
 
 # References
-[1] Chan, R.W., Ramsay, E.A., Cunningham, C.H. and Plewes, D.B. (2009), Temporal stability of adaptive 3D radial MRI using multidimensional golden means. Magn. Reson. Med., 61: 354-363. https://doi.org/10.1002/mrm.21837
+1. Chan RW, Ramsay EA, Cunningham CH, and Plewes DB. "Temporal stability of adaptive 3D radial MRI using multidimensional golden means". Magn. Reson. Med. (2009), 61: 354-363. https://doi.org/10.1002/mrm.21837
 """
 function calculateGoldenMeans()
     M = [0 1 0; 0 0 1; 1 0 1]

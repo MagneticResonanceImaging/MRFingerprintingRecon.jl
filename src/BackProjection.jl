@@ -12,12 +12,13 @@ Calculate (filtered) backprojection.
 
 One of the following arguments needs to be supplied
 - `img_shape::NTuple{N,Int}`: Shape of image; in this case, the data is reconstructed per coil.
-- `cmaps::::AbstractVector{<:AbstractArray{Tc}}`: Coil sensitivities; in this case, the coils are added up to a single backprojection. Use `AbstractVector{CuArray{Tc,N}}` as type for use with CUDA code.
+- `cmaps::AbstractVector{<:AbstractArray{Tc}}`: Coil sensitivities; in this case, the coils are added up to a single backprojection. Use `AbstractVector{CuArray{Tc,N}}` as type for use with CUDA code.
 
 # Optional Keyword Arguments
-- `U::Matrix = I(length(data))` or `= I(1)``: Basis coefficients of subspace (only defined if data and trj have different timeframes)
-- `density_compensation = :none`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type `AbstractVector{<:AbstractVector}`
-- `verbose::Boolean = false`: Verbosity level
+- `U::Matrix`=`I(size(trj)[end])` or `=I(1)`: Basis coefficients of subspace (only defined if data and trj have different timeframes)
+- `mask::AbstractArray{Bool}`=`trues(size(trj)[2:end])`: Mask to indicate which k-space samples to use
+- `density_compensation`=`:none`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type `AbstractVector{<:AbstractVector}`
+- `verbose::Boolean`=`false`: Verbosity level
 """
 function calculateBackProjection(data::AbstractArray{Tc,3}, trj::AbstractArray{T,3}, img_shape; U=I(size(trj)[end]), mask=trues(size(trj)[2:end]), density_compensation=:none, verbose=false) where {T <: Real, Tc <: Complex{T}}
     Ncoef = size(U, 2)

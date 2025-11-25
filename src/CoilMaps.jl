@@ -1,16 +1,17 @@
 """
-    calcCoilMaps(data, trj, img_shape; U, density_compensation, kernel_size, calib_size, eigThresh_1, eigThresh_2, nmaps, verbose)
+    calculateCoilMaps(data, trj, img_shape; U, density_compensation, kernel_size, calib_size, eigThresh_1, eigThresh_2, nmaps, verbose)
 
 Estimate coil sensitivity maps using ESPIRiT [1].
 
 # Arguments
-- `data::AbstractArray{Complex{T}}`: Complex dataset with axes (samples, time frames, channels). Time frames are reconstructed using the subspace defined in U. . Use `CuArray` as input type to use CUDA code.
+- `data::AbstractArray{Complex{T}}`: Complex dataset with axes (samples, time frames, channels). Time frames are reconstructed using the subspace defined in U. Use `CuArray` as input type to use CUDA code.
 - `trj::AbstractArray{T}`: Trajectory with sample coordinates corresponding to the dataset Use `CuArray` as input type to use GPU code.
 - `img_shape::NTuple{N,Int}`: Shape of image
 
 # Keyword Arguments
-- `U::Matrix` = ones(T, size(trj)[end]) : I(1): Basis coefficients of subspace
-- `density_compensation`=:`radial_3D`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractArray{T}`
+- `U::Matrix`=`ones(T, size(trj)[end])` : `I(1)`: Basis coefficients of subspace
+- `mask::AbstractArray{Bool}`=`trues(size(trj)[2:end])`: Mask to indicate which k-space samples to use
+- `density_compensation`=`:radial_3D`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractArray{T}`
 - `kernel_size`=`ntuple(_ -> 6, N)`: Kernel size
 - `calib_size`=`ntuple(_ -> 24, N)`: Size of calibration region
 - `eigThresh_1`=0.01: Threshold of first eigenvalue
@@ -19,10 +20,10 @@ Estimate coil sensitivity maps using ESPIRiT [1].
 - `verbose::Boolean`=`false`: Verbosity level
 
 # return
-- `cmaps::::Vector{<:Array{Complex{T}}}`: Coil sensitivities as Vector of arrays
+- `cmaps::Vector{<:Array{Complex{T}}}`: Coil sensitivities as Vector of arrays
 
 # References
-[1] Uecker, M., Lai, P., Murphy, M.J., Virtue, P., Elad, M., Pauly, J.M., Vasanawala, S.S. and Lustig, M. (2014), ESPIRiT—an eigenvalue approach to autocalibrating parallel MRI: Where SENSE meets GRAPPA. Magn. Reson. Med., 71: 990-1001. https://doi.org/10.1002/mrm.24751
+1. Uecker M, Lai P, Murphy MJ, Virtue P, Elad M, Pauly JM, Vasanawala SS, and Lustig M. "ESPIRiT—an eigenvalue approach to autocalibrating parallel MRI: Where SENSE meets GRAPPA". Magn. Reson. Med. 71 (2014), pp. 990-1001. https://doi.org/10.1002/mrm.24751
 """
 function calculateCoilMaps(data::AbstractArray{Complex{T}}, trj::AbstractArray{T}, img_shape::NTuple{N,Int}; U=ones(Complex{T}, size(trj)[end]), mask=trues(size(trj)[2:end]), kernel_size=ntuple(_ -> 6, N), calib_size=ntuple(i -> nextprod((2, 3, 5), img_shape[i] ÷ (maximum(img_shape) ÷ 32)), length(img_shape)), eigThresh_1=0.01, eigThresh_2=0.9, nmaps=1, Niter=100, verbose=false) where {N,T}
     @assert all([icalib .== nextprod((2, 3, 5), icalib) for icalib ∈ calib_size]) "calib_size has to be composed of the prime factors 2, 3, and 5 (cf. NonuniformFFTs.jl documentation)."

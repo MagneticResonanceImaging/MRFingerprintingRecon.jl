@@ -1,4 +1,4 @@
-function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,3}, trj::CuArray{T,3}, img_shape; U=cu(I(size(trj)[end])), mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,Tc<:Complex{T}}
+function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,3}, trj::CuArray{T,3}, img_shape; U=cu(I(size(trj)[end])), mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T <: Real, Tc <: Complex{T}}
     nsamp_t = dropdims(sum(mask; dims=1); dims=1) # number of samples per time frame
     Ncoef = size(U, 2)
     Ncoil = size(data, 3)
@@ -31,7 +31,7 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,3}, trj:
     return xbp
 end
 
-function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,3}, trj::CuArray{T,3}, cmaps::AbstractVector{<:CuArray{Tc,N}}; U=cu(I(size(trj)[end])), mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,Tc<:Complex{T},N}
+function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,3}, trj::CuArray{T,3}, cmaps::AbstractVector{<:CuArray{Tc,N}}; U=cu(I(size(trj)[end])), mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T <: Real,Tc <: Complex{T}, N}
     nsamp_t = dropdims(sum(mask; dims=1); dims=1) # number of samples per time frame
     Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
@@ -67,14 +67,14 @@ function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,3}, trj:
 end
 
 # Wrapper for use with 4D arrays, where nr of ADC samples per readout is in a separate at 2ⁿᵈ dim
-function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,4}, trj::CuArray{T,4}, arg3; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T,Tc<:Complex}
+function MRFingerprintingRecon.calculateBackProjection(data::CuArray{Tc,4}, trj::CuArray{T,4}, arg3; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T, Tc <: Complex}
     data = reshape(data, :, size(data,3), size(data,4))
     trj = reshape(trj, size(trj,1), :, size(trj,4))
     mask = reshape(mask, :, size(mask,3))
     return MRFingerprintingRecon.calculateBackProjection(data, trj, arg3; kwargs..., mask)
 end
 
-function calculateCoilwiseCG(data::CuArray{Tc,3}, trj::CuArray{T,3}, img_shape; U=CUDA.ones(T, size(trj)[end]), mask=CUDA.ones(Bool, size(trj)[2:end]), maxiter=100, verbose=false) where {T<:Real,Tc<:Complex{T}}
+function calculateCoilwiseCG(data::CuArray{Tc,3}, trj::CuArray{T,3}, img_shape; U=CUDA.ones(T, size(trj)[end]), mask=CUDA.ones(Bool, size(trj)[2:end]), maxiter=100, verbose=false) where {T <: Real,Tc <: Complex{T}}
     Ncoil = size(data, 3)
 
     AᴴA = MRFingerprintingRecon.NFFTNormalOp(img_shape, trj, U[:, 1]; mask=mask, verbose)

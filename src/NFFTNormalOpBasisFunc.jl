@@ -14,23 +14,24 @@ When the basis functions `U` are real-valued, a real-only NUFFT is used to compu
 - `img_shape::Tuple{Int}`: Image dimensions
 - `trj::AbstractArray{T}`: Trajectory, use `CuArray` as input type to use CUDA code.
 - `U::AbstractMatrix{Tc}`: Basis coefficients of subspace
-- `cmaps::AbstractVector{Matrix{Tc,N}}`=`[ones(T, img_shape)]`: Coil sensitivities, use `AbstractVector{CuArray{Tc,N}}` as type for use with CUDA code.
+- `cmaps::AbstractVector{Matrix{Tc,N}}`=`(1,)`: Coil sensitivities, use `AbstractVector{CuArray{Tc,N}}` as type for use with CUDA code.
+- `mask::AbstractArray{Bool} = trues(size(trj)[2:end])`: Mask to indicate which k-space samples to use
 - `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
 - `kmask_indcs::Vector{Int}`: Sampling indices of Toeplitz mask
 - `verbose::Boolean`=`false`: Verbose level
 - `num_fft_threads::Int`=`round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1))`: Number of threads for FFT
 
 # References
-[1] Wajer, F.T.A.W., Pruessmann, K.P. “Major Speedup of Reconstruction for Sensitivity Encoding with Arbitrary Trajectories”. In: Proc. Intl. Soc. Mag. Reson. Med 9 (2001).
-[2] Fessler, J.A. et al. "Toeplitz-Based Iterative Image Reconstruction for MRI With Correction for Magnetic Field Inhomogeneity". IEEE Trans. Signal Process., 53.9 (2006).
-[3] Mani, M. et al. “Fast iterative algorithm for the reconstruction of multishot non-cartesian diffusion data”. Magn Reson Med. 74.4 (2015), pp. 1086–1094. doi: 10.1002/mrm.25486.
-[4] Uecker, M., Zhang, S., Frahm, J. “Nonlinear inverse reconstruction for real-time MRI of the human heart using undersampled radial FLASH". Magn Res Med. 63 (2010), pp. 1456–1462. doi: 10.1002/mrm.22453.
+1. Wajer FTAW, and Pruessmann, KP. “Major Speedup of Reconstruction for Sensitivity Encoding with Arbitrary Trajectories”. In: Proc. Intl. Soc. Mag. Reson. Med 9 (2001).
+2. Fessler JA, et al. "Toeplitz-Based Iterative Image Reconstruction for MRI With Correction for Magnetic Field Inhomogeneity". IEEE Trans. Signal Process., 53.9 (2006).
+3. Mani M, et al. “Fast iterative algorithm for the reconstruction of multishot non-cartesian diffusion data”. Magn Reson Med. 74.4 (2015), pp. 1086–1094. https://doi.org/10.1002/mrm.25486
+4. Uecker M, Zhang S, and Frahm J. “Nonlinear inverse reconstruction for real-time MRI of the human heart using undersampled radial FLASH". Magn Res Med. 63 (2010), pp. 1456–1462. https://doi.org/10.1002/mrm.22453
 """
 function NFFTNormalOp(
     img_shape,
     trj::AbstractArray{T,3},
     U::AbstractArray{Tc};
-    cmaps=1,
+    cmaps=(1,),
     mask=trues(size(trj)[2:end]),
     verbose=false,
     num_fft_threads=round(Int, Threads.nthreads()/size(U, 2)),
@@ -52,7 +53,7 @@ function NFFTNormalOp(
     img_shape,
     Λ::Array{Tc,3},
     kmask_indcs::Vector{<:Integer};
-    cmaps=1,
+    cmaps=(1,),
     num_fft_threads=round(Int, Threads.nthreads()/size(Λ, 1))
     ) where {T, Tc <:Union{T, Complex{T}}}
 

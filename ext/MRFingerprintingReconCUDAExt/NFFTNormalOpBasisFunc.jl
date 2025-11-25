@@ -2,7 +2,7 @@ function MRFingerprintingRecon.NFFTNormalOp(
     img_shape,
     trj::CuArray{T,3},
     U::CuArray{Tc};
-    cmaps=1,
+    cmaps=(1,),
     mask=CUDA.ones(Bool, size(trj)[2:end]),
     verbose=false
     ) where {T <: Real, Tc <: Union{T, Complex{T}}}
@@ -23,7 +23,7 @@ function MRFingerprintingRecon.NFFTNormalOp(
     img_shape,
     Λ::CuArray{Tc},
     kmask_indcs;
-    cmaps=1
+    cmaps=(1,)
     ) where {T <: Real, Tc <: Union{T, Complex{T}}}
     @assert length(kmask_indcs) == size(Λ, length(size(Λ))) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`
     @assert all(kmask_indcs .> 0)
@@ -155,7 +155,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T,3}, U::CuArra
     S = CuArray{T}(undef, sum(nsamp_t))
 
     # Prep FFT and NUFFT plans
-    # Use brfft (and conjugate λ2 in loop below) because an rfft that maps from complex to real does not exist in FFTW package
+    # Use brfft (and conjugate λ2 in loop below) because an rfft from complex to real does not exist in FFTW package
     brfftplan = plan_brfft(λ2, img_shape_os[1])
     nfftplan = PlanNUFFT(T, img_shape_os; backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200)) # use plan specific to real inputs
     set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))

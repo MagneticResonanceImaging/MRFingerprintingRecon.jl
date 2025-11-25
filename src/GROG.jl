@@ -114,7 +114,7 @@ Perform GROG kernel calibration and gridding [1] of data in-place. The trajector
 - `trj::AbstractArray{<:Integer}}`: Cartesian trajectory with the elements `trj[idim,ik,it] ∈ (1, img_shape[idim])`
 
 # References
-[1] Seiberlich, N., Breuer, F., Blaimer, M., Jakob, P. and Griswold, M. (2008), Self-calibrating GRAPPA operator gridding for radial and spiral trajectories. Magn. Reson. Med., 59: 930-935. https://doi.org/10.1002/mrm.21565
+1. Seiberlich N, Breuer F, Blaimer M, Jakob P, and Griswold M. "Self-calibrating GRAPPA operator gridding for radial and spiral trajectories". Magn. Reson. Med. 59 (2008), pp. 930-935. https://doi.org/10.1002/mrm.21565
 """
 function radial_grog!(data, trj, Nr, img_shape)
     lnG = grog_calib(data, trj, Nr)
