@@ -12,11 +12,11 @@ When the basis functions `U` are real-valued, a real-only NUFFT is used to compu
 
 # Arguments
 - `img_shape::Tuple{Int}`: Image dimensions
-- `trj::AbstractArray{T}`: Trajectory, use `CuArray` as input type to use CUDA code.
-- `U::AbstractMatrix{Tc}`: Basis coefficients of subspace
-- `cmaps::AbstractVector{Matrix{Tc,N}}`=`(1,)`: Coil sensitivities, use `AbstractVector{CuArray{Tc,N}}` as type for use with CUDA code.
+- `trj::AbstractArray`: Trajectory, use `CuArray` as input type to use CUDA code.
+- `U::AbstractMatrix`: Basis coefficients of subspace
+- `cmaps::AbstractVector{Matrix}=(1,)`: Coil sensitivities, use `AbstractVector{CuArray}` as type for use with CUDA code.
 - `mask::AbstractArray{Bool} = trues(size(trj)[2:end])`: Mask to indicate which k-space samples to use
-- `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
+- `Λ::Array{T,3}`: Toeplitz kernel basis
 - `kmask_indcs::Vector{Int}`: Sampling indices of Toeplitz mask
 - `verbose::Boolean`=`false`: Verbose level
 - `num_fft_threads::Int`=`round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1))`: Number of threads for FFT
@@ -37,7 +37,7 @@ function NFFTNormalOp(
     num_fft_threads=round(Int, Threads.nthreads()/size(U, 2)),
     ) where {T <: Real, Tc <: Union{T, Complex{T}}}
 
-    Λ, kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; mask=mask, verbose=verbose)
+    Λ, kmask_indcs = calculate_kernel_noncartesian(2 .* img_shape, trj, U; mask, verbose)
 
     return NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps, num_fft_threads=num_fft_threads)
 end
@@ -46,7 +46,7 @@ end
 function NFFTNormalOp(img_shape, trj::AbstractArray{T,4}, U::AbstractArray{Tc,2}; mask=trues(size(trj)[2:end]), kwargs...) where {T, Tc <: Union{T, Complex{T}}}
     trj = reshape(trj, size(trj, 1), :, size(trj,4))
     mask = reshape(mask, :, size(mask,3))
-    return NFFTNormalOp(img_shape, trj, U; kwargs..., mask)
+    return NFFTNormalOp(img_shape, trj, U; mask, kwargs...)
 end
 
 function NFFTNormalOp(
@@ -103,9 +103,10 @@ struct _NFFTNormalOp{S,E,F,G,H,I,J,K,L,M,N}
     blocks::N
 end
 
-function calculate_kmask_indcs(img_shape_os, trj::AbstractArray{T}; mask=trues(size(trj)[2:end])) where {T}
+function calculate_kmask_indcs(img_shape_os, trj; mask=trues(size(trj)[2:end]))
     @assert all([i .== nextprod((2, 3, 5), i) for i ∈ img_shape_os]) "img_shape_os has to be composed of the prime factors 2, 3, and 5 (cf. NonuniformFFTs.jl documentation)."
 
+    T = eltype(trj)
     backend = CPU()
     p = PlanNUFFT(Complex{T}, img_shape_os; σ=1, kernel=GaussianKernel(), backend=backend) # default is without fftshift
     set_points!(p, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
@@ -117,7 +118,7 @@ function calculate_kmask_indcs(img_shape_os, trj::AbstractArray{T}; mask=trues(s
 end
 
 # Calculation for complex-valued basis U
-function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray{T,3}, U::AbstractArray{Tc}; mask=trues(size(trj)[2:end]), verbose=false) where {T, Tc <: Complex{T}}
+function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray{T,3}, U::AbstractArray{Tc}; mask=trues(size(trj)[2:end]), verbose=false) where {T, Tc <: Complex{T}}
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))
@@ -129,7 +130,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray{T,3}, U::
 
     λ  = Array{Complex{T}}(undef, img_shape_os)
     λ2 = similar(λ)
-    
+
     Ncoeff = size(U, 2)
     Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
     S = Array{Complex{T}}(undef, sum(nsamp_t))
@@ -166,7 +167,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray{T,3}, U::
 end
 
 # Kernel is assumed to be real-valued for faster computation, highly accurate if U is a set of real basis functions
-function calculateToeplitzKernelBasis(img_shape_os, trj::AbstractArray, U::AbstractArray{T}; mask=trues(size(trj)[2:end]), verbose=false) where {T <: Real}
+function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray, U::AbstractArray{T}; mask=trues(size(trj)[2:end]), verbose=false) where {T <: Real}
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))

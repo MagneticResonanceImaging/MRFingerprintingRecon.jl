@@ -62,7 +62,7 @@ trj = Tint.(cat(kx, ky; dims=1))
 mask = reshape(mask, Nx*Nx, Nt)
 
 ##
-A = FFTNormalOp((Nx,Nx), trj, U; cmaps, mask=mask)
+A = FFTNormalOp((Nx,Nx), trj, U; cmaps, mask)
 
 ## test that forward operator is symmetric
 Λ = zeros(Complex{T}, Nc, Nc, Nx^2)
@@ -73,7 +73,7 @@ for i ∈ CartesianIndices((Nx, Nx))
 end
 
 ## test cg recon
-xbp = calculateBackProjection(data, trj, cmaps; U, mask)
+xbp = calculate_backprojection(data, trj, cmaps; U, mask)
 xr = cg(A, vec(xbp), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
 

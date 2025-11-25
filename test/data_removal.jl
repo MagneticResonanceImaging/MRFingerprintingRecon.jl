@@ -47,7 +47,7 @@ phi = Float32.(α_g * (1:Nt*Ncyc))
 theta = Float32.(0 * (1:Nt*Ncyc) .+ pi/2)
 phi = reshape(phi, Ncyc, Nt)
 theta = reshape(theta, Ncyc, Nt)
-trj = kooshball(2Nx, theta, phi)
+trj = traj_kooshball(2Nx, theta, phi)
 trj = trj[1:2, :, :]
 
 ## set up basis functions
@@ -76,8 +76,8 @@ mask = trues(2Nx, Ncyc, Nt)
 mask[:, icyc_rm, it_rm] .= false
 mask = reshape(mask, 2Nx*Ncyc, Nt)
 
-## Test BackProjection 
-b = calculateBackProjection(data, trj, cmaps; U, mask)
+## Test BackProjection
+b = calculate_backprojection(data, trj, cmaps; U, mask)
 
 ## construct forward operator
 A = NFFTNormalOp((Nx,Nx), trj, U; cmaps, mask)

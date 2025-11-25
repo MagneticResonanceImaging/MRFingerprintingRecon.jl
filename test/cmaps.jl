@@ -51,7 +51,7 @@ theta = Float32.(0 * (1:Nt*Ncyc) .+ pi/2)
 phi = reshape(phi, Ncyc, Nt)
 theta = reshape(theta, Ncyc, Nt)
 
-trj = kooshball(2Nx, theta, phi)
+trj = traj_kooshball(2Nx, theta, phi)
 trj = trj[1:2, :, :]
 
 ## set up basis functions
@@ -74,13 +74,13 @@ for icoil ∈ axes(data, 3)
 end
 
 ## use simulated coil maps
-b = calculateBackProjection(data, trj, cmaps; U)
+b = calculate_backprojection(data, trj, cmaps; U)
 A = NFFTNormalOp(img_shape, trj, U; cmaps)
 xr = reshape(cg(A, b), Nx, Nx, Nc)
 
 ## use estimated coil maps
-cmaps = calculateCoilMaps(data, trj, img_shape; U)
-b = calculateBackProjection(data, trj, cmaps; U)
+cmaps = calculate_coil_maps(data, trj, img_shape; U)
+b = calculate_backprojection(data, trj, cmaps; U)
 A = NFFTNormalOp(img_shape, trj, U; cmaps)
 xr_est = reshape(cg(A, b), Nx, Nx, Nc)
 

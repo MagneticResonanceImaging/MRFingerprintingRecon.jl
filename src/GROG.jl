@@ -5,16 +5,16 @@ Perform GROG kernel calibration based on whole radial trajectory and passed data
 Calibration follows the work on self-calibrating radial GROG (https://doi.org/10.1002/mrm.21565).
 
 # Arguments
-- `data::AbstractAbstractArray{Tc}`: Complex dataset with dimensions (samples per time frame [Nr], time frames, Rx channels)
-- `trj::AbstractArray{T}`: Trajectory with samples corresponding to the dataset, passed as AbstractArray with dimension (dims, samples per time frame, time frames)
+- `data::AbstractAbstractArray`: Complex dataset with dimensions (samples per time frame [Nr], time frames, Rx channels)
+- `trj::AbstractArray`: Trajectory with samples corresponding to the dataset, passed as AbstractArray with dimension (dims, samples per time frame, time frames)
 - `Nr::Int`: Number of samples per read out
 """
 function grog_calib(data, trj, Nr)
     Ncoil = size(data, 3)
-    Nrep  = size(data, 4)
+    Nrep = size(data, 4)
 
     if (1 != Nrep)
-        data = permutedims(data, (1,2,4,3))
+        data = permutedims(data, (1, 2, 4, 3))
     end
 
     data_rs = reshape(data, Nr, :, Ncoil)
@@ -26,12 +26,12 @@ function grog_calib(data, trj, Nr)
 
     # preallocations
     lnG = Array{eltype(data_rs)}(undef, Nd, Ncoil, Ncoil) # matrix of GROG operators
-    vθ  = Array{eltype(data_rs)}(undef, Ns, Ncoil, Ncoil)
+    vθ = Array{eltype(data_rs)}(undef, Ns, Ncoil, Ncoil)
 
     # 1) Precompute n, m for the trajectory
     trj_rs = reshape(trj, Nd, Nr, :)
     nm = transpose(dropdims(diff(trj_rs[:, 1:2, :], dims=2), dims=2)) .* Nr # units of sampling rate
-    nm = repeat(nm, outer = [Nrep]) # Stack trj in time if sampling repeats
+    nm = repeat(nm, outer=[Nrep]) # Stack trj in time if sampling repeats
 
     # 2) For each spoke, solve Eq3 for Gθ and compute matrix log
     Threads.@threads for ip ∈ axes(data_rs, 2)
@@ -54,9 +54,9 @@ end
 Perform gridding of data based on pre-calculated GROG kernel.
 
 # Arguments
-- `data::AbstractVector{<:AbstractMatrix{Tc}}`: Complex dataset passed as AbstractVector of matrices
-- `trj::AbstractArray{T}}`: Trajectory with samples corresponding to the dataset passed as AbstractVector of matrices with Float32 entries
-- `lnG::AbstractArray{Matrix{T}}`: Natural logarithm of GROG kernel in all dimensions
+- `data::AbstractVector{<:AbstractMatrix}`: Complex dataset passed as AbstractVector of matrices
+- `trj::AbstractArray}`: Trajectory with samples corresponding to the dataset passed as AbstractVector of matrices with Float32 entries
+- `lnG::AbstractArray{Matrix}`: Natural logarithm of GROG kernel in all dimensions
 - `Nr::Int`: Number of samples per read out
 - `img_shape::Tuple{<:Integer}`: Image dimensions
 
@@ -71,7 +71,7 @@ Perform gridding of data based on pre-calculated GROG kernel.
 function grog_gridding!(data, trj, lnG, Nr, img_shape)
     exp_method = ExpMethodHigham2005()
     trj_cart = similar(trj, Int32) #[similar(trj_i, Int32) for trj_i ∈ trj]
-    
+
     Nt = size(data, 2)
     Ncoil = size(data, 3)
     Nrep = size(data, 4)
@@ -105,8 +105,8 @@ end
 Perform GROG kernel calibration and gridding [1] of data in-place. The trajectory is returned with integer values.
 
 # Arguments
-- `data::AbstractArray{Tc}}`: Complex dataset with dimensions (samples per time frame [Nr], time frames, Rx channels)
-- `trj::AbstractArray{T}`: Trajectory with samples corresponding to the dataset, passed as AbstractArray with dimension (dims, samples per time frame, time frames)
+- `data::AbstractArray}`: Complex dataset with dimensions (samples per time frame [Nr], time frames, Rx channels)
+- `trj::AbstractArray`: Trajectory with samples corresponding to the dataset, passed as AbstractArray with dimension (dims, samples per time frame, time frames)
 - `Nr::Int`: Number of samples per read out
 - `img_shape::Tuple{Int}`: Image dimensions
 

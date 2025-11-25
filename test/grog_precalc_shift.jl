@@ -19,7 +19,7 @@ Ncyc = 3
 img_shape = (Nx,Nx)
 
 ## Create trajectory
-trj = MRFingerprintingRecon.traj_2d_radial_goldenratio(Nr, Ncyc, Nt; N=1)
+trj = traj_2d_radial_goldenratio(Nr, Ncyc, Nt; N=1)
 
 ## Create phantom geometry
 x = shepp_logan(Nx)
@@ -88,14 +88,14 @@ U = ones(ComplexF32, Nt, 1)
 
 # Reconstruction without repeating pattern
 A_grog = FFTNormalOp((Nx,Nx), trj, U; cmaps)
-x1 = calculateBackProjection(data, trj, cmaps; U)
+x1 = calculate_backprojection(data, trj, cmaps; U)
 xg1 = cg(A_grog, vec(x1), maxiter=20)
 xg1 = reshape(xg1, Nx, Nx)
 
 # Reconstruction with repeating pattern
 U2 = repeat(U, 1, 1, Nrep) # For joint subspace reconstruction
 A_grog = FFTNormalOp((Nx,Nx), trj2, U2; cmaps)
-x2 = calculateBackProjection(data2, trj2, cmaps; U=U2)
+x2 = calculate_backprojection(data2, trj2, cmaps; U=U2)
 xg2 = cg(A_grog, vec(x2), maxiter=20)
 xg2 = reshape(xg2, Nx, Nx)
 

@@ -12,11 +12,11 @@ Differentiate between functions exploiting a pre-calculated kernel basis `Λ` an
 
 # Arguments
 - `img_shape::Tuple{Int}`: Image dimensions
-- `traj::Vector{Matrix{Float32}}`: Trajectory
-- `U::Matrix{ComplexF32}`=(1,): Basis coefficients of subspace
-- `cmaps::Matrix{ComplexF32}`: Coil sensitivities
+- `traj::Vector{Matrix}`: Trajectory
+- `U::Matrix`: Basis coefficients of subspace
+- `cmaps::Matrix=(1,)`: Coil sensitivities
 - `mask::AbstractArray{Bool}`=`trues(size(trj)[2:end])`: Mask to indicate which k-space samples to use
-- `M::Vector{Matrix{Float32}}`: Mask
+- `M::Vector{Matrix}`: Mask
 - `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
 - `num_fft_threads::Int`=`round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1)): Number of Threads for FFT
 - `eltype_x`=`eltype(Λ)` define the type of `x` (in the product `FFTNormalOp(Λ) * x`). The default is the same eltype as `Λ`
@@ -26,12 +26,12 @@ Differentiate between functions exploiting a pre-calculated kernel basis `Λ` an
 2. Assländer J, et al. “Low rank alternating direction method of multipliers reconstruction for MR fingerprinting”. Magn Reson Med 79.1 (2018), pp. 83–96. https://doi.org/10.1002/mrm.26639
 """
 function FFTNormalOp(img_shape, trj, U; cmaps=(1,), mask=trues(size(trj)[2:end]), num_fft_threads=round(Int, Threads.nthreads()/size(U, 2)))
-    Λ = calculateKernelBasis(img_shape, trj, U; mask)
+    Λ = calculate_kernel_cartesian(img_shape, trj, U; mask)
     return FFTNormalOp(Λ; cmaps, num_fft_threads)
 end
 
 function FFTNormalOp(M, U; cmaps=(1,), num_fft_threads=round(Int, Threads.nthreads()/size(U, 2)))
-    Λ = calculateKernelBasis(M, U)
+    Λ = calculate_kernel_cartesian(M, U)
     return FFTNormalOp(Λ; cmaps, num_fft_threads )
 end
 
@@ -78,7 +78,7 @@ struct _FFTNormalOp{S,ΛType,T,N,E,F,G}
     cmaps::G
 end
 
-function calculateKernelBasis(img_shape, trj, U; mask=trues(size(trj)[2:end]))
+function calculate_kernel_cartesian(img_shape, trj, U; mask=trues(size(trj)[2:end]))
     Ncoeff = size(U, 2)
     Λ = zeros(eltype(U), Ncoeff, Ncoeff, img_shape...)
 
@@ -96,7 +96,7 @@ function calculateKernelBasis(img_shape, trj, U; mask=trues(size(trj)[2:end]))
     return Λ
 end
 
-function calculateKernelBasis(M, U)
+function calculate_kernel_cartesian(M, U)
     Ncoeff = size(U, 2)
     img_shape = size(M)[1:end-1]
     Λ = Array{eltype(U)}(undef, Ncoeff, Ncoeff, img_shape...)

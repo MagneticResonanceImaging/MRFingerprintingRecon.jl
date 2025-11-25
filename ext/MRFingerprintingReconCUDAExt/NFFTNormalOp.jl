@@ -6,9 +6,9 @@ function MRFingerprintingRecon.NFFTNormalOp(
     mask=CUDA.ones(Bool, size(trj)[2:end]),
     verbose=false
     ) where {T <: Real, Tc <: Union{T, Complex{T}}}
-    
-    Λ, kmask_indcs = calculateToeplitzKernelBasis(2 .* img_shape, trj, U; mask, verbose)
-    
+
+    Λ, kmask_indcs = calculate_kernel_noncartesian(2 .* img_shape, trj, U; mask, verbose)
+
     return MRFingerprintingRecon.NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps)
 end
 
@@ -86,7 +86,7 @@ function calculate_kmask_indcs(img_shape_os, trj::CuArray{T,3}; mask=CUDA.ones(B
 end
 
 # Kernel is complex-valued (case of complex basis matrix U)
-function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T,3}, U::CuArray{Tc}; mask=CUDA.ones(Bool, size(trj)[2:end]), verbose=false) where {T <: Real, Tc <: Complex{T}}
+function calculate_kernel_noncartesian(img_shape_os, trj::CuArray{T,3}, U::CuArray{Tc}; mask=CUDA.ones(Bool, size(trj)[2:end]), verbose=false) where {T <: Real, Tc <: Complex{T}}
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
 
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
@@ -137,7 +137,7 @@ function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T,3}, U::CuArra
 end
 
 # Kernel is assumed to be real-valued to reduce storage by half (method only works with real basis U)
-function calculateToeplitzKernelBasis(img_shape_os, trj::CuArray{T,3}, U::CuArray{T}; mask=CUDA.ones(Bool, size(trj)[2:end]), verbose=false) where {T <: Real}
+function calculate_kernel_noncartesian(img_shape_os, trj::CuArray{T,3}, U::CuArray{T}; mask=CUDA.ones(Bool, size(trj)[2:end]), verbose=false) where {T <: Real}
     kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))

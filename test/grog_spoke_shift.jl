@@ -20,7 +20,7 @@ Nt = 1
 img_shape = (Nx,Nx)
 
 ## Create trajectory
-trj = MRFingerprintingRecon.traj_2d_radial_goldenratio(Nr, Ncyc, Nt)
+trj = traj_2d_radial_goldenratio(Nr, Ncyc, Nt)
 
 ## Create phantom geometry
 x = shepp_logan(Nx)

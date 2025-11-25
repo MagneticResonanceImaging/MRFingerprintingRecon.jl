@@ -47,7 +47,7 @@ theta = Float32.(0 * (1:Nt*Ncyc) .+ pi/2)
 phi = reshape(phi, Ncyc, Nt)
 theta = reshape(theta, Ncyc, Nt)
 
-trj = kooshball(Nr, theta, phi)
+trj = traj_kooshball(Nr, theta, phi)
 trj = trj[1:2, :, :]
 
 ## set up basis functions
@@ -79,14 +79,14 @@ end
 xc = ifft(ifftshift(xc, 1:2), 1:2)
 
 ## NFFT Reconstruction
-xbp_rad = calculateBackProjection(data, trj, cmaps; U=U)
+xbp_rad = calculate_backprojection(data, trj, cmaps; U=U)
 A_rad = NFFTNormalOp((Nx,Nx), trj, U; cmaps=cmaps)
 xr = cg(A_rad, vec(xbp_rad), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
 
 ## GROG Reconstruction
 trj_cart = radial_grog!(data, trj, Nr, (Nx,Nx))
-xbp_grog = calculateBackProjection(data, trj_cart, cmaps; U)
+xbp_grog = calculate_backprojection(data, trj_cart, cmaps; U)
 A_cart = FFTNormalOp((Nx,Nx), trj_cart, U; cmaps)
 xg = cg(A_cart, vec(xbp_grog), maxiter=20)
 xg = reshape(xg, Nx, Nx, Nc)

@@ -10,7 +10,7 @@ using MRFingerprintingRecon.NonuniformFFTs
 
 using CUDA
 
-include("NFFTNormalOpBasisFunc.jl")
+include("NFFTNormalOp.jl")
 include("BackProjection.jl")
 include("CoilMaps.jl")
 
