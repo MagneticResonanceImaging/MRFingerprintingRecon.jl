@@ -24,7 +24,7 @@ function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{
     Ncoef = size(U, 2)
 
     # count the number of samples per time frame using the mask
-    nsamp_t = sum(mask; dims=1) |> vec
+    nsamp_t = vec(sum(mask; dims=1))
     cumsum_nsamp = cumsum(nsamp_t)
     prepend!(cumsum_nsamp, 1)
 
@@ -46,10 +46,10 @@ function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{
             for it ∈ axes(data, 2)
                 idx1 = cumsum_nsamp[it]
                 idx2 = cumsum_nsamp[it + 1]
-                data_temp[idx1:idx2] .= data_rs[idx1:idx2,icoil] .* conj(U[it,icoef])
+                @views data_temp[idx1:idx2] .= data_rs[idx1:idx2,icoil] .* conj(U[it,icoef])
             end
             apply_density_compensation!(data_temp, trj_rs; density_compensation)
-            @views exec_type1!(xbp[img_idx, icoef, icoil], p, data_temp) # type 1: non-uniform points to uniform grid
+            @views NonuniformFFTs.exec_type1!(xbp[img_idx, icoef, icoil], p, data_temp) # type 1: non-uniform points to uniform grid
         end
         verbose && println("coefficient = $icoef: t = $t s")
         flush(stdout)
@@ -64,7 +64,7 @@ function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{
     img_shape = size(cmaps[1])
 
     # Count the number of samples per time frame using the mask
-    nsamp_t = sum(mask; dims=1) |> vec
+    nsamp_t = vec(sum(mask; dims=1))
     cumsum_nsamp = cumsum(nsamp_t)
     prepend!(cumsum_nsamp, 1)
 
@@ -88,7 +88,7 @@ function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{
                 @views data_temp[idx1:idx2] .= data_rs[idx1:idx2,icoil] .* conj(U[it,icoef])
             end
             apply_density_compensation!(data_temp, trj_rs; density_compensation)
-            exec_type1!(xtmp, p, data_temp) # type 1: non-uniform points to uniform grid
+            NonuniformFFTs.exec_type1!(xtmp, p, data_temp) # type 1: non-uniform points to uniform grid
             xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
         verbose && println("coefficient = $icoef: t = $t s")

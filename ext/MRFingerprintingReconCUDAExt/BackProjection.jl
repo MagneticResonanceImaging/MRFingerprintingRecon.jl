@@ -18,14 +18,14 @@ function MRFingerprintingRecon.calculate_backprojection(data::CuArray{Tc,3}, trj
 
     # Apply sampling mask to data and perform backprojection
     data_rs = data[mask, :]
-    threads, blocks = default_kernel_config(nsamp_t)
+    threads, blocks = default_launch_config(nsamp_t)
     verbose && println("calculating backprojection...")
     flush(stdout)
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ axes(data, 3)
-            @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data_rs, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
+            @cuda threads=threads blocks=blocks multiply_data_with_basis!(data_temp, data_rs, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
             MRFingerprintingRecon.apply_density_compensation!(data_temp, trj_rs; density_compensation)
-            @views exec_type1!(xbp[img_idx, icoef, icoil], p, data_temp) # type 1: non-uniform points to uniform grid
+            @views NonuniformFFTs.exec_type1!(xbp[img_idx, icoef, icoil], p, data_temp) # type 1: non-uniform points to uniform grid
         end
         verbose && println("coefficient = $icoef: t = $t s")
         flush(stdout)
@@ -54,14 +54,14 @@ function MRFingerprintingRecon.calculate_backprojection(data::CuArray{Tc,3}, trj
 
     # Apply sampling mask to data and perform backprojection
     data_rs = data[mask, :]
-    threads, blocks = default_kernel_config(nsamp_t)
+    threads, blocks = default_launch_config(nsamp_t)
     verbose && println("calculating backprojection...")
     flush(stdout)
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
-            @cuda threads = threads blocks = blocks kernel_bp!(data_temp, data_rs, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
+            @cuda threads=threads blocks=blocks multiply_data_with_basis!(data_temp, data_rs, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
             MRFingerprintingRecon.apply_density_compensation!(data_temp, trj_rs; density_compensation)
-            exec_type1!(xtmp, p, data_temp) # type 1: non-uniform points to uniform grid
+            NonuniformFFTs.exec_type1!(xtmp, p, data_temp) # type 1: non-uniform points to uniform grid
             xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
         verbose && println("coefficient = $icoef: t = $t s")
@@ -82,7 +82,7 @@ end
 ## ##########################################################################
 # Internal helper functions
 #############################################################################
-function kernel_bp!(data_temp, data, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
+function multiply_data_with_basis!(data_temp, data, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
     ik = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     it = (blockIdx().y - 1) * blockDim().y + threadIdx().y
 
@@ -97,7 +97,7 @@ function kernel_bp!(data_temp, data, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
 end
 
 # Default threading for back projection
-function default_kernel_config(nsamp_t)
+function default_launch_config(nsamp_t)
     max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
     threads_x = min(max_threads, maximum(nsamp_t))
     threads_y = min(max_threads ÷ threads_x, length(nsamp_t))

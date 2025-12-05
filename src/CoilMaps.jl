@@ -44,7 +44,7 @@ function calculate_coil_maps(
     calib_scale = img_shape ./ calib_size
     mask_calib = reshape(all(abs.(trj) .* calib_scale .< 0.5; dims=1), size(trj, 2), :)
     mask_calib .&= mask # new mask only takes data within calib region
-    trj_calib = trj .* convert.(T, calib_scale) # scale trj for correct image dims
+    trj_calib = trj .* T.(calib_scale) # scale trj for correct image dims
 
     x = reconstruct_coilwise(data, trj_calib, calib_size; U, mask=mask_calib, Niter_cg)
 
@@ -124,10 +124,10 @@ function reconstruct_coilwise(
     Niter_cg=100,
     verbose=false) where {T <: Real, Tc <: Complex{T}}
 
-    Ncoil = size(data, 3)
-
-    AᴴA = NFFTNormalOp(img_shape, trj, U[:, 1]; mask=mask, verbose)
+    AᴴA = NFFTNormalOp(img_shape, trj, U[:, 1]; mask, verbose)
     xbp = calculate_backprojection(data, trj, img_shape; U=U[:, 1], mask, verbose)
+
+    Ncoil = size(data, 3)
     x = zeros(Tc, img_shape..., Ncoil)
 
     for icoil ∈ axes(xbp, length(img_shape) + 2)
@@ -136,21 +136,21 @@ function reconstruct_coilwise(
         cg!(xi, AᴴA, bi; maxiter=Niter_cg, verbose, reltol=0)
     end
     return x
-end
+end                      
 
 function reconstruct_coilwise(
     data::AbstractArray{Tc,3},
     trj::AbstractArray{<:Integer,3},
     img_shape;
-    U=CUDA.ones(T, size(trj)[end]),
+    U=I(size(trj)[end]),
     mask=trues(size(trj)[2:end]),
     Niter_cg=5,
     verbose=false) where {Tc <: Complex}
 
-    Ncoil = size(data, 3)
-
-    AᴴA = FFTNormalOp(img_shape, trj, U[:, 1:1]; mask)
+    AᴴA = FFTNormalOp(img_shape, trj, U[:, 1]; mask)
     xbp = calculate_backprojection(data, trj, img_shape; U=U[:, 1], mask)
+
+    Ncoil = size(data, 3)
     x = zeros(Tc, img_shape..., Ncoil)
 
     for icoil ∈ axes(xbp, length(img_shape) + 2)

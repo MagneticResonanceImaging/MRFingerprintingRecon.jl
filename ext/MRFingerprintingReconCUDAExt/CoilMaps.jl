@@ -3,8 +3,10 @@ function MRFingerprintingRecon.calculate_coil_maps(
     trj::CuArray{T},
     img_shape::NTuple{N,Int};
     U=CUDA.ones(T, size(trj)[end]),
-    mask=CUDA.ones(Bool, size(trj)[2:end]), kernel_size=ntuple(_ -> 6, N),
-    calib_size=ntuple(i -> nextprod((2, 3, 5), img_shape[i] ÷ (maximum(img_shape) ÷ 32)), length(img_shape)), eigThresh_1=0.01,
+    mask=CUDA.ones(Bool, size(trj)[2:end]),
+    kernel_size=ntuple(_ -> 6, N),
+    calib_size=ntuple(i -> nextprod((2, 3, 5), img_shape[i] ÷ (maximum(img_shape) ÷ 32)), length(img_shape)), 
+    eigThresh_1=0.01,
     eigThresh_2=0.9,
     nmaps=1,
     Niter_cg=100,
@@ -13,12 +15,12 @@ function MRFingerprintingRecon.calculate_coil_maps(
     @assert all([icalib .== nextprod((2, 3, 5), icalib) for icalib ∈ calib_size]) "calib_size has to be composed of the prime factors 2, 3, and 5 (cf. NonuniformFFTs.jl documentation)."
 
     calib_scale = cu(collect(img_shape ./ calib_size))
-    trj_idx = reshape(all(abs.(trj) .* calib_scale .< 0.5; dims=1), size(trj, 2), :)
-    mask .&= trj_idx # update mask to only take calib region of k-space in CoilwiseCG
-    trj  .*= calib_scale # scale trj for correct FOV
+    mask_calib = reshape(all(abs.(trj) .* calib_scale .< 0.5; dims=1), size(trj, 2), :)
+    mask_calib .&= mask # update mask to only take calib region of k-space in CoilwiseCG
+    trj_calib = trj .* calib_scale # scale trj for correct FOV
 
-    x = MRFingerprintingRecon.reconstruct_coilwise(data, trj, calib_size; U, mask, Niter_cg)
-
+    x = MRFingerprintingRecon.reconstruct_coilwise(data, trj_calib, calib_size; U, mask=mask_calib, Niter_cg)
+    
     imdims = ntuple(i -> i, length(img_shape))
     kbp = fftshift(x, imdims)
     fft!(kbp, imdims)
@@ -51,7 +53,7 @@ end
 ## ##########################################################################
 # Internal helper functions
 #############################################################################
-function reconstruct_coilwise(
+function MRFingerprintingRecon.reconstruct_coilwise(
     data::CuArray{Tc,3},
     trj::CuArray{T,3},
     img_shape;
@@ -59,13 +61,14 @@ function reconstruct_coilwise(
     mask=CUDA.ones(Bool, size(trj)[2:end]),
     Niter_cg=100,
     verbose=false) where {T <: Real,Tc <: Complex{T}}
-    Ncoil = size(data, 3)
 
     AᴴA = MRFingerprintingRecon.NFFTNormalOp(img_shape, trj, U[:, 1]; mask=mask, verbose)
     xbp = MRFingerprintingRecon.calculate_backprojection(data, trj, img_shape; U=U[:, 1], mask=mask, verbose)
+    
+    Ncoil = size(data, 3)
     x = CUDA.zeros(Tc, img_shape..., Ncoil)
 
-    for icoil = 1:Ncoil
+    for icoil = axes(xbp, length(img_shape) + 2)
         bi = vec(@view xbp[CartesianIndices(img_shape), 1, icoil])
         xi = vec(@view x[CartesianIndices(img_shape), icoil])
         cg!(xi, AᴴA, bi; maxiter=Niter_cg, verbose, reltol=0)

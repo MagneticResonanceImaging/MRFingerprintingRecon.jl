@@ -20,10 +20,12 @@ function traj_cartesian(Nx, Ny, Nz, Nt; T=Int)
     k = Array{T}(undef, 3, Nx * Ny * Nz, Nt)
     for it ∈ axes(k, 3)
         ki = Array{T,4}(undef, 3, Nx, Ny, Nz)
-        @batch for x ∈ 1:Nx, y ∈ 1:Ny, z ∈ 1:Nz
-            ki[1, x, y, z] = kx[x]
-            ki[2, x, y, z] = ky[y]
-            ki[3, x, y, z] = kz[z]
+        Threads.@threads for z ∈ 1:Nz
+            for y ∈ 1:Ny, x ∈ 1:Nx
+                ki[1, x, y, z] = kx[x]
+                ki[2, x, y, z] = ky[y]
+                ki[3, x, y, z] = kz[z]
+            end
         end
         k[:, :, it] = reshape(ki, 3, :)
     end
@@ -118,10 +120,12 @@ function traj_kooshball(Nr, theta, phi; thetaRot=0, phiRot=0, delay=(0, 0, 0))
     if thetaRot == 0 && phiRot == 0
         for it ∈ axes(k, 3)
             ki = Array{eltype(theta),3}(undef, 3, Nr, Ncyc)
-            @batch for ic = 1:Ncyc, ir ∈ 1:Nr
-                ki[1, ir, ic] = -stheta[ic, it] * cphi[ic, it] * (kr[ir] + delay[1])
-                ki[2, ir, ic] =  stheta[ic, it] * sphi[ic, it] * (kr[ir] + delay[2])
-                ki[3, ir, ic] =  ctheta[ic, it]                * (kr[ir] + delay[3])
+            Threads.@threads for ic ∈ 1:Ncyc
+                for ir ∈ 1:Nr
+                    ki[1, ir, ic] = -stheta[ic, it] * cphi[ic, it] * (kr[ir] + delay[1])
+                    ki[2, ir, ic] =  stheta[ic, it] * sphi[ic, it] * (kr[ir] + delay[2])
+                    ki[3, ir, ic] =  ctheta[ic, it]                * (kr[ir] + delay[3])
+                end
             end
             k[:, :, it] = reshape(ki, 3, :)
             @. k[:, :, it] = max(min(k[:, :, it], 0.5), -0.5) # avoid NFFT.jl to throw errors. This should alter only very few points
@@ -135,10 +139,12 @@ function traj_kooshball(Nr, theta, phi; thetaRot=0, phiRot=0, delay=(0, 0, 0))
         k = Array{eltype(theta),3}(undef, 3, Nr * Ncyc, Nt)
         for it ∈ axes(k, 3)
             ki = Array{eltype(theta),3}(undef, 3, Nr, Ncyc)
-            @batch for ic = 1:Ncyc, ir ∈ 1:Nr
-                ki[1, ir, ic] = -(cphiRot * cphi[ic, it] * cthetaRot * stheta[ic, it] - sphiRot *  sphi[ic, it] * stheta[ic, it] + cphiRot * ctheta[ic, it] * sthetaRot)    * (kr[ir] + delay[1])
-                ki[2, ir, ic] =  (cphiRot * sphi[ic, it]             * stheta[ic, it] + sphiRot * (cphi[ic, it] * cthetaRot * stheta[ic, it] + ctheta[ic, it] * sthetaRot)) * (kr[ir] + delay[2])
-                ki[3, ir, ic] =  (cthetaRot * ctheta[ic, it] - sthetaRot * cphi[ic, it] * stheta[ic, it])                                                                   * (kr[ir] + delay[3])
+            Threads.@threads for ic ∈ 1:Ncyc
+                for ir ∈ 1:Nr
+                    ki[1, ir, ic] = -(cphiRot * cphi[ic, it] * cthetaRot * stheta[ic, it] - sphiRot *  sphi[ic, it] * stheta[ic, it] + cphiRot * ctheta[ic, it] * sthetaRot)    * (kr[ir] + delay[1])
+                    ki[2, ir, ic] =  (cphiRot * sphi[ic, it]             * stheta[ic, it] + sphiRot * (cphi[ic, it] * cthetaRot * stheta[ic, it] + ctheta[ic, it] * sthetaRot)) * (kr[ir] + delay[2])
+                    ki[3, ir, ic] =  (cthetaRot * ctheta[ic, it] - sthetaRot * cphi[ic, it] * stheta[ic, it])                                                                   * (kr[ir] + delay[3])
+                end
             end
             k[:, :, it] = reshape(ki, 3, :)
             @. k[:, :, it] = max(min(k[:, :, it], 0.5), -0.5) # avoid NFFT.jl to throw errors. This should alter only very few points

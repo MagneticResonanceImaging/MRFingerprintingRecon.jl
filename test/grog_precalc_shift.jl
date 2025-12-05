@@ -51,7 +51,7 @@ for icoil ∈ 1:Ncoil
     xcoil .*= cmaps[icoil]
     for it ∈ axes(data, 2)
         set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reshape(trj[:,:,it], 2, :)))
-        @views exec_type2!(data[:,it,icoil], nfftplan, xcoil)
+        @views NonuniformFFTs.exec_type2!(data[:,it,icoil], nfftplan, xcoil)
     end
 end
 

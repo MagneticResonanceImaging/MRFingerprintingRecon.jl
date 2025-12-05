@@ -12,6 +12,8 @@ using Test
 using Random
 Random.seed!(42)
 
+##
+
 T  = Float32
 Nx = 64
 Nc = 4
@@ -69,7 +71,7 @@ for icoil ∈ axes(data, 3)
     for it ∈ axes(data, 2)
         set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reshape(trj[:,:,it], 2, :)))
         xt = reshape(reshape(xcoil, :, Nc) * U[it,:], Nx, Nx)
-        @views exec_type2!(data[:,it,icoil], nfftplan, xt)
+        @views NonuniformFFTs.exec_type2!(data[:,it,icoil], nfftplan, xt)
     end
 end
 
@@ -79,7 +81,7 @@ A = NFFTNormalOp(img_shape, trj, U; cmaps)
 xr = reshape(cg(A, b), Nx, Nx, Nc)
 
 ## use estimated coil maps
-cmaps = calculate_coil_maps(data, trj, img_shape; U)
+cmaps = calculate_coil_maps(data, trj, img_shape; U, Niter_cg=10);
 b = calculate_backprojection(data, trj, cmaps; U)
 A = NFFTNormalOp(img_shape, trj, U; cmaps)
 xr_est = reshape(cg(A, b), Nx, Nx, Nc)
@@ -87,5 +89,4 @@ xr_est = reshape(cg(A, b), Nx, Nx, Nc)
 ## correct constant phase offset
 phase_diff = @. exp(-1im * angle(xr_est[:,:,1])) * exp(1im * angle(xr[:,:,1]))
 xr_est = xr_est .* phase_diff
-
 @test xr ≈ xr_est rtol=1e-1

@@ -51,7 +51,7 @@ end
 
 function NFFTNormalOp(
     img_shape,
-    Λ::Array{Tc,3},
+    Λ::AbstractArray{Tc,3},
     kmask_indcs::Vector{<:Integer};
     cmaps=(1,),
     num_fft_threads=round(Int, Threads.nthreads()/size(Λ, 1))
@@ -124,7 +124,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray{T,3}, U:
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
     # count the number of samples per time frame using the mask
-    nsamp_t = sum(mask; dims=1) |> vec
+    nsamp_t = vec(sum(mask; dims=1))
     cumsum_nsamp = cumsum(nsamp_t)
     prepend!(cumsum_nsamp, 1)
 
@@ -152,7 +152,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray{T,3}, U:
                     @inbounds S[idx1:idx2] .= conj(U[it,ic1]) * U[it,ic2]
                 end
 
-                exec_type1!(λ2, nfftplan, vec(S)) # type 1: non-uniform points to uniform grid
+                NonuniformFFTs.exec_type1!(λ2, nfftplan, vec(S)) # type 1: non-uniform points to uniform grid
                 mul!(λ, fftplan, λ2)
 
                 Threads.@threads for it ∈ eachindex(kmask_indcs)
@@ -173,7 +173,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray, U::Abst
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
     # count the number of samples per time frame using the mask
-    nsamp_t = sum(mask; dims=1) |> vec
+    nsamp_t = vec(sum(mask; dims=1))
     cumsum_nsamp = cumsum(nsamp_t)
     prepend!(cumsum_nsamp, 1)
 
@@ -201,7 +201,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray, U::Abst
                     @inbounds S[idx1:idx2] .= U[it,ic1] * U[it,ic2]
                 end
 
-                exec_type1!(λ2, nfftplan, vec(S))
+                NonuniformFFTs.exec_type1!(λ2, nfftplan, vec(S))
                 λ2 .= conj.(λ2) # conjugate input to flip the sign of the exponential in brfft
                 mul!(λ, brfftplan, λ2)
 

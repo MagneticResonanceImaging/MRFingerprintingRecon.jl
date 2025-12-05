@@ -123,12 +123,12 @@ function calculate_kernel_noncartesian(img_shape_os, trj::CuArray{T,3}, U::CuArr
     for ic2 ∈ 1:Ncoeff, ic1 ∈ 1:Ncoeff
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
-                @cuda threads=threads blocks=blocks kernel_uprod!(S, U, nsamp_t, cumsum_nsamp, ic1, ic2)
+                @cuda threads=threads blocks=blocks multiply_basis_vectors!(S, U, nsamp_t, cumsum_nsamp, ic1, ic2)
 
                 exec_type1!(λ2, nfftplan, vec(S)) # type 1: non-uniform points to uniform grid
                 mul!(λ, fftplan, λ2)
 
-                @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
+                @cuda threads=threads_sort blocks=blocks_sort store_packed_kernel!(Λ, λ, kmask_indcs, ic1, ic2)
             end
             verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
         end
@@ -174,13 +174,13 @@ function calculate_kernel_noncartesian(img_shape_os, trj::CuArray{T,3}, U::CuArr
     for ic2 ∈ 1:Ncoeff, ic1 ∈ 1:Ncoeff
         if ic2 >= ic1 # eval. only upper triangular matrix
             t = @elapsed begin
-                @cuda threads=threads blocks=blocks kernel_uprod!(S, U, nsamp_t, cumsum_nsamp, ic1, ic2)
+                @cuda threads=threads blocks=blocks multiply_basis_vectors!(S, U, nsamp_t, cumsum_nsamp, ic1, ic2)
 
                 exec_type1!(λ2, nfftplan, vec(S)) # type 1: non-uniform points to uniform grid
                 λ2 .= conj.(λ2) # conjugate to flip the sign of the exponential in brfft
                 mul!(λ, brfftplan, λ2)
 
-                @cuda threads=threads_sort blocks=blocks_sort kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
+                @cuda threads=threads_sort blocks=blocks_sort store_packed_kernel!(Λ, λ, kmask_indcs, ic1, ic2)
             end
             verbose && println("ic = ($ic1, $ic2): t = $t s"); flush(stdout)
         end
@@ -215,7 +215,7 @@ function LinearAlgebra.mul!(x::CuArray, S::MRFingerprintingRecon._NFFTNormalOp, 
     return x
 end
 
-function kernel_uprod!(S, U, nsamp_t, cumsum_nsamp, ic1, ic2)
+function multiply_basis_vectors!(S, U, nsamp_t, cumsum_nsamp, ic1, ic2)
     it = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     ik = (blockIdx().y - 1) * blockDim().y + threadIdx().y
 
@@ -230,7 +230,7 @@ function kernel_uprod!(S, U, nsamp_t, cumsum_nsamp, ic1, ic2)
 end
 
 # Place elements of kernel in packed Λ
-function kernel_sort!(Λ, λ, kmask_indcs, ic1, ic2)
+function store_packed_kernel!(Λ, λ, kmask_indcs, ic1, ic2)
     i = (blockIdx().x-1) * blockDim().x + threadIdx().x
 
     # Packed storage of Λ by columns

@@ -83,9 +83,9 @@ function calculate_kernel_cartesian(img_shape, trj, U; mask=trues(size(trj)[2:en
     Λ = zeros(eltype(U), Ncoeff, Ncoeff, img_shape...)
 
     Threads.@threads for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
-        for it ∈ axes(U, 1), ix ∈ axes(trj, 2)
-            if mask[ix, it]
-                k_idx = ntuple(j -> mod1(Int(trj[j, ix, it]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
+        for it ∈ axes(U, 1), is ∈ axes(trj, 2)
+            if mask[is, it]
+                k_idx = ntuple(j -> mod1(Int(trj[j, is, it]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
                 k_idx = CartesianIndex(k_idx)
                 for irep ∈ axes(U, 3)
                     Λ[ic[1], ic[2], k_idx] += conj(U[it, ic[1], irep]) * U[it, ic[2], irep]

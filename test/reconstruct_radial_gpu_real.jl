@@ -69,7 +69,7 @@ for icoil ∈ axes(data, 3)
     for it ∈ axes(data, 2)
         set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reshape(trj[:, :, it], 2, :)))
         xt = reshape(reshape(xcoil, :, Nc) * U[it, :], Nx, Nx)
-        @views exec_type2!(data[:, it, icoil], nfftplan, xt)
+        @views NonuniformFFTs.exec_type2!(data[:, it, icoil], nfftplan, xt)
     end
 end
 
@@ -95,7 +95,7 @@ mask_d = cu(mask)
 
 ## GPU
 b_d = calculate_backprojection(data_d, trj_d, cmaps_d; U=U_d, mask=mask_d)
-A_d = NFFTNormalOp(img_shape, trj_d, U_d; cmaps=cmaps_d, mask=mask_d) # kernels are expected to slightly differ between CPU/GPUb_d = calculate_backprojection(data_d, trj_d, cmaps_d; U=U_d, mask=mask_d)
+A_d = NFFTNormalOp(img_shape, trj_d, U_d; cmaps=cmaps_d, mask=mask_d) # kernels are expected to slightly differ between CPU/GPU
 xr_d = cg(A_d, vec(b_d), maxiter=50)
 xr_d = reshape(Array(xr_d), img_shape..., Nc) # end results should be equivalent
 

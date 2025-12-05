@@ -1,6 +1,5 @@
 module MRFingerprintingRecon
 
-using Polyester
 using OhMyThreads
 using LinearAlgebra
 using FFTW

@@ -69,7 +69,7 @@ for icoil ∈ axes(data, 3)
     for it ∈ axes(data, 2)
         set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reshape(trj[:, :, it], 2, :)))
         xt = reshape(reshape(xcoil, :, Nc) * U[it, :], Nx, Nx)
-        @views exec_type2!(vec(data[:, it, icoil]), nfftplan, xt)
+        @views NonuniformFFTs.exec_type2!(vec(data[:, it, icoil]), nfftplan, xt)
     end
 end
 
