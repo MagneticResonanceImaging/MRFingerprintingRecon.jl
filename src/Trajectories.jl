@@ -33,7 +33,7 @@ function traj_cartesian(Nx, Ny, Nz, Nt; T=Int)
 end
 
 """
-    traj_traj_kooshball_goldenratio(Nr, Ncyc, Nt; thetaRot, phiRot, delay)
+    traj_kooshball_goldenratio(Nr, Ncyc, Nt; thetaRot, phiRot, delay)
 
 Function to calculate  golden means [1] based traj_kooshball trajectory.
 
@@ -48,7 +48,7 @@ Function to calculate  golden means [1] based traj_kooshball trajectory.
 # References
 1. Chan RW, Ramsay EA, Cunningham CH, and Plewes DB. "Temporal stability of adaptive 3D radial MRI using multidimensional golden means". Magn. Reson. Med. 61 (2009) pp. 354-363. https://doi.org/10.1002/mrm.21837
 """
-function traj_traj_kooshball_goldenratio(Nr, Ncyc, Nt; thetaRot=0, phiRot=0, delay=(0, 0, 0))
+function traj_kooshball_goldenratio(Nr, Ncyc, Nt; thetaRot=0, phiRot=0, delay=(0, 0, 0))
     gm1, gm2 = calculateGoldenMeans()
     theta = acos.(mod.((0:(Ncyc*Nt-1)) * gm1, 1))
     phi = (0:(Ncyc*Nt-1)) * 2π * gm2
