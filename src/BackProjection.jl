@@ -23,8 +23,10 @@ One of the following arguments needs to be supplied
 function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{T,3}, img_shape; U=I(size(trj)[end]), mask=trues(size(trj)[2:end]), density_compensation=:none, verbose=false) where {T <: Real, Tc <: Complex{T}}
     Ncoef = size(U, 2)
 
-    # count the number of samples per time frame using the mask
+    # Count the number of samples per time frame using the mask
     nsamp_t = vec(sum(mask; dims=1))
+    @assert sum(nsamp_t) > 0 "Mask removes all samples, cannot compute backprojection."
+
     cumsum_nsamp = cumsum(nsamp_t)
     prepend!(cumsum_nsamp, 1)
 
@@ -65,6 +67,8 @@ function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{
 
     # Count the number of samples per time frame using the mask
     nsamp_t = vec(sum(mask; dims=1))
+    @assert sum(nsamp_t) > 0 "Mask removes all samples, cannot compute backprojection."
+
     cumsum_nsamp = cumsum(nsamp_t)
     prepend!(cumsum_nsamp, 1)
 

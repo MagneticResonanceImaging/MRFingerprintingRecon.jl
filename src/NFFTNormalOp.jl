@@ -125,6 +125,8 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray{T,3}, U:
 
     # count the number of samples per time frame using the mask
     nsamp_t = vec(sum(mask; dims=1))
+    @assert sum(nsamp_t) > 0 "Mask removes all samples, cannot compute kernel."
+
     cumsum_nsamp = cumsum(nsamp_t)
     prepend!(cumsum_nsamp, 1)
 
@@ -174,6 +176,8 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray, U::Abst
 
     # count the number of samples per time frame using the mask
     nsamp_t = vec(sum(mask; dims=1))
+    @assert sum(nsamp_t) > 0 "Mask removes all samples, cannot compute kernel."
+
     cumsum_nsamp = cumsum(nsamp_t)
     prepend!(cumsum_nsamp, 1)
 
@@ -185,7 +189,8 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray, U::Abst
     S = Array{T}(undef, sum(nsamp_t))
 
     # Prep FFT and NUFFT plans specific to real non-uniform data
-    # Use brfft (and conjugate λ2) because an rfft that maps from complex to real does not exist in FFTW package
+    # Use brfft (and conjugate λ2) because an rfft with a complex input does not exist in FFTW
+    # That is, a forward transform with Hermitian input that outputs only real values is not defined
     brfftplan = plan_brfft(λ2, img_shape_os[1]; flags=FFTW.MEASURE, num_threads=Threads.nthreads())
     nfftplan = PlanNUFFT(T, img_shape_os)
     set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))

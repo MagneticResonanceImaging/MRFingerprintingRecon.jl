@@ -143,6 +143,8 @@ function calculate_kernel_noncartesian(img_shape_os, trj::CuArray{T,3}, U::CuArr
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
     nsamp_t = cu(sum(mask, dims=1)) # number of samples per time frame
+    @assert sum(nsamp_t) > 0 "Mask removes all samples, cannot compute kernel."
+
     cumsum_nsamp = CUDA.zeros(eltype(nsamp_t), size(nsamp_t))
     cumsum_nsamp[2:end] = cumsum(nsamp_t[1:end-1])
 
@@ -155,7 +157,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::CuArray{T,3}, U::CuArr
     S = CuArray{T}(undef, sum(nsamp_t))
 
     # Prep FFT and NUFFT plans
-    # Use brfft (and conjugate λ2 in loop below) because an rfft from complex to real does not exist in FFTW package
+    # Use brfft (and conjugate λ2 in loop below) because a forward rfft with complex input does not exist in FFTW package
     brfftplan = plan_brfft(λ2, img_shape_os[1])
     nfftplan = PlanNUFFT(T, img_shape_os; backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200)) # use plan specific to real inputs
     set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
