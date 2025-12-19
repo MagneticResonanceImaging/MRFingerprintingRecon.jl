@@ -185,7 +185,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray, U::Abst
     λ2 = Array{Complex{T}}(undef, img_shape_os[1] ÷ 2 + 1, Base.tail(img_shape_os)...)
 
     Ncoeff = size(U, 2)
-    Λ = Array{T}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
+    Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
     S = Array{T}(undef, sum(nsamp_t))
 
     # Prep FFT and NUFFT plans specific to real non-uniform data
