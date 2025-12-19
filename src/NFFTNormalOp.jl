@@ -55,7 +55,7 @@ function NFFTNormalOp(
     kmask_indcs::Vector{<:Integer};
     cmaps=(1,),
     num_fft_threads=round(Int, Threads.nthreads()/size(Λ, 1))
-    ) where {T, Tc <:Union{T, Complex{T}}}
+    ) where {T, Tc <:Complex{T}}
 
     @assert length(kmask_indcs) == size(Λ,3) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`
     @assert all(kmask_indcs .> 0)
@@ -185,7 +185,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray, U::Abst
     λ2 = Array{Complex{T}}(undef, img_shape_os[1] ÷ 2 + 1, Base.tail(img_shape_os)...)
 
     Ncoeff = size(U, 2)
-    Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
+    Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs)) # complex kernel because mul! is faster as complex * complex than real * complex
     S = Array{T}(undef, sum(nsamp_t))
 
     # Prep FFT and NUFFT plans specific to real non-uniform data
