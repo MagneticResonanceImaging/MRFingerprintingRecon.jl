@@ -55,11 +55,12 @@ function NFFTNormalOp(
     kmask_indcs::Vector{<:Integer};
     cmaps=(1,),
     num_fft_threads=round(Int, Threads.nthreads()/size(Λ, 1))
-    ) where {T, Tc <:Complex{T}}
+    ) where {T, Tc <:Union{T, Complex{T}}}
 
     @assert length(kmask_indcs) == size(Λ,3) # ensure that kmask is not out of bound as we use `@inbounds` in `mul!`
     @assert all(kmask_indcs .> 0)
     @assert all(kmask_indcs .<= prod(2 .* img_shape))
+    eltype(Λ) <: Real && @warn "The Toeplitz kernel is real-valued; using a complex kernel greatly improves performance when applying the normal operator on CPUs." maxlog=1
 
     Ncoeff = size(Λ, 1)
     img_shape_os = 2 .* img_shape
@@ -135,7 +136,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray{T,3}, U:
 
     Ncoeff = size(U, 2)
     Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs))
-    S = Array{Complex{T}}(undef, sum(nsamp_t))
+    S = Vector{Complex{T}}(undef, sum(nsamp_t))
 
     # Prep FFT and NUFFT plans
     fftplan  = plan_fft(λ; flags=FFTW.MEASURE, num_threads=Threads.nthreads())
@@ -185,7 +186,10 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray, U::Abst
     λ2 = Array{Complex{T}}(undef, img_shape_os[1] ÷ 2 + 1, Base.tail(img_shape_os)...)
 
     Ncoeff = size(U, 2)
-    Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs)) # complex kernel because mul! is faster as complex * complex than real * complex
+
+    # Complex kernel because mul! is 2.5 faster as complex * complex than real * complex
+    # Set Λ to type Array{T} for equivalent results with conserved memory, but at the cost of computation time
+    Λ = Array{Complex{T}}(undef, Ncoeff, Ncoeff, length(kmask_indcs)) 
     S = Array{T}(undef, sum(nsamp_t))
 
     # Prep FFT and NUFFT plans specific to real non-uniform data
@@ -248,7 +252,7 @@ function LinearAlgebra.mul!(x::AbstractVector{T}, S::_NFFTNormalOp, b, α, β) w
             Threads.@threads for i in eachindex(kL2_rs)
                 kL2_rs[i] = 0
             end
-            Threads.@threads for i ∈ axes(S.Λ, 3)
+            @tasks for i ∈ axes(S.Λ, 3) # @tasks is 2x faster, because @threads conflicts with multithreading scheduler in LinearOperatorCollection
                 @views @inbounds mul!(kL2_rs[S.kmask_indcs[i], :], S.Λ[:, :, i], kL1_rs[S.kmask_indcs[i], :])
             end
 
