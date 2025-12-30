@@ -27,7 +27,7 @@ function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{
     nsamp_t = vec(sum(mask; dims=1))
     @assert sum(nsamp_t) > 0 "Mask removes all samples, cannot compute backprojection."
 
-    cumsum_nsamp = cumsum(nsamp_t)
+    cumsum_nsamp = cumsum(nsamp_t) .+ 1
     prepend!(cumsum_nsamp, 1)
 
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true)
@@ -47,7 +47,7 @@ function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{
         t = @elapsed for icoil ∈ axes(data, 3)
             for it ∈ axes(data, 2)
                 idx1 = cumsum_nsamp[it]
-                idx2 = cumsum_nsamp[it + 1]
+                idx2 = cumsum_nsamp[it + 1] - 1
                 @views data_temp[idx1:idx2] .= data_rs[idx1:idx2,icoil] .* conj(U[it,icoef])
             end
             apply_density_compensation!(data_temp, trj_rs; density_compensation)
@@ -69,7 +69,7 @@ function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{
     nsamp_t = vec(sum(mask; dims=1))
     @assert sum(nsamp_t) > 0 "Mask removes all samples, cannot compute backprojection."
 
-    cumsum_nsamp = cumsum(nsamp_t)
+    cumsum_nsamp = cumsum(nsamp_t) .+ 1 # start index of each frame
     prepend!(cumsum_nsamp, 1)
 
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true)
@@ -88,7 +88,7 @@ function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{
         t = @elapsed for icoil ∈ eachindex(cmaps)
              @simd for it ∈ axes(data, 2)
                 idx1 = cumsum_nsamp[it]
-                idx2 = cumsum_nsamp[it + 1]
+                idx2 = cumsum_nsamp[it + 1] - 1
                 @views data_temp[idx1:idx2] .= data_rs[idx1:idx2,icoil] .* conj(U[it,icoef])
             end
             apply_density_compensation!(data_temp, trj_rs; density_compensation)

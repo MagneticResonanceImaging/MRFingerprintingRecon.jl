@@ -128,7 +128,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray{T,3}, U:
     nsamp_t = vec(sum(mask; dims=1))
     @assert sum(nsamp_t) > 0 "Mask removes all samples, cannot compute kernel."
 
-    cumsum_nsamp = cumsum(nsamp_t)
+    cumsum_nsamp = cumsum(nsamp_t) .+ 1
     prepend!(cumsum_nsamp, 1)
 
     λ  = Array{Complex{T}}(undef, img_shape_os)
@@ -151,7 +151,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray{T,3}, U:
             t = @elapsed begin
                 @simd for it ∈ axes(U,1)
                     idx1 = cumsum_nsamp[it]
-                    idx2 = cumsum_nsamp[it + 1]
+                    idx2 = cumsum_nsamp[it + 1] - 1
                     @inbounds S[idx1:idx2] .= conj(U[it,ic1]) * U[it,ic2]
                 end
 
@@ -179,7 +179,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray, U::Abst
     nsamp_t = vec(sum(mask; dims=1))
     @assert sum(nsamp_t) > 0 "Mask removes all samples, cannot compute kernel."
 
-    cumsum_nsamp = cumsum(nsamp_t)
+    cumsum_nsamp = cumsum(nsamp_t) .+ 1
     prepend!(cumsum_nsamp, 1)
 
     λ  = Array{T}(undef, img_shape_os)
@@ -206,7 +206,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray, U::Abst
             t = @elapsed begin
                 @simd for it ∈ axes(U,1)
                     idx1 = cumsum_nsamp[it]
-                    idx2 = cumsum_nsamp[it + 1]
+                    idx2 = cumsum_nsamp[it + 1] - 1
                     @inbounds S[idx1:idx2] .= U[it,ic1] * U[it,ic2]
                 end
 
