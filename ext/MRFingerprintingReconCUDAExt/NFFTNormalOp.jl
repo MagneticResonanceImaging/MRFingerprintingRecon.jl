@@ -3,20 +3,20 @@ function MRFingerprintingRecon.NFFTNormalOp(
     trj::CuArray{T,3},
     U::CuArray{Tc};
     cmaps=(1,),
-    mask=CUDA.ones(Bool, size(trj)[2:end]),
+    sample_mask=CUDA.ones(Bool, size(trj)[2:end]),
     verbose=false
     ) where {T <: Real, Tc <: Union{T, Complex{T}}}
 
-    Λ, kmask_indcs = calculate_kernel_noncartesian(2 .* img_shape, trj, U; mask, verbose)
+    Λ, kmask_indcs = calculate_kernel_noncartesian(2 .* img_shape, trj, U; sample_mask, verbose)
 
     return MRFingerprintingRecon.NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps)
 end
 
 # Wrapper for 4D data arrays
-function MRFingerprintingRecon.NFFTNormalOp(img_shape, trj::CuArray{T,4}, U::CuArray{Tc}; mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T, Tc <: Union{T, Complex{T}}}
+function MRFingerprintingRecon.NFFTNormalOp(img_shape, trj::CuArray{T,4}, U::CuArray{Tc}; sample_mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T, Tc <: Union{T, Complex{T}}}
     trj = reshape(trj, size(trj,1), :, size(trj,4))
-    mask = reshape(mask, :, size(mask,3))
-    return MRFingerprintingRecon.NFFTNormalOp(img_shape, trj, U; kwargs..., mask)
+    sample_mask = reshape(sample_mask, :, size(sample_mask,3))
+    return MRFingerprintingRecon.NFFTNormalOp(img_shape, trj, U; kwargs..., sample_mask)
 end
 
 function MRFingerprintingRecon.NFFTNormalOp(
@@ -72,12 +72,12 @@ end
 ## ##########################################################################
 # Internal use
 #############################################################################
-function calculate_kmask_indcs(img_shape_os, trj::CuArray{T,3}; mask=CUDA.ones(Bool, size(trj)[2:end])) where {T}
+function calculate_kmask_indcs(img_shape_os, trj::CuArray{T,3}; sample_mask=CUDA.ones(Bool, size(trj)[2:end])) where {T}
     @assert all([i .== nextprod((2, 3, 5), i) for i ∈ img_shape_os]) "img_shape_os has to be composed of the prime factors 2, 3, and 5 (cf. NonuniformFFTs.jl documentation)."
 
     backend = CUDABackend()
     p = PlanNUFFT(Complex{T}, img_shape_os; σ=1, kernel=GaussianKernel(), backend=backend) # default is without fftshift
-    set_points!(p, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
+    set_points!(p, NonuniformFFTs._transform_point_convention.(trj[:, sample_mask]))
 
     S = CUDA.ones(Complex{T}, size(p.points[1]))
     NonuniformFFTs.spread_from_points!(p.backend, NUFFTCallbacks().nonuniform, p.point_transform_fold, p.blocks, p.kernels, p.kernel_evalmode, p.data.us, p.points, (S,))
@@ -86,13 +86,13 @@ function calculate_kmask_indcs(img_shape_os, trj::CuArray{T,3}; mask=CUDA.ones(B
 end
 
 # Kernel is complex-valued (case of complex basis matrix U)
-function calculate_kernel_noncartesian(img_shape_os, trj::CuArray{T,3}, U::CuArray{Tc}; mask=CUDA.ones(Bool, size(trj)[2:end]), verbose=false) where {T <: Real, Tc <: Complex{T}}
-    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
+function calculate_kernel_noncartesian(img_shape_os, trj::CuArray{T,3}, U::CuArray{Tc}; sample_mask=CUDA.ones(Bool, size(trj)[2:end]), verbose=false) where {T <: Real, Tc <: Complex{T}}
+    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; sample_mask)
 
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
-    nsamp_t = cu(sum(mask, dims=1)) # number of samples per time frame
+    nsamp_t = cu(sum(sample_mask, dims=1)) # number of samples per time frame
     cumsum_nsamp = CUDA.zeros(eltype(nsamp_t), size(nsamp_t)) # the cumulative sum indicates in which time frame each sample is contained
     cumsum_nsamp[2:end] = cumsum(nsamp_t[1:end-1])
 
@@ -107,7 +107,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::CuArray{T,3}, U::CuArr
     # Prep FFT and NUFFT plans
     fftplan  = plan_fft(λ)
     nfftplan = PlanNUFFT(Complex{T}, img_shape_os; backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200)) # use plan specific to real inputs
-    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
+    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, sample_mask]))
 
     # Params for kernel_uprod!
     max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
@@ -137,13 +137,13 @@ function calculate_kernel_noncartesian(img_shape_os, trj::CuArray{T,3}, U::CuArr
 end
 
 # Kernel is assumed to be real-valued to reduce storage by half (method only works with real basis U)
-function calculate_kernel_noncartesian(img_shape_os, trj::CuArray{T,3}, U::CuArray{T}; mask=CUDA.ones(Bool, size(trj)[2:end]), verbose=false) where {T <: Real}
-    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
+function calculate_kernel_noncartesian(img_shape_os, trj::CuArray{T,3}, U::CuArray{T}; sample_mask=CUDA.ones(Bool, size(trj)[2:end]), verbose=false) where {T <: Real}
+    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; sample_mask)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
-    nsamp_t = cu(sum(mask, dims=1)) # number of samples per time frame
-    @assert sum(nsamp_t) > 0 "Mask removes all samples, cannot compute kernel."
+    nsamp_t = cu(sum(sample_mask, dims=1)) # number of samples per time frame
+    @assert sum(nsamp_t) > 0 "Sample_mask removes all samples, cannot compute kernel."
 
     cumsum_nsamp = CUDA.zeros(eltype(nsamp_t), size(nsamp_t))
     cumsum_nsamp[2:end] = cumsum(nsamp_t[1:end-1])
@@ -160,7 +160,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::CuArray{T,3}, U::CuArr
     # Use brfft (and conjugate λ2 in loop below) because a forward rfft with complex input does not exist in FFTW package
     brfftplan = plan_brfft(λ2, img_shape_os[1])
     nfftplan = PlanNUFFT(T, img_shape_os; backend=CUDABackend(), gpu_method=:shared_memory, gpu_batch_size = Val(200)) # use plan specific to real inputs
-    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
+    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, sample_mask]))
 
     # Params for kernel_uprod!
     max_threads = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)

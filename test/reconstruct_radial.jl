@@ -77,7 +77,7 @@ end
 b = calculate_backprojection(data, trj, cmaps; U)
 
 ## construct forward operator
-A = NFFTNormalOp((Nx, Nx), trj, U, cmaps=cmaps)
+A = NFFTNormalOp((Nx, Nx), trj, U; cmaps)
 
 ## reconstruct
 xr = cg(A, vec(b), maxiter=20)

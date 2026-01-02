@@ -1,8 +1,8 @@
 """
-    calculate_backprojection(data, trj, img_shape; U, mask, density_compensation, verbose)
-    calculate_backprojection(data, trj, cmaps::AbstractVector{<:AbstractArray{Tc,N}}; U, mask, density_compensation, verbose)
-    calculate_backprojection(data, trj, cmaps_img_shape; U, mask, density_compensation, verbose)
-    calculate_backprojection(data, trj, cmaps; U, mask)
+    calculate_backprojection(data, trj, img_shape; U, sample_mask, density_compensation, verbose)
+    calculate_backprojection(data, trj, cmaps::AbstractVector{<:AbstractArray{Tc,N}}; U, sample_mask, density_compensation, verbose)
+    calculate_backprojection(data, trj, cmaps_img_shape; U, sample_mask, density_compensation, verbose)
+    calculate_backprojection(data, trj, cmaps; U, sample_mask)
 
 Calculate (filtered) backprojection.
 
@@ -16,29 +16,29 @@ One of the following arguments needs to be supplied
 
 # Optional Keyword Arguments
 - `U::Matrix`=`I(size(trj)[end])` or `=I(1)`: Basis coefficients of subspace (only defined if data and trj have different timeframes)
-- `mask::AbstractArray{Bool}`=`trues(size(trj)[2:end])`: Mask to indicate which k-space samples to use
+- `sample_mask::AbstractArray{Bool}`=`trues(size(trj)[2:end])`: Mask indicating which acquired k-space samples are retained for reconstruction
 - `density_compensation`=`:none`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type `AbstractVector{<:AbstractVector}`
 - `verbose::Boolean`=`false`: Verbosity level
 """
-function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{T,3}, img_shape; U=I(size(trj)[end]), mask=trues(size(trj)[2:end]), density_compensation=:none, verbose=false) where {T <: Real, Tc <: Complex{T}}
+function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{T,3}, img_shape; U=I(size(trj)[end]), sample_mask=trues(size(trj)[2:end]), density_compensation=:none, verbose=false) where {T <: Real, Tc <: Complex{T}}
     Ncoef = size(U, 2)
 
     # Count the number of samples per time frame using the mask
-    nsamp_t = vec(sum(mask; dims=1))
-    @assert sum(nsamp_t) > 0 "Mask removes all samples, cannot compute backprojection."
+    nsamp_t = vec(sum(sample_mask; dims=1))
+    @assert sum(nsamp_t) > 0 "Sample mask removes all samples, cannot compute backprojection."
 
     cumsum_nsamp = cumsum(nsamp_t) .+ 1
     prepend!(cumsum_nsamp, 1)
 
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true)
-    trj_rs = trj[:, mask]
+    trj_rs = trj[:, sample_mask]
     set_points!(p, NonuniformFFTs._transform_point_convention.(trj_rs)) # transform matrix to tuples, change sign of FT exponent, change range to (0,2π)
 
     Ncoil = size(data, 3)
     xbp = Array{Tc}(undef, img_shape..., Ncoef, Ncoil)
 
-    data_rs = data[mask, :]
-    data_temp = Array{Tc}(undef, sum(mask))
+    data_rs = data[sample_mask, :]
+    data_temp = Array{Tc}(undef, sum(sample_mask))
 
     img_idx = CartesianIndices(img_shape)
     verbose && println("calculating backprojection...")
@@ -59,27 +59,27 @@ function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{
     return xbp
 end
 
-function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{T,3}, cmaps::AbstractVector{<:AbstractArray{Tc,N}}; U=I(size(trj)[end]), mask=trues(size(trj)[2:end]), density_compensation=:none, verbose=false) where {T <: Real, Tc <: Complex{T}, N}
+function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{T,3}, cmaps::AbstractVector{<:AbstractArray{Tc,N}}; U=I(size(trj)[end]), sample_mask=trues(size(trj)[2:end]), density_compensation=:none, verbose=false) where {T <: Real, Tc <: Complex{T}, N}
     test_dimension(data, trj, U, cmaps)
 
     Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
 
     # Count the number of samples per time frame using the mask
-    nsamp_t = vec(sum(mask; dims=1))
-    @assert sum(nsamp_t) > 0 "Mask removes all samples, cannot compute backprojection."
+    nsamp_t = vec(sum(sample_mask; dims=1))
+    @assert sum(nsamp_t) > 0 "Sample mask removes all samples, cannot compute backprojection."
 
     cumsum_nsamp = cumsum(nsamp_t) .+ 1 # start index of each frame
     prepend!(cumsum_nsamp, 1)
 
     p = PlanNUFFT(Complex{T}, img_shape; fftshift=true)
-    trj_rs = trj[:, mask]
+    trj_rs = trj[:, sample_mask]
     set_points!(p, NonuniformFFTs._transform_point_convention.(trj_rs))
     xbp = zeros(Tc, img_shape..., Ncoef)
     xtmp = Array{Tc}(undef, img_shape)
 
-    data_rs = data[mask, :]
-    data_temp = Array{Tc}(undef, sum(mask))
+    data_rs = data[sample_mask, :]
+    data_temp = Array{Tc}(undef, sum(sample_mask))
 
     img_idx = CartesianIndices(img_shape)
     verbose && println("calculating backprojection...")
@@ -101,7 +101,7 @@ function calculate_backprojection(data::AbstractArray{Tc,3}, trj::AbstractArray{
     return xbp
 end
 
-function calculate_backprojection(data::AbstractArray{Tc}, trj::AbstractArray{<:Integer,3}, cmaps::AbstractVector{<:AbstractArray}; U=I(size(trj)[end]), mask=trues(size(trj)[2:end])) where {Tc <: Complex}
+function calculate_backprojection(data::AbstractArray{Tc}, trj::AbstractArray{<:Integer,3}, cmaps::AbstractVector{<:AbstractArray}; U=I(size(trj)[end]), sample_mask=trues(size(trj)[2:end])) where {Tc <: Complex}
     Ncoeff = size(U, 2)
     img_shape = size(cmaps[1])
     img_idx = CartesianIndices(img_shape)
@@ -113,7 +113,7 @@ function calculate_backprojection(data::AbstractArray{Tc}, trj::AbstractArray{<:
         for icoil ∈ axes(data, 3)
             dataU[img_idx, icoef] .= 0
             for it ∈ axes(data, 2), is ∈ axes(data, 1)
-                if mask[is, it] # only incorporate samples within the mask
+                if sample_mask[is, it] # only incorporate samples within the mask
                     k_idx = ntuple(j -> mod1(trj[j, is, it] - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
                     k_idx = CartesianIndex(k_idx)
                     for irep ∈ axes(data, 4)
@@ -128,7 +128,7 @@ function calculate_backprojection(data::AbstractArray{Tc}, trj::AbstractArray{<:
     return xbp
 end
 
-function calculate_backprojection(data::AbstractArray{Tc}, trj::AbstractArray{<:Integer,3}, img_shape; U=I(size(trj)[end]), mask=trues(size(trj)[2:end])) where {Tc <: Complex}
+function calculate_backprojection(data::AbstractArray{Tc}, trj::AbstractArray{<:Integer,3}, img_shape; U=I(size(trj)[end]), sample_mask=trues(size(trj)[2:end])) where {Tc <: Complex}
     Ncoeff = size(U, 2)
     Ncoil = size(data, 3)
     img_idx = CartesianIndices(img_shape)
@@ -140,7 +140,7 @@ function calculate_backprojection(data::AbstractArray{Tc}, trj::AbstractArray{<:
         for icoil ∈ axes(data, 3)
             dataU[img_idx, icoef] .= 0
             for it ∈ axes(data, 2), is ∈ axes(data, 1)
-                if mask[is, it] # only incorporate samples within the mask
+                if sample_mask[is, it] # only incorporate samples within the mask
                     k_idx = ntuple(j -> mod1(trj[j, is, it] - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
                     k_idx = CartesianIndex(k_idx)
                     for irep ∈ axes(data, 4)
@@ -156,11 +156,11 @@ function calculate_backprojection(data::AbstractArray{Tc}, trj::AbstractArray{<:
 end
 
 # wrappers for use with 4D arrays where the nr of ADC samples per readout is within a separate 2ⁿᵈ axis
-function calculate_backprojection(data::AbstractArray{Tc,4}, trj::AbstractArray{T,4}, arg3; mask=trues(size(trj)[2:end]), kwargs...) where {T, Tc <: Complex}
+function calculate_backprojection(data::AbstractArray{Tc,4}, trj::AbstractArray{T,4}, arg3; sample_mask=trues(size(trj)[2:end]), kwargs...) where {T, Tc <: Complex}
     data = reshape(data, :, size(data,3), size(data,4))
     trj = reshape(trj, size(trj,1), :, size(trj,4))
-    mask = reshape(mask, :, size(mask,3))
-    return calculate_backprojection(data, trj, arg3; mask, kwargs...)
+    sample_mask = reshape(sample_mask, :, size(sample_mask,3))
+    return calculate_backprojection(data, trj, arg3; sample_mask, kwargs...)
 end
 
 ## ##########################################################################

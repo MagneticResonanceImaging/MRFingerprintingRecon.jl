@@ -15,7 +15,7 @@ Differentiate between functions exploiting a pre-calculated kernel basis `Λ` an
 - `traj::Vector{Matrix}`: Trajectory
 - `U::Matrix`: Basis coefficients of subspace
 - `cmaps::Matrix=(1,)`: Coil sensitivities
-- `mask::AbstractArray{Bool}`=`trues(size(trj)[2:end])`: Mask to indicate which k-space samples to use
+- `sample_mask::AbstractArray{Bool}`=`trues(size(trj)[2:end])`: Mask indicating which acquired k-space samples are retained for reconstruction
 - `M::Vector{Matrix}`: Mask
 - `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
 - `num_fft_threads::Int`=`round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1)): Number of Threads for FFT
@@ -25,8 +25,8 @@ Differentiate between functions exploiting a pre-calculated kernel basis `Λ` an
 1. Tamir JI, et al. “T2 shuffling: Sharp, multicontrast, volumetric fast spin-echo imaging”. Magn Reson Med. 77.1 (2017), pp. 180–195. https://doi.org/10.1002/mrm.26102
 2. Assländer J, et al. “Low rank alternating direction method of multipliers reconstruction for MR fingerprinting”. Magn Reson Med 79.1 (2018), pp. 83–96. https://doi.org/10.1002/mrm.26639
 """
-function FFTNormalOp(img_shape, trj, U; cmaps=(1,), mask=trues(size(trj)[2:end]), num_fft_threads=round(Int, Threads.nthreads()/size(U, 2)))
-    Λ = calculate_kernel_cartesian(img_shape, trj, U; mask)
+function FFTNormalOp(img_shape, trj, U; cmaps=(1,), sample_mask=trues(size(trj)[2:end]), num_fft_threads=round(Int, Threads.nthreads()/size(U, 2)))
+    Λ = calculate_kernel_cartesian(img_shape, trj, U; sample_mask)
     return FFTNormalOp(Λ; cmaps, num_fft_threads)
 end
 
@@ -78,13 +78,13 @@ struct _FFTNormalOp{S,ΛType,T,N,E,F,G}
     cmaps::G
 end
 
-function calculate_kernel_cartesian(img_shape, trj, U; mask=trues(size(trj)[2:end]))
+function calculate_kernel_cartesian(img_shape, trj, U; sample_mask=trues(size(trj)[2:end]))
     Ncoeff = size(U, 2)
     Λ = zeros(eltype(U), Ncoeff, Ncoeff, img_shape...)
 
     Threads.@threads for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
         for it ∈ axes(U, 1), is ∈ axes(trj, 2)
-            if mask[is, it]
+            if sample_mask[is, it]
                 k_idx = ntuple(j -> mod1(Int(trj[j, is, it]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
                 k_idx = CartesianIndex(k_idx)
                 for irep ∈ axes(U, 3)

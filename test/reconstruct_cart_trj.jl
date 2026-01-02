@@ -54,15 +54,15 @@ fft!(data, (1, 2))
 data = fftshift(data, (1, 2))
 data = reshape(data, Nx*Nx, Nt, Ncoil)
 
-mask = rand(Nx, Nx, Nt) .< 0.8 # sampling mask
+sample_mask = rand(Nx, Nx, Nt) .< 0.8 # sampling mask
 trj = collect(Iterators.product(1:Nx, 1:Nx, 1:Nt))
 kx = reshape(getindex.(trj, 1), (1, Nx*Nx, Nt))
 ky = reshape(getindex.(trj, 2), (1, Nx*Nx, Nt))
 trj = Tint.(cat(kx, ky; dims=1))
-mask = reshape(mask, Nx*Nx, Nt)
+sample_mask = reshape(sample_mask, Nx*Nx, Nt)
 
 ##
-A = FFTNormalOp((Nx,Nx), trj, U; cmaps, mask)
+A = FFTNormalOp((Nx,Nx), trj, U; cmaps, sample_mask)
 
 ## test that forward operator is symmetric
 Λ = zeros(Complex{T}, Nc, Nc, Nx^2)
@@ -73,7 +73,7 @@ for i ∈ CartesianIndices((Nx, Nx))
 end
 
 ## test cg recon
-xbp = calculate_backprojection(data, trj, cmaps; U, mask)
+xbp = calculate_backprojection(data, trj, cmaps; U, sample_mask)
 xr = cg(A, vec(xbp), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
 

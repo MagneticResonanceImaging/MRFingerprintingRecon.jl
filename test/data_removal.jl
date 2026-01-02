@@ -72,15 +72,15 @@ end
 ## create sampling mask
 it_rm = 1
 icyc_rm = 5
-mask = trues(2Nx, Ncyc, Nt)
-mask[:, icyc_rm, it_rm] .= false
-mask = reshape(mask, 2Nx*Ncyc, Nt)
+sample_mask = trues(2Nx, Ncyc, Nt)
+sample_mask[:, icyc_rm, it_rm] .= false
+sample_mask = reshape(sample_mask, 2Nx*Ncyc, Nt)
 
 ## Test BackProjection
-b = calculate_backprojection(data, trj, cmaps; U, mask)
+b = calculate_backprojection(data, trj, cmaps; U, sample_mask)
 
 ## construct forward operator
-A = NFFTNormalOp((Nx,Nx), trj, U; cmaps, mask)
+A = NFFTNormalOp((Nx,Nx), trj, U; cmaps, sample_mask)
 
 ## reconstruct
 xr = cg(A, vec(b), maxiter=20)

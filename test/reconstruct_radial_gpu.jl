@@ -76,13 +76,13 @@ end
 # Create sampling mask
 it_rm = 1
 icyc_rm = 5
-mask = trues(2Nx, Ncyc, Nt)
-mask[:, icyc_rm, it_rm] .= false
-mask = reshape(mask, :, Nt)
+sample_mask = trues(2Nx, Ncyc, Nt)
+sample_mask[:, icyc_rm, it_rm] .= false
+sample_mask = reshape(sample_mask, :, Nt)
 
 ## CPU
-A = NFFTNormalOp(img_shape, trj, U; cmaps, mask)
-b = calculate_backprojection(data, trj, cmaps; U, mask)
+A = NFFTNormalOp(img_shape, trj, U; cmaps, sample_mask)
+b = calculate_backprojection(data, trj, cmaps; U, sample_mask)
 xr = cg(A, vec(b), maxiter=50)
 xr = reshape(xr, img_shape..., Nc)
 
@@ -91,11 +91,11 @@ trj_d = cu(trj)
 data_d = cu(data)
 U_d = cu(U)
 cmaps_d = [cu(cmaps[i]) for i ∈ eachindex(cmaps)]
-mask_d = cu(mask)
+sample_mask_d = cu(sample_mask)
 
 ## GPU
-A_d = NFFTNormalOp(img_shape, trj_d, U_d; cmaps=cmaps_d, mask=mask_d) # kernels are expected to slightly differ between CPU/GPU
-b_d = calculate_backprojection(data_d, trj_d, cmaps_d; U=U_d, mask=mask_d)
+A_d = NFFTNormalOp(img_shape, trj_d, U_d; cmaps=cmaps_d, sample_mask=sample_mask_d) # kernels are expected to slightly differ between CPU/GPU
+b_d = calculate_backprojection(data_d, trj_d, cmaps_d; U=U_d, sample_mask=sample_mask_d)
 xr_d = cg(A_d, vec(b_d), maxiter=50)
 xr_d = reshape(Array(xr_d), img_shape..., Nc) # end results should be equivalent
 

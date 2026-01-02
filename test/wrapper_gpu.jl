@@ -83,7 +83,7 @@ U = cu(U)
 ## reconstruct with 3D format
 @assert ndims(trj) == 3 && ndims(data) == 3
 b = calculate_backprojection(data, trj, cmaps; U)
-A = NFFTNormalOp((Nx, Nx), trj, U, cmaps=cmaps)
+A = NFFTNormalOp((Nx, Nx), trj, U; cmaps)
 xr3d = cg(A, vec(b), maxiter=20)
 xr3d = reshape(xr3d, Nx, Nx, Nc)
 
@@ -93,7 +93,7 @@ data = reshape(data, 2Nx, Ncyc, Nt, Ncoil)
 
 @assert ndims(trj) == 4 && ndims(data) == 4
 b = calculate_backprojection(data, trj, cmaps; U)
-A = NFFTNormalOp((Nx, Nx), trj, U; cmaps=cmaps)
+A = NFFTNormalOp((Nx, Nx), trj, U; cmaps)
 xr = cg(A, vec(b), maxiter=20)
 xr4d = reshape(xr, Nx, Nx, Nc)
 

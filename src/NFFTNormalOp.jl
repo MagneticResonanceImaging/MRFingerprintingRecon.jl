@@ -3,7 +3,7 @@
 #############################################################################
 
 """
-    NFFTNormalOp(img_shape, trj, U; cmaps, verbose, num_fft_threads)
+    NFFTNormalOp(img_shape, trj, U; cmaps, sample_mask, verbose, num_fft_threads)
     NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps)
 
 Create normal operator of NFFT operator.
@@ -15,9 +15,7 @@ When the basis functions `U` are real-valued, a real-only NUFFT is used to compu
 - `trj::AbstractArray`: Trajectory, use `CuArray` as input type to use CUDA code.
 - `U::AbstractMatrix`: Basis coefficients of subspace
 - `cmaps::AbstractVector{Matrix}=(1,)`: Coil sensitivities, use `AbstractVector{CuArray}` as type for use with CUDA code.
-- `mask::AbstractArray{Bool} = trues(size(trj)[2:end])`: Mask to indicate which k-space samples to use
-- `Λ::Array{T,3}`: Toeplitz kernel basis
-- `kmask_indcs::Vector{Int}`: Sampling indices of Toeplitz mask
+- `sample_mask::AbstractArray{Bool} = trues(size(trj)[2:end])`: Mask indicating which acquired k-space samples are retained for reconstruction
 - `verbose::Boolean`=`false`: Verbose level
 - `num_fft_threads::Int`=`round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1))`: Number of threads for FFT
 
@@ -32,21 +30,21 @@ function NFFTNormalOp(
     trj::AbstractArray{T,3},
     U::AbstractArray{Tc};
     cmaps=(1,),
-    mask=trues(size(trj)[2:end]),
+    sample_mask=trues(size(trj)[2:end]),
     verbose=false,
     num_fft_threads=round(Int, Threads.nthreads()/size(U, 2)),
     ) where {T <: Real, Tc <: Union{T, Complex{T}}}
 
-    Λ, kmask_indcs = calculate_kernel_noncartesian(2 .* img_shape, trj, U; mask, verbose)
+    Λ, kmask_indcs = calculate_kernel_noncartesian(2 .* img_shape, trj, U; sample_mask, verbose)
 
     return NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps, num_fft_threads=num_fft_threads)
 end
 
 # Wrapper for 4D data arrays
-function NFFTNormalOp(img_shape, trj::AbstractArray{T,4}, U::AbstractArray{Tc,2}; mask=trues(size(trj)[2:end]), kwargs...) where {T, Tc <: Union{T, Complex{T}}}
+function NFFTNormalOp(img_shape, trj::AbstractArray{T,4}, U::AbstractArray{Tc,2}; sample_mask=trues(size(trj)[2:end]), kwargs...) where {T, Tc <: Union{T, Complex{T}}}
     trj = reshape(trj, size(trj, 1), :, size(trj,4))
-    mask = reshape(mask, :, size(mask,3))
-    return NFFTNormalOp(img_shape, trj, U; mask, kwargs...)
+    sample_mask = reshape(sample_mask, :, size(sample_mask,3))
+    return NFFTNormalOp(img_shape, trj, U; sample_mask, kwargs...)
 end
 
 function NFFTNormalOp(
@@ -104,13 +102,13 @@ struct _NFFTNormalOp{S,E,F,G,H,I,J,K,L,M,N}
     blocks::N
 end
 
-function calculate_kmask_indcs(img_shape_os, trj; mask=trues(size(trj)[2:end]))
+function calculate_kmask_indcs(img_shape_os, trj; sample_mask=trues(size(trj)[2:end]))
     @assert all([i .== nextprod((2, 3, 5), i) for i ∈ img_shape_os]) "img_shape_os has to be composed of the prime factors 2, 3, and 5 (cf. NonuniformFFTs.jl documentation)."
 
     T = eltype(trj)
     backend = CPU()
     p = PlanNUFFT(Complex{T}, img_shape_os; σ=1, kernel=GaussianKernel(), backend=backend) # default is without fftshift
-    set_points!(p, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
+    set_points!(p, NonuniformFFTs._transform_point_convention.(trj[:, sample_mask]))
 
     S = ones(Complex{T}, size(p.points[1]))
     NonuniformFFTs.spread_from_points!(p.backend, NUFFTCallbacks().nonuniform, p.point_transform_fold, p.blocks, p.kernels, p.kernel_evalmode, p.data.us, p.points, (S,))
@@ -119,13 +117,13 @@ function calculate_kmask_indcs(img_shape_os, trj; mask=trues(size(trj)[2:end]))
 end
 
 # Calculation for complex-valued basis U
-function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray{T,3}, U::AbstractArray{Tc}; mask=trues(size(trj)[2:end]), verbose=false) where {T, Tc <: Complex{T}}
-    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
+function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray{T,3}, U::AbstractArray{Tc}; sample_mask=trues(size(trj)[2:end]), verbose=false) where {T, Tc <: Complex{T}}
+    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; sample_mask)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
     # count the number of samples per time frame using the mask
-    nsamp_t = vec(sum(mask; dims=1))
+    nsamp_t = vec(sum(sample_mask; dims=1))
     @assert sum(nsamp_t) > 0 "Mask removes all samples, cannot compute kernel."
 
     cumsum_nsamp = cumsum(nsamp_t) .+ 1
@@ -141,7 +139,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray{T,3}, U:
     # Prep FFT and NUFFT plans
     fftplan  = plan_fft(λ; flags=FFTW.MEASURE, num_threads=Threads.nthreads())
     nfftplan = PlanNUFFT(Complex{T}, img_shape_os) # default is without fftshift
-    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask])) # transform matrix to tuples, change sign of FT exponent, change range to (0,2π)
+    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, sample_mask])) # transform matrix to tuples, change sign of FT exponent, change range to (0,2π)
 
     # Evaluating only the upper triangular matrix assumes that the PSF from the rightmost voxel to the leftmost voxel is the adjoint of the PSF in the opposite direction.
     # For the outmost voxel, this is not correct, but the resulting images are virtually identical in our test cases.
@@ -170,13 +168,13 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray{T,3}, U:
 end
 
 # Kernel is assumed to be real-valued for faster computation, highly accurate if U is a set of real basis functions
-function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray, U::AbstractArray{T}; mask=trues(size(trj)[2:end]), verbose=false) where {T <: Real}
-    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; mask)
+function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray, U::AbstractArray{T}; sample_mask=trues(size(trj)[2:end]), verbose=false) where {T <: Real}
+    kmask_indcs = calculate_kmask_indcs(img_shape_os, trj; sample_mask)
     @assert all(kmask_indcs .> 0) # ensure that kmask is not out of bound
     @assert all(kmask_indcs .<= prod(img_shape_os))
 
     # count the number of samples per time frame using the mask
-    nsamp_t = vec(sum(mask; dims=1))
+    nsamp_t = vec(sum(sample_mask; dims=1))
     @assert sum(nsamp_t) > 0 "Mask removes all samples, cannot compute kernel."
 
     cumsum_nsamp = cumsum(nsamp_t) .+ 1
@@ -197,7 +195,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::AbstractArray, U::Abst
     # That is, a forward transform with Hermitian input that outputs only real values is not defined
     brfftplan = plan_brfft(λ2, img_shape_os[1]; flags=FFTW.MEASURE, num_threads=Threads.nthreads())
     nfftplan = PlanNUFFT(T, img_shape_os)
-    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, mask]))
+    set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(trj[:, sample_mask]))
 
     # Evaluating only the upper triangular matrix assumes that the PSF from the rightmost voxel to the leftmost voxel is the adjoint of the PSF in the opposite direction.
     # For the outmost voxel, this is not correct, but the resulting images are virtually identical in our test cases.
