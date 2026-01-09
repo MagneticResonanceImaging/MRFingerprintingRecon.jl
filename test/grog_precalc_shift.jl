@@ -16,9 +16,10 @@ Ncoil = 9
 Nrep = 3
 Nd = 2
 Ncyc = 3
+img_shape = (Nx,Nx)
 
 ## Create trajectory
-trj = MRFingerprintingRecon.traj_2d_radial_goldenratio(Nr, Ncyc, Nt; N=1)
+trj = traj_2d_radial_goldenratio(Nr, Ncyc, Nt; N=1)
 
 ## Create phantom geometry
 x = shepp_logan(Nx)
@@ -41,21 +42,21 @@ end
 
 cmaps = [cmaps[:,:,ic] for ic=1:Ncoil]
 
-## Simulate data
-data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
-nfftplan = plan_nfft(trj[1], (Nx,Nx))
+##
+data = Array{Complex{T}, 3}(undef, 2Nx*Ncyc, Nt, Ncoil);
+nfftplan = PlanNUFFT(Complex{T}, img_shape; fftshift=true);
 xcoil = similar(x, Complex{T})
 for icoil ∈ 1:Ncoil
     xcoil .= x
     xcoil .*= cmaps[icoil]
-    for it ∈ eachindex(data)
-        set_points!(nfftplan.p, trj[it])
-        @views mul!(data[it][:,icoil], nfftplan, xcoil)
+    for it ∈ axes(data, 2)
+        set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reshape(trj[:,:,it], 2, :)))
+        @views NonuniformFFTs.exec_type2!(data[:,it,icoil], nfftplan, xcoil)
     end
 end
 
 # Create repeating pattern
-data2 = [repeat(data_i, outer = [1, 1, Nrep]) for data_i ∈ data]
+data2 = repeat(data, outer = [1, 1, 1, Nrep])
 
 ## #####################################
 # Test Calibration of GROG kernel
@@ -64,7 +65,6 @@ lnG = MRFingerprintingRecon.grog_calib(data, trj, Nr)
 lnG2 = MRFingerprintingRecon.grog_calib(data2, trj, Nr)
 
 @test lnG ≈ lnG2 rtol = 1e-6
-
 
 ## #####################################
 # Test Gridding with GROG kernel
@@ -78,29 +78,25 @@ trj = MRFingerprintingRecon.grog_gridding!(data, trj, lnG, Nr, (Nx,Nx))
 trj2 = MRFingerprintingRecon.grog_gridding!(data2, trj2, lnG2, Nr, (Nx,Nx))
 
 # Compare gridding with and without repeating pattern
-@test data[1] ≈ data2[1][:,:,1] rtol = 1e-5
-@test data[1] ≈ data2[1][:,:,3] rtol = 1e-5
-
+@test data ≈ data2[:,:,:,1] rtol = 1e-5
+@test data ≈ data2[:,:,:,3] rtol = 1e-5
 
 ## #####################################
 # Test Gridded Reconstruction with and without Repeating Pattern
 ########################################
-U = ones(ComplexF32, length(data), 1)
+U = ones(ComplexF32, Nt, 1)
 
 # Reconstruction without repeating pattern
 A_grog = FFTNormalOp((Nx,Nx), trj, U; cmaps)
-x1 = calculateBackProjection(data, trj, cmaps; U)
+x1 = calculate_backprojection(data, trj, cmaps; U)
 xg1 = cg(A_grog, vec(x1), maxiter=20)
 xg1 = reshape(xg1, Nx, Nx)
 
 # Reconstruction with repeating pattern
 U2 = repeat(U, 1, 1, Nrep) # For joint subspace reconstruction
 A_grog = FFTNormalOp((Nx,Nx), trj2, U2; cmaps)
-x2 = calculateBackProjection(data2, trj2, cmaps; U=U2)
+x2 = calculate_backprojection(data2, trj2, cmaps; U=U2)
 xg2 = cg(A_grog, vec(x2), maxiter=20)
 xg2 = reshape(xg2, Nx, Nx)
 
 @test xg1 ≈ xg2 rtol = 5e-3
-
-# using Plots
-# heatmap(abs.(cat(reshape(xg1, Nx, :), reshape(xg2, Nx, :), dims=1)), clim=(0.75, 1.25))

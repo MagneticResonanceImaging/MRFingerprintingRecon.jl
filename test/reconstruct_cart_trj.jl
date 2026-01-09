@@ -1,4 +1,3 @@
-
 using BenchmarkTools
 using MRFingerprintingRecon
 using ImagePhantoms
@@ -10,11 +9,10 @@ using Test
 ## set parameters
 T = Float32
 Tint = Int32
-Nx = 64
+Nx = 128
 Nc = 4
-Nt = 100
+Nt = 40
 Ncoil = 9
-
 img_shape = (Nx, Nx)
 
 ## create test image
@@ -54,19 +52,17 @@ end
 data .= ifftshift(data, (1, 2))
 fft!(data, (1, 2))
 data = fftshift(data, (1, 2))
+data = reshape(data, Nx*Nx, Nt, Ncoil)
 
-D = rand(Nx, Nx, Nt) .< 0.1 # sampling mask
-data = [data[D[:,:,it], it, :] for it ∈ 1:Nt]
+sample_mask = rand(Nx, Nx, Nt) .< 0.8 # sampling mask
+trj = collect(Iterators.product(1:Nx, 1:Nx, 1:Nt))
+kx = reshape(getindex.(trj, 1), (1, Nx*Nx, Nt))
+ky = reshape(getindex.(trj, 2), (1, Nx*Nx, Nt))
+trj = Tint.(cat(kx, ky; dims=1))
+sample_mask = reshape(sample_mask, Nx*Nx, Nt)
 
-## create trajectory from sampling mask
-trj = Vector{Matrix{Int}}(undef, Nt)
-for it ∈ 1:Nt
-    cart_indices = findall(D[:,:,it] .> 0)
-    trj_it = collect(Iterators.flatten(Tuple.(cart_indices)))
-    trj[it] = reshape(trj_it, 2, Int(length(trj_it) / 2))
-end
-
-A = FFTNormalOp((Nx,Nx), trj, U; cmaps)
+##
+A = FFTNormalOp((Nx,Nx), trj, U; cmaps, sample_mask)
 
 ## test that forward operator is symmetric
 Λ = zeros(Complex{T}, Nc, Nc, Nx^2)
@@ -77,7 +73,7 @@ for i ∈ CartesianIndices((Nx, Nx))
 end
 
 ## test cg recon
-xbp = calculateBackProjection(data, trj, cmaps; U)
+xbp = calculate_backprojection(data, trj, cmaps; U, sample_mask)
 xr = cg(A, vec(xbp), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
 

@@ -12,25 +12,30 @@ Differentiate between functions exploiting a pre-calculated kernel basis `Λ` an
 
 # Arguments
 - `img_shape::Tuple{Int}`: Image dimensions
-- `traj::Vector{Matrix{Float32}}`: Trajectory
-- `U::Matrix{ComplexF32}`=(1,): Basis coefficients of subspace
-- `cmaps::Matrix{ComplexF32}`: Coil sensitivities
-- `M::Vector{Matrix{Float32}}`: Mask
+- `traj::Vector{Matrix}`: Trajectory
+- `U::Matrix`: Basis coefficients of subspace
+- `cmaps::Matrix=(1,)`: Coil sensitivities
+- `sample_mask::AbstractArray{Bool}`=`trues(size(trj)[2:end])`: Mask indicating which acquired k-space samples are retained for reconstruction
+- `M::Vector{Matrix}`: Mask
 - `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
-- `num_fft_threads::Int = round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1)): Number of Threads for FFT
-- `eltype_x=eltype(Λ)` define the type of `x` (in the product `FFTNormalOp(Λ) * x`). The default is the same eltype as `Λ`
+- `num_fft_threads::Int`=`round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1)): Number of Threads for FFT
+- `eltype_x`=`eltype(Λ)` define the type of `x` (in the product `FFTNormalOp(Λ) * x`). The default is the same eltype as `Λ`
+
+# References
+1. Tamir JI, et al. “T2 shuffling: Sharp, multicontrast, volumetric fast spin-echo imaging”. Magn Reson Med. 77.1 (2017), pp. 180–195. https://doi.org/10.1002/mrm.26102
+2. Assländer J, et al. “Low rank alternating direction method of multipliers reconstruction for MR fingerprinting”. Magn Reson Med 79.1 (2018), pp. 83–96. https://doi.org/10.1002/mrm.26639
 """
-function FFTNormalOp(img_shape, trj, U; cmaps=(1,), num_fft_threads = round(Int, Threads.nthreads()/size(U, 2)))
-    Λ = calculateKernelBasis(img_shape, trj, U)
+function FFTNormalOp(img_shape, trj, U; cmaps=(1,), sample_mask=trues(size(trj)[2:end]), num_fft_threads=round(Int, Threads.nthreads()/size(U, 2)))
+    Λ = calculate_kernel_cartesian(img_shape, trj, U; sample_mask)
     return FFTNormalOp(Λ; cmaps, num_fft_threads)
 end
 
-function FFTNormalOp(M, U; cmaps=(1,), num_fft_threads = round(Int, Threads.nthreads()/size(U, 2)))
-    Λ = calculateKernelBasis(M, U)
+function FFTNormalOp(M, U; cmaps=(1,), num_fft_threads=round(Int, Threads.nthreads()/size(U, 2)))
+    Λ = calculate_kernel_cartesian(M, U)
     return FFTNormalOp(Λ; cmaps, num_fft_threads )
 end
 
-function FFTNormalOp(Λ; cmaps=(1,), num_fft_threads = round(Int, Threads.nthreads()/size(Λ, 1)), eltype_x=eltype(Λ))
+function FFTNormalOp(Λ; cmaps=(1,), num_fft_threads=round(Int, Threads.nthreads()/size(Λ, 1)), eltype_x=eltype(Λ))
     Ncoeff = size(Λ, 1)
     img_shape = size(Λ)[3:end]
     kL1 = Array{eltype_x}(undef, img_shape..., Ncoeff)
@@ -73,21 +78,25 @@ struct _FFTNormalOp{S,ΛType,T,N,E,F,G}
     cmaps::G
 end
 
-function calculateKernelBasis(img_shape, trj, U)
+function calculate_kernel_cartesian(img_shape, trj, U; sample_mask=trues(size(trj)[2:end]))
     Ncoeff = size(U, 2)
     Λ = zeros(eltype(U), Ncoeff, Ncoeff, img_shape...)
 
     Threads.@threads for ic ∈ CartesianIndices((Ncoeff, Ncoeff))
-        for it ∈ axes(U, 1), ix ∈ axes(trj[it], 2), irep ∈ axes(U, 3)
-            k_idx = ntuple(j -> mod1(Int(trj[it][j, ix]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
-            k_idx = CartesianIndex(k_idx)
-            Λ[ic[1], ic[2], k_idx] += conj(U[it, ic[1], irep]) * U[it, ic[2], irep]
+        for it ∈ axes(U, 1), is ∈ axes(trj, 2)
+            if sample_mask[is, it]
+                k_idx = ntuple(j -> mod1(Int(trj[j, is, it]) - img_shape[j] ÷ 2, img_shape[j]), length(img_shape)) # incorporates ifftshift
+                k_idx = CartesianIndex(k_idx)
+                for irep ∈ axes(U, 3)
+                    Λ[ic[1], ic[2], k_idx] += conj(U[it, ic[1], irep]) * U[it, ic[2], irep]
+                end
+            end
         end
     end
     return Λ
 end
 
-function calculateKernelBasis(M, U)
+function calculate_kernel_cartesian(M, U)
     Ncoeff = size(U, 2)
     img_shape = size(M)[1:end-1]
     Λ = Array{eltype(U)}(undef, Ncoeff, Ncoeff, img_shape...)
@@ -96,7 +105,6 @@ function calculateKernelBasis(M, U)
     Threads.@threads for i ∈ CartesianIndices(img_shape)
         Λ[:, :, i] .= U' * (M[i, :] .* U) #U' * diagm(D) * U
     end
-
     return Λ
 end
 

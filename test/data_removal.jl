@@ -16,6 +16,7 @@ Nx = 32
 Nc = 4
 Nt = 20
 Ncyc = 10
+img_shape = (Nx, Nx)
 
 ## create test image
 x = zeros(Complex{T}, Nx, Nx, Nc)
@@ -46,53 +47,40 @@ phi = Float32.(α_g * (1:Nt*Ncyc))
 theta = Float32.(0 * (1:Nt*Ncyc) .+ pi/2)
 phi = reshape(phi, Ncyc, Nt)
 theta = reshape(theta, Ncyc, Nt)
-
-trj = kooshball(2Nx, theta, phi)
-trj = [trj[i][1:2,:] for i ∈ eachindex(trj)]
+trj = traj_kooshball(2Nx, theta, phi)
+trj = trj[1:2, :, :]
 
 ## set up basis functions
 U = randn(Complex{T}, Nt, Nc)
 U,_,_ = svd(U)
 
 ## simulate data
-data = Array{Complex{T}}(undef, size(trj[1], 2), Nt, Ncoil)
-data = [data[:,it,:] for it = 1:Nt]
+data = Array{Complex{T}, 3}(undef, 2Nx*Ncyc, Nt, Ncoil);
+nfftplan = PlanNUFFT(Complex{T}, img_shape; fftshift=true);
+xcoil = copy(x);
 
-nfftplan = plan_nfft(trj[1], (Nx,Nx))
-xcoil = copy(x)
-for icoil ∈ 1:Ncoil
+for icoil ∈ axes(data, 3)
     xcoil .= x
     xcoil .*= cmaps[icoil]
-    for it ∈ axes(data,1)
-        set_points!(nfftplan.p, trj[it])
+    for it ∈ axes(data, 2)
+        set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reshape(trj[:,:,it], 2, :)))
         xt = reshape(reshape(xcoil, :, Nc) * U[it,:], Nx, Nx)
-        @views mul!(data[it][:,icoil], nfftplan, xt)
+        @views NonuniformFFTs.exec_type2!(data[:,it,icoil], nfftplan, xt)
     end
 end
 
-# create mask with false value to remove
+## create sampling mask
 it_rm = 1
 icyc_rm = 5
-maskDataSelection = trues(2Nx, Ncyc, Nt)
-maskDataSelection[:, icyc_rm, it_rm] .= false
+sample_mask = trues(2Nx, Ncyc, Nt)
+sample_mask[:, icyc_rm, it_rm] .= false
+sample_mask = reshape(sample_mask, 2Nx*Ncyc, Nt)
 
-maskDataSelection = reshape(maskDataSelection,:,Nt)
-maskDataSelection = [vec(maskDataSelection[:,i]) for i in axes(maskDataSelection,2)]
-
-# remove data
-for it ∈ 1:Nt
-    data[it] = data[it][maskDataSelection[it],:] 
-    trj[it] = trj[it][:,maskDataSelection[it]] 
-end
-
-## Test BackProjection 
-img_shape = (Nx,Nx)
-b_temp = calculateBackProjection(data, trj, img_shape)
-
-b = calculateBackProjection(data, trj, cmaps; U=U)
+## Test BackProjection
+b = calculate_backprojection(data, trj, cmaps; U, sample_mask)
 
 ## construct forward operator
-A = NFFTNormalOp((Nx,Nx), trj, U, cmaps=cmaps)
+A = NFFTNormalOp((Nx,Nx), trj, U; cmaps, sample_mask)
 
 ## reconstruct
 xr = cg(A, vec(b), maxiter=20)

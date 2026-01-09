@@ -15,6 +15,7 @@ Nc = 4
 Nt = 100
 Ncyc = 200
 Ncoil = 9
+img_shape=(Nx, Nx)
 
 ## create test image
 x = zeros(Complex{T}, Nx, Nx, Nc)
@@ -46,24 +47,25 @@ theta = Float32.(0 * (1:Nt*Ncyc) .+ pi/2)
 phi = reshape(phi, Ncyc, Nt)
 theta = reshape(theta, Ncyc, Nt)
 
-trj = kooshball(Nr, theta, phi)
-trj = [trj[i][1:2,:] for i ∈ eachindex(trj)]
+trj = traj_kooshball(Nr, theta, phi)
+trj = trj[1:2, :, :]
 
 ## set up basis functions
 U = randn(Complex{T}, Nt, Nc)
 U,_,_ = svd(U)
 
 ## simulate data
-data = [Matrix{Complex{T}}(undef, size(trj[1], 2), Ncoil) for _ ∈ 1:Nt]
-nfftplan = plan_nfft(trj[1], (Nx,Nx))
-xcoil = copy(x)
-for icoil ∈ 1:Ncoil
+data = Array{Complex{T}, 3}(undef, 2Nx*Ncyc, Nt, Ncoil);
+nfftplan = PlanNUFFT(Complex{T}, img_shape; fftshift=true);
+xcoil = copy(x);
+
+for icoil ∈ axes(data, 3)
     xcoil .= x
     xcoil .*= cmaps[icoil]
-    for it ∈ eachindex(data)
-        set_points!(nfftplan.p, trj[it])
+    for it ∈ axes(data, 2)
+        set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reshape(trj[:,:,it], 2, :)))
         xt = reshape(reshape(xcoil, :, Nc) * U[it,:], Nx, Nx)
-        @views mul!(data[it][:,icoil], nfftplan, xt)
+        @views NonuniformFFTs.exec_type2!(data[:,it,icoil], nfftplan, xt)
     end
 end
 
@@ -76,19 +78,15 @@ for i ∈ CartesianIndices(xc)
 end
 xc = ifft(ifftshift(xc, 1:2), 1:2)
 
-## Remove some data
-data[2] = data[2][1:end-Nr,:]
-trj[2]  =  trj[2][:,1:end-Nr]
-
 ## NFFT Reconstruction
-xbp_rad = calculateBackProjection(data, trj, cmaps; U=U)
+xbp_rad = calculate_backprojection(data, trj, cmaps; U=U)
 A_rad = NFFTNormalOp((Nx,Nx), trj, U; cmaps=cmaps)
 xr = cg(A_rad, vec(xbp_rad), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc)
 
 ## GROG Reconstruction
 trj_cart = radial_grog!(data, trj, Nr, (Nx,Nx))
-xbp_grog = calculateBackProjection(data, trj_cart, cmaps; U)
+xbp_grog = calculate_backprojection(data, trj_cart, cmaps; U)
 A_cart = FFTNormalOp((Nx,Nx), trj_cart, U; cmaps)
 xg = cg(A_cart, vec(xbp_grog), maxiter=20)
 xg = reshape(xg, Nx, Nx, Nc)
@@ -99,9 +97,3 @@ xg = reshape(xg, Nx, Nx, Nc)
 ## test recon equivalence
 @test xc ≈ xr  rtol = 5e-2
 @test xc ≈ xg  rtol = 5e-2
-
-##
-# using Plots
-# heatmap(abs.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), reshape(xg, Nx, :), dims=1)), clim=(0.75, 1.25), size=(1100,750))
-# heatmap(angle.(cat(reshape(xc, Nx, :), reshape(xr, Nx, :), reshape(xg, Nx, :); dims=1)), size=(1100,750))
-# heatmap(angle.(reshape(xr, Nx, :)) .- angle.(reshape(xg, Nx, :)), clim=(-0.05, 0.05), size=(1100,250), c=:bluesreds)
