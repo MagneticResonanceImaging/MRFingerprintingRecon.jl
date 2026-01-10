@@ -22,6 +22,7 @@ MRFingerprintingReconCUDAExt = "CUDA"
 [compat]
 CUDA = "5.8.3"
 ExponentialUtilities = "1"
+FFTW = "1"
 IterativeSolvers = "0.9"
 LinearAlgebra = "1.7"
 LinearOperators = "2.11"
