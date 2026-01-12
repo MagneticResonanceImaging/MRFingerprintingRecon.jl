@@ -1,7 +1,7 @@
 # test coil map estimates
 
 using BenchmarkTools
-using MRFingerprintingRecon
+using MRISubspaceRecon
 using ImagePhantoms
 using LinearAlgebra
 using IterativeSolvers

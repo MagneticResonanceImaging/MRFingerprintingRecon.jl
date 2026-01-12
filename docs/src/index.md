@@ -1,13 +1,13 @@
 ```@meta
-CurrentModule = MRFingerprintingRecon
+CurrentModule = MRISubspaceRecon
 ```
 
-# MRFingerprintingRecon.jl
+# MRISubspaceRecon.jl
 
-[MRFingerprintingRecon.jl](https://github.com/MagneticResonanceImaging/MRFingerprintingRecon.jl) package package aims to enable rapid iterative reconstruction
+[MRISubspaceRecon.jl](https://github.com/MagneticResonanceImaging/MRISubspaceRecon.jl) package package aims to enable rapid iterative reconstruction
 of Cartesian and non-Cartesian MRI data using subspace modeling [1,2]. Particular care is given to enable the reconstruction of large numbers of subspace coefficients along with large image grid sizes.
 
-For compatibility with other Julia packages, such as [IterativeSolvers.jl](https://github.com/JuliaLinearAlgebra/IterativeSolvers.jl) and [RegularizedLeastSquares.jl](https://github.com/JuliaImageRecon/RegularizedLeastSquares.jl), operations are defined in terms of linear operators and their effects on the data vectors. [MRFingerprintingRecon.jl](https://github.com/MagneticResonanceImaging/MRFingerprintingRecon.jl) is designed to compute these objects with multi-threaded CPUs and on NVIDIA GPUs. The package further contains functions to perform GRAPPA operator gridding (GROG) [3] or to generate radial trajectories. However, all methods that require an explicit k-space trajectory as input generalize to arbitrary trajectories.
+For compatibility with other Julia packages, such as [IterativeSolvers.jl](https://github.com/JuliaLinearAlgebra/IterativeSolvers.jl) and [RegularizedLeastSquares.jl](https://github.com/JuliaImageRecon/RegularizedLeastSquares.jl), operations are defined in terms of linear operators and their effects on the data vectors. [MRISubspaceRecon.jl](https://github.com/MagneticResonanceImaging/MRISubspaceRecon.jl) is designed to compute these objects with multi-threaded CPUs and on NVIDIA GPUs. The package further contains functions to perform GRAPPA operator gridding (GROG) [3] or to generate radial trajectories. However, all methods that require an explicit k-space trajectory as input generalize to arbitrary trajectories.
 
 The documentation of all exported functions can be found in the [API](@ref) Section.
 
@@ -26,9 +26,9 @@ To decrease computation time, iterative reconstructions employ Toeplitz embeddin
 is implemented as a pointwise multiplication at the cost of an oversampling factor of 2 across each spatial dimension. The resulting operator is an $R\times R$ matrix per k-space sample and thus has a large total size of $8N_xN_yN_zR^2$ for a 3D image. We exploit several methods throughout to handle the large memory requirement, especially when using a GPU for reconstruction. A main point for users is that a real-valued basis $\mathbf{U}_R$ reduces the memory requirement for storing the normal operator by a factor of 2.
 
 # CPU or GPU
-Reconstructions of non-Cartesian MRI in [MRFingerprintingRecon.jl](https://github.com/MagneticResonanceImaging/MRFingerprintingRecon.jl) are implemented for CPU and NVIDIA GPUs. The GPU code is included as a Julia extension and is loaded after importing CUDA.jl via:
+Reconstructions of non-Cartesian MRI in [MRISubspaceRecon.jl](https://github.com/MagneticResonanceImaging/MRISubspaceRecon.jl) are implemented for CPU and NVIDIA GPUs. The GPU code is included as a Julia extension and is loaded after importing CUDA.jl via:
 ```
-using MRFingerprintingRecon
+using MRISubspaceRecon
 using CUDA
 ```
 We recommend using the GPU code which can be faster by a factor of 10--20 than CPU multi-threading (for typical solvers like conjugate gradient or FISTA [7]). However, a specific GPU implementation for Cartesian MRI is still under development. In this case, one can use the CPU implementation or the non-Cartesian methods.

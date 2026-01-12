@@ -1,4 +1,4 @@
-using MRFingerprintingRecon
+using MRISubspaceRecon
 using CUDA
 using LinearAlgebra
 using BenchmarkTools

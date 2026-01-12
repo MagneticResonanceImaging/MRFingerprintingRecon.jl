@@ -1,7 +1,7 @@
 # test iterative reconstruction with complex basis U
 
 using BenchmarkTools
-using MRFingerprintingRecon
+using MRISubspaceRecon
 using ImagePhantoms
 using LinearAlgebra
 using IterativeSolvers

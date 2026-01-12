@@ -1,0 +1,17 @@
+module MRISubspaceReconCUDAExt
+
+using MRISubspaceRecon
+using MRISubspaceRecon.FFTW
+using MRISubspaceRecon.IterativeSolvers
+using MRISubspaceRecon.LinearAlgebra
+using MRISubspaceRecon.LinearOperators
+using MRISubspaceRecon.MRICoilSensitivities
+using MRISubspaceRecon.NonuniformFFTs
+
+using CUDA
+
+include("NFFTNormalOp.jl")
+include("BackProjection.jl")
+include("CoilMaps.jl")
+
+end # module

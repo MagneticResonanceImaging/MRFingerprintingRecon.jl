@@ -1,4 +1,4 @@
-module MRFingerprintingRecon
+module MRISubspaceRecon
 
 using OhMyThreads
 using LinearAlgebra

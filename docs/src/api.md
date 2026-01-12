@@ -1,15 +1,15 @@
 ```@meta
 Author = "Jakob Assländer"
-CurrentModule = MRFingerprintingRecon
+CurrentModule = MRISubspaceRecon
 ```
 
 # API
 
-In the following, you find the documentation of all exported functions of the [MRFingerprintingRecon.jl](https://github.com/MagneticResonanceImaging/MRFingerprintingRecon.jl) package:
+In the following, you find the documentation of all exported functions of the [MRISubspaceRecon.jl](https://github.com/MagneticResonanceImaging/MRISubspaceRecon.jl) package:
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [MRFingerprintingRecon]
+Modules = [MRISubspaceRecon]
 ```

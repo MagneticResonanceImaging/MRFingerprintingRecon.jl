@@ -1,6 +1,6 @@
-name = "MRFingerprintingRecon"
-uuid = "f4798e02-a7e0-47f5-a571-12dd775704d3"
-version = "0.8.7-DEV"
+name = "MRISubspaceRecon"
+uuid = "81225dec-f002-11f0-8080-35af0c2c6e2d"
+version = "0.9.0-DEV"
 authors = ["Jakob Asslaender <jakob.asslaender@nyumc.org>"]
 
 [deps]
@@ -17,7 +17,7 @@ OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 
 [extensions]
-MRFingerprintingReconCUDAExt = "CUDA"
+MRISubspaceReconCUDAExt = "CUDA"
 
 [compat]
 CUDA = "5.8.3"

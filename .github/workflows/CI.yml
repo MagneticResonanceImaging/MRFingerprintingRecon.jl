@@ -61,9 +61,9 @@ jobs:
       - run: |
           julia --project=docs -e '
             using Documenter: DocMeta, doctest
-            using MRFingerprintingRecon
-            DocMeta.setdocmeta!(MRFingerprintingRecon, :DocTestSetup, :(using MRFingerprintingRecon); recursive=true)
-            # doctest(MRFingerprintingRecon)'
+            using MRISubspaceRecon
+            DocMeta.setdocmeta!(MRISubspaceRecon, :DocTestSetup, :(using MRISubspaceRecon); recursive=true)
+            # doctest(MRISubspaceRecon)'
       - run: julia --project=docs docs/make.jl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

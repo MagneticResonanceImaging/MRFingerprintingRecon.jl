@@ -2,7 +2,7 @@
 # tests with a complex point spread function
 
 using BenchmarkTools
-using MRFingerprintingRecon
+using MRISubspaceRecon
 using ImagePhantoms
 using LinearAlgebra
 using IterativeSolvers
