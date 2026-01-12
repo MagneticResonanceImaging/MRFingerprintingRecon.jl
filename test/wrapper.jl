@@ -1,7 +1,7 @@
 # test wrapped method calls
 
 using BenchmarkTools
-using MRFingerprintingRecon
+using MRISubspaceRecon
 using ImagePhantoms
 using LinearAlgebra
 using IterativeSolvers

@@ -3,7 +3,7 @@ Pkg.activate("docs")
 Pkg.develop(PackageSpec(path=pwd()))
 Pkg.instantiate()
 
-using MRFingerprintingRecon
+using MRISubspaceRecon
 using Documenter
 using Literate
 using Plots # to not capture precompilation output
@@ -45,17 +45,17 @@ for file in files
     Literate.script(  file_path, OUTPUT)
 end
 
-DocMeta.setdocmeta!(MRFingerprintingRecon, :DocTestSetup, :(using MRFingerprintingRecon); recursive=true)
+DocMeta.setdocmeta!(MRISubspaceRecon, :DocTestSetup, :(using MRISubspaceRecon); recursive=true)
 
 makedocs(;
     doctest = false,
-    modules=[MRFingerprintingRecon],
+    modules=[MRISubspaceRecon],
     authors="Jakob Asslaender <jakob.asslaender@nyumc.org> and contributors",
-    repo="https://github.com/MagneticResonanceImaging/MRFingerprintingRecon.jl/blob/{commit}{path}#{line}",
-    sitename="MRFingerprintingRecon.jl",
+    repo="https://github.com/MagneticResonanceImaging/MRISubspaceRecon.jl/blob/{commit}{path}#{line}",
+    sitename="MRISubspaceRecon.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://MagneticResonanceImaging.github.io/MRFingerprintingRecon.jl",
+        canonical="https://MagneticResonanceImaging.github.io/MRISubspaceRecon.jl",
         assets=String[],
     ),
     pages=[
@@ -71,5 +71,5 @@ makedocs(;
 run(`sed -i'.old' 's/var darkPreference = false/var darkPreference = true/g' docs/build/assets/themeswap.js`)
 
 deploydocs(;
-    repo="github.com/MagneticResonanceImaging/MRFingerprintingRecon.jl",
+    repo="github.com/MagneticResonanceImaging/MRISubspaceRecon.jl",
 )

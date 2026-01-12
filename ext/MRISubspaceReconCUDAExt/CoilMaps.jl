@@ -1,4 +1,4 @@
-function MRFingerprintingRecon.calculate_coil_maps(
+function MRISubspaceRecon.calculate_coil_maps(
     data::CuArray{Complex{T}},
     trj::CuArray{T},
     img_shape::NTuple{N,Int};
@@ -19,7 +19,7 @@ function MRFingerprintingRecon.calculate_coil_maps(
     mask_calib .&= sample_mask # update mask to only take calib region of k-space in CoilwiseCG
     trj_calib = trj .* calib_scale # scale trj for correct FOV
 
-    x = MRFingerprintingRecon.reconstruct_coilwise(data, trj_calib, calib_size; U, sample_mask=mask_calib, Niter_cg)
+    x = MRISubspaceRecon.reconstruct_coilwise(data, trj_calib, calib_size; U, sample_mask=mask_calib, Niter_cg)
     
     imdims = ntuple(i -> i, length(img_shape))
     kbp = fftshift(x, imdims)
@@ -36,7 +36,7 @@ function MRFingerprintingRecon.calculate_coil_maps(
 end
 
 # wrapper for 4D data arrays with readout lines in separate axis
-function MRFingerprintingRecon.calculate_coil_maps(
+function MRISubspaceRecon.calculate_coil_maps(
     data::CuArray{Tc,4},
     trj::CuArray{T,4},
     img_shape::NTuple{N,Int};
@@ -53,7 +53,7 @@ end
 ## ##########################################################################
 # Internal helper functions
 #############################################################################
-function MRFingerprintingRecon.reconstruct_coilwise(
+function MRISubspaceRecon.reconstruct_coilwise(
     data::CuArray{Tc,3},
     trj::CuArray{T,3},
     img_shape;
@@ -62,8 +62,8 @@ function MRFingerprintingRecon.reconstruct_coilwise(
     Niter_cg=100,
     verbose=false) where {T <: Real,Tc <: Complex{T}}
 
-    AᴴA = MRFingerprintingRecon.NFFTNormalOp(img_shape, trj, U[:, 1]; sample_mask=sample_mask, verbose)
-    xbp = MRFingerprintingRecon.calculate_backprojection(data, trj, img_shape; U=U[:, 1], sample_mask=sample_mask, verbose)
+    AᴴA = MRISubspaceRecon.NFFTNormalOp(img_shape, trj, U[:, 1]; sample_mask=sample_mask, verbose)
+    xbp = MRISubspaceRecon.calculate_backprojection(data, trj, img_shape; U=U[:, 1], sample_mask=sample_mask, verbose)
     
     Ncoil = size(data, 3)
     x = CUDA.zeros(Tc, img_shape..., Ncoil)

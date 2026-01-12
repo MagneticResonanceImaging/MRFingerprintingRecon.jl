@@ -1,4 +1,4 @@
-function MRFingerprintingRecon.calculate_backprojection(data::CuArray{Tc,3}, trj::CuArray{T,3}, img_shape; U=cu(I(size(trj, 3))), sample_mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,Tc<:Complex{T}}
+function MRISubspaceRecon.calculate_backprojection(data::CuArray{Tc,3}, trj::CuArray{T,3}, img_shape; U=cu(I(size(trj, 3))), sample_mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,Tc<:Complex{T}}
     nsamp_t = dropdims(sum(sample_mask; dims=1); dims=1) # number of samples per time frame
     Ncoef = size(U, 2)
     Ncoil = size(data, 3)
@@ -24,7 +24,7 @@ function MRFingerprintingRecon.calculate_backprojection(data::CuArray{Tc,3}, trj
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ axes(data, 3)
             @cuda threads=threads blocks=blocks multiply_data_with_basis!(data_temp, data_rs, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
-            MRFingerprintingRecon.apply_density_compensation!(data_temp, trj_rs; density_compensation)
+            MRISubspaceRecon.apply_density_compensation!(data_temp, trj_rs; density_compensation)
             @views NonuniformFFTs.exec_type1!(xbp[img_idx, icoef, icoil], p, data_temp) # type 1: non-uniform points to uniform grid
         end
         verbose && println("coefficient = $icoef: t = $t s")
@@ -33,7 +33,7 @@ function MRFingerprintingRecon.calculate_backprojection(data::CuArray{Tc,3}, trj
     return xbp
 end
 
-function MRFingerprintingRecon.calculate_backprojection(data::CuArray{Tc,3}, trj::CuArray{T,3}, cmaps::AbstractVector{<:CuArray{Tc,N}}; U=cu(I(size(trj, 3))), sample_mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,Tc<:Complex{T},N}
+function MRISubspaceRecon.calculate_backprojection(data::CuArray{Tc,3}, trj::CuArray{T,3}, cmaps::AbstractVector{<:CuArray{Tc,N}}; U=cu(I(size(trj, 3))), sample_mask=CUDA.ones(Bool, size(trj)[2:end]), density_compensation=:none, verbose=false) where {T<:Real,Tc<:Complex{T},N}
     nsamp_t = dropdims(sum(sample_mask; dims=1); dims=1) # number of samples per time frame
     Ncoef = size(U, 2)
     img_shape = size(cmaps[1])
@@ -60,7 +60,7 @@ function MRFingerprintingRecon.calculate_backprojection(data::CuArray{Tc,3}, trj
     for icoef ∈ axes(U, 2)
         t = @elapsed for icoil ∈ eachindex(cmaps)
             @cuda threads=threads blocks=blocks multiply_data_with_basis!(data_temp, data_rs, Uc, nsamp_t, cumsum_nsamp, icoef, icoil)
-            MRFingerprintingRecon.apply_density_compensation!(data_temp, trj_rs; density_compensation)
+            MRISubspaceRecon.apply_density_compensation!(data_temp, trj_rs; density_compensation)
             NonuniformFFTs.exec_type1!(xtmp, p, data_temp) # type 1: non-uniform points to uniform grid
             xbp[img_idx, icoef] .+= conj.(cmaps[icoil]) .* xtmp
         end
@@ -71,11 +71,11 @@ function MRFingerprintingRecon.calculate_backprojection(data::CuArray{Tc,3}, trj
 end
 
 # Wrapper for use with 4D arrays, where nr of ADC samples per readout is in a separate at 2ⁿᵈ dim
-function MRFingerprintingRecon.calculate_backprojection(data::CuArray{Tc,4}, trj::CuArray{T,4}, arg3; sample_mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T,Tc<:Complex}
+function MRISubspaceRecon.calculate_backprojection(data::CuArray{Tc,4}, trj::CuArray{T,4}, arg3; sample_mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T,Tc<:Complex}
     data = reshape(data, :, size(data, 3), size(data, 4))
     trj = reshape(trj, size(trj, 1), :, size(trj, 4))
     sample_mask = reshape(sample_mask, :, size(sample_mask, 3))
-    return MRFingerprintingRecon.calculate_backprojection(data, trj, arg3; sample_mask, kwargs...)
+    return MRISubspaceRecon.calculate_backprojection(data, trj, arg3; sample_mask, kwargs...)
 end
 
 

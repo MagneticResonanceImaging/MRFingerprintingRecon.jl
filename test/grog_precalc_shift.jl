@@ -1,5 +1,5 @@
 using BenchmarkTools
-using MRFingerprintingRecon
+using MRISubspaceRecon
 using ImagePhantoms
 using LinearAlgebra
 using IterativeSolvers
@@ -61,8 +61,8 @@ data2 = repeat(data, outer = [1, 1, 1, Nrep])
 ## #####################################
 # Test Calibration of GROG kernel
 ########################################
-lnG = MRFingerprintingRecon.grog_calib(data, trj, Nr)
-lnG2 = MRFingerprintingRecon.grog_calib(data2, trj, Nr)
+lnG = MRISubspaceRecon.grog_calib(data, trj, Nr)
+lnG2 = MRISubspaceRecon.grog_calib(data2, trj, Nr)
 
 @test lnG ≈ lnG2 rtol = 1e-6
 
@@ -72,10 +72,10 @@ lnG2 = MRFingerprintingRecon.grog_calib(data2, trj, Nr)
 trj2 = deepcopy(trj)
 
 # Gridding of each sample with non repeating trajectory (Reference)
-trj = MRFingerprintingRecon.grog_gridding!(data, trj, lnG, Nr, (Nx,Nx))
+trj = MRISubspaceRecon.grog_gridding!(data, trj, lnG, Nr, (Nx,Nx))
 
 # Exploit Precalculated Shifts
-trj2 = MRFingerprintingRecon.grog_gridding!(data2, trj2, lnG2, Nr, (Nx,Nx))
+trj2 = MRISubspaceRecon.grog_gridding!(data2, trj2, lnG2, Nr, (Nx,Nx))
 
 # Compare gridding with and without repeating pattern
 @test data ≈ data2[:,:,:,1] rtol = 1e-5

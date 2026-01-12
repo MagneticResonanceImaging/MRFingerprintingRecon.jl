@@ -4,7 +4,7 @@
 
 # This example illustrates how to perform an MRI subspace reconstruction from non-Cartesian k-space data.
 # For this example, we need the following packages:
-using MRFingerprintingRecon
+using MRISubspaceRecon
 using ImagePhantoms
 using LinearAlgebra
 using IterativeSolvers

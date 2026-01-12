@@ -1,4 +1,4 @@
-using MRFingerprintingRecon
+using MRISubspaceRecon
 using Test
 
 @testset "Recon Radial" begin

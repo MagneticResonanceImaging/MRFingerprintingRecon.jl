@@ -1,4 +1,4 @@
-function MRFingerprintingRecon.NFFTNormalOp(
+function MRISubspaceRecon.NFFTNormalOp(
     img_shape,
     trj::CuArray{T,3},
     U::CuArray{Tc};
@@ -9,17 +9,17 @@ function MRFingerprintingRecon.NFFTNormalOp(
 
     Λ, kmask_indcs = calculate_kernel_noncartesian(2 .* img_shape, trj, U; sample_mask, verbose)
 
-    return MRFingerprintingRecon.NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps)
+    return MRISubspaceRecon.NFFTNormalOp(img_shape, Λ, kmask_indcs; cmaps=cmaps)
 end
 
 # Wrapper for 4D data arrays
-function MRFingerprintingRecon.NFFTNormalOp(img_shape, trj::CuArray{T,4}, U::CuArray{Tc}; sample_mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T, Tc <: Union{T, Complex{T}}}
+function MRISubspaceRecon.NFFTNormalOp(img_shape, trj::CuArray{T,4}, U::CuArray{Tc}; sample_mask=CUDA.ones(Bool, size(trj)[2:end]), kwargs...) where {T, Tc <: Union{T, Complex{T}}}
     trj = reshape(trj, size(trj,1), :, size(trj,4))
     sample_mask = reshape(sample_mask, :, size(sample_mask,3))
-    return MRFingerprintingRecon.NFFTNormalOp(img_shape, trj, U; kwargs..., sample_mask)
+    return MRISubspaceRecon.NFFTNormalOp(img_shape, trj, U; kwargs..., sample_mask)
 end
 
-function MRFingerprintingRecon.NFFTNormalOp(
+function MRISubspaceRecon.NFFTNormalOp(
     img_shape,
     Λ::CuArray{Tc},
     kmask_indcs;
@@ -54,7 +54,7 @@ function MRFingerprintingRecon.NFFTNormalOp(
     blocks = cld.((length(kmask_indcs), Ncoeff), threads)
 
     # Set up the actual object
-    A = MRFingerprintingRecon._NFFTNormalOp(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps, ind_lookup, threads, blocks)
+    A = MRISubspaceRecon._NFFTNormalOp(img_shape, Ncoeff, fftplan, ifftplan, Λ, kmask_indcs, kL1, kL2, cmaps, ind_lookup, threads, blocks)
 
     return LinearOperator(
         Complex{T},
@@ -190,7 +190,7 @@ function calculate_kernel_noncartesian(img_shape_os, trj::CuArray{T,3}, U::CuArr
     return Λ, kmask_indcs
 end
 
-function LinearAlgebra.mul!(x::CuArray, S::MRFingerprintingRecon._NFFTNormalOp, b, α, β)
+function LinearAlgebra.mul!(x::CuArray, S::MRISubspaceRecon._NFFTNormalOp, b, α, β)
     b = reshape(b, S.shape..., S.Ncoeff)
     if β == 0
         x .= 0

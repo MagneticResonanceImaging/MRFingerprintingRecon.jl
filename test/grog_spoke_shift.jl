@@ -1,5 +1,5 @@
 using BenchmarkTools
-using MRFingerprintingRecon
+using MRISubspaceRecon
 using ImagePhantoms
 using LinearAlgebra
 using IterativeSolvers
@@ -58,7 +58,7 @@ for icoil ∈ axes(data, 3)
 end
 
 ## Test GROG kernels for some spokes in golden ratio based trajectory
-lnG = MRFingerprintingRecon.grog_calib(data, trj, Nr)
+lnG = MRISubspaceRecon.grog_calib(data, trj, Nr)
 
 data_r = reshape(data, Nr, Ncyc*Nt, Ncoil)
 trj_r = reshape(trj, 2, Nr, Ncyc*Nt)
