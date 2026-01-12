@@ -6,22 +6,22 @@ Estimate coil sensitivity maps using ESPIRiT [1].
 # Arguments
 - `data::AbstractArray`: Complex dataset with axes (samples, time frames, channels). Time frames are reconstructed using the subspace defined in U. Use `CuArray` as input type to use CUDA code.
 - `trj::AbstractArray`: Trajectory with sample coordinates corresponding to the dataset Use `CuArray` as input type to use GPU code.
-- `img_shape::NTuple{N,Int}`: Shape of image
+- `img_shape::NTuple{N,Int}`: Shape of output image
 
 # Keyword Arguments
 - `U::Matrix`=`ones(size(trj)[end])` : `I(1)`: Basis coefficients of subspace
-- `sample_mask::AbstractArray{Bool}`=`trues(size(trj)[2:end])`: Mask indicating which acquired k-space samples are retained for reconstruction
+- `sample_mask::AbstractArray{Bool}`=`trues(size(trj)[2:end])`: Mask indicating which acquired k-space samples are included in the reconstruction
 - `density_compensation`=`:radial_3D`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type  `AbstractArray`
 - `kernel_size`=`ntuple(_ -> 6, N)`: Kernel size
 - `calib_size`=`ntuple(_ -> 24, N)`: Size of calibration region
 - `eigThresh_1`=0.01: Threshold of first eigenvalue
 - `eigThresh_2`=0.9: Threshold of second eigenvalue
 - `nmaps`=1: Number of estimated maps
-- `Niter_cg`: Number of CG iterations used for the reconstruction. The default is 100 for non-Cartesian and 5 for Cartesian trajectories.
+- `Niter_cg`: Number of CG iterations used for the reconstruction. The default is 100 and 5 for non-Cartesian and Cartesian trajectories, respectively. Using a number of iterations too large for a given dataset can introduce errors.
 - `verbose::Boolean`=`false`: Verbosity level
 
 # Return
-- `cmaps::Vector{Array}`: Coil sensitivities as Vector of arrays
+- `cmaps::Vector{Array}`: Coil sensitivities as `Vector` of arrays
 
 # References
 1. Uecker M, Lai P, Murphy MJ, Virtue P, Elad M, Pauly JM, Vasanawala SS, and Lustig M. "ESPIRiT—an eigenvalue approach to autocalibrating parallel MRI: Where SENSE meets GRAPPA". Magn. Reson. Med. 71 (2014), pp. 990-1001. https://doi.org/10.1002/mrm.24751

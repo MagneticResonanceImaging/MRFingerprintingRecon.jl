@@ -8,16 +8,17 @@
 
 Create normal operator of NFFT operator.
 Differentiate between functions exploiting a pre-calculated Toeplitz kernel basis `Λ` and the function which calculates Λ based on a passed trajectory `trj`.
-When the basis functions `U` are real-valued, a real-only NUFFT is used to compute `Λ`, reducing the data volume for the spreading and interpolation steps by half.
+When the basis functions `U` are real-valued, a real-only NUFFT is used to compute `Λ`, reducing the data volume and computation time for the spreading and interpolation steps by half.
 
 # Arguments
 - `img_shape::Tuple{Int}`: Image dimensions
 - `trj::AbstractArray`: Trajectory, use `CuArray` as input type to use CUDA code.
 - `U::AbstractMatrix`: Basis coefficients of subspace
 - `cmaps::AbstractVector{Matrix}=(1,)`: Coil sensitivities, use `AbstractVector{CuArray}` as type for use with CUDA code.
-- `sample_mask::AbstractArray{Bool} = trues(size(trj)[2:end])`: Mask indicating which acquired k-space samples are retained for reconstruction
+- `sample_mask::AbstractArray{Bool} = trues(size(trj)[2:end])`: Mask indicating which acquired k-space samples are included in the reconstruction
 - `verbose::Boolean`=`false`: Verbose level
 - `num_fft_threads::Int`=`round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1))`: Number of threads for FFT
+- `Λ`: Toeplitz kernel basis resulting from internal `calculate_kernel_noncartesian` method. Using a real basis `U` reduces its size by a factor of 2.
 
 # References
 1. Wajer FTAW, and Pruessmann, KP. “Major Speedup of Reconstruction for Sensitivity Encoding with Arbitrary Trajectories”. In: Proc. Intl. Soc. Mag. Reson. Med 9 (2001).
