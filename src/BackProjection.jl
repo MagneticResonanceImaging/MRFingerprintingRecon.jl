@@ -1,7 +1,7 @@
 """
     calculate_backprojection(data, trj, img_shape; U, sample_mask, density_compensation, verbose)
     calculate_backprojection(data, trj, cmaps::AbstractVector{<:AbstractArray{Tc,N}}; U, sample_mask, density_compensation, verbose)
-    calculate_backprojection(data, trj, cmaps_img_shape; U, sample_mask, density_compensation, verbose)
+    calculate_backprojection(data, trj, img_shape; U, sample_mask, density_compensation, verbose)
     calculate_backprojection(data, trj, cmaps; U, sample_mask)
 
 Calculate (filtered) backprojection.
@@ -11,12 +11,12 @@ Calculate (filtered) backprojection.
 - `trj <: AbstractArray`: Trajectory with sample coordinates corresponding to the dataset. For a Cartesian reconstruction, use `T <: Int` and define `trj[idim,it,ik] ∈ (1, img_shape[idim])`. If `T <: Float`, the NFFT is used. Use `CuArray` as input type to use CUDA code.
 
 One of the following arguments needs to be supplied
-- `img_shape::NTuple{N,Int}`: Shape of image; in this case, the data is reconstructed per coil.
-- `cmaps::AbstractVector{<:AbstractArray{Tc}}`: Coil sensitivities; in this case, the coils are added up to a single backprojection. Use `AbstractVector{CuArray{Tc,N}}` as type for use with CUDA code.
+- `img_shape::NTuple{N,Int}`: Shape of output image; in this case, the data is reconstructed per coil.
+- `cmaps::AbstractVector{<:AbstractArray{Tc}}`: Coil sensitivities; when provided, the coils are combined into an array with no coil axis. Use `AbstractVector{CuArray{Tc,N}}` as type for use with CUDA code.
 
 # Optional Keyword Arguments
 - `U::Matrix`=`I(size(trj)[end])` or `=I(1)`: Basis coefficients of subspace (only defined if data and trj have different timeframes)
-- `sample_mask::AbstractArray{Bool}`=`trues(size(trj)[2:end])`: Mask indicating which acquired k-space samples are retained for reconstruction
+- `sample_mask::AbstractArray{Bool}`=`trues(size(trj)[2:end])`: Mask indicating which acquired k-space samples are included in the reconstruction
 - `density_compensation`=`:none`: Values of `:radial_3D`, `:radial_2D`, `:none`, or of type `AbstractVector{<:AbstractVector}`
 - `verbose::Boolean`=`false`: Verbosity level
 """

@@ -1,13 +1,15 @@
 """
     grog_calib(data, trj, Nr)
 
-Perform GROG kernel calibration based on whole radial trajectory and passed data.
-Calibration follows the work on self-calibrating radial GROG (https://doi.org/10.1002/mrm.21565).
+Perform GROG kernel calibration based on the radial trajectory and acquired k-space data [1].
 
 # Arguments
 - `data::AbstractAbstractArray`: Complex dataset with dimensions (samples per time frame [Nr], time frames, Rx channels)
 - `trj::AbstractArray`: Trajectory with samples corresponding to the dataset, passed as AbstractArray with dimension (dims, samples per time frame, time frames)
-- `Nr::Int`: Number of samples per read out
+- `Nr::Int`: Number of samples per readout
+
+# References
+1. Seiberlich N, Breuer F, Blaimer M, Jakob P, and Griswold M. "Self-calibrating GRAPPA operator gridding for radial and spiral trajectories". Magn. Reson. Med. 59 (2008), pp. 930-935. https://doi.org/10.1002/mrm.21565
 """
 function grog_calib(data, trj, Nr)
     Ncoil = size(data, 3)
@@ -102,7 +104,7 @@ end
 """
     radial_grog!(data, trj, Nr, img_shape)
 
-Perform GROG kernel calibration and gridding [1] of data in-place. The trajectory is returned with integer values.
+Perform GROG kernel calibration and gridding of data in-place [1]. The trajectory is returned with integer values.
 
 # Arguments
 - `data::AbstractArray}`: Complex dataset with dimensions (samples per time frame [Nr], time frames, Rx channels)

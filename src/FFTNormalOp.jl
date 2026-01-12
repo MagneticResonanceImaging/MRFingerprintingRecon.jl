@@ -15,9 +15,9 @@ Differentiate between functions exploiting a pre-calculated kernel basis `Λ` an
 - `traj::Vector{Matrix}`: Trajectory
 - `U::Matrix`: Basis coefficients of subspace
 - `cmaps::Matrix=(1,)`: Coil sensitivities
-- `sample_mask::AbstractArray{Bool}`=`trues(size(trj)[2:end])`: Mask indicating which acquired k-space samples are retained for reconstruction
-- `M::Vector{Matrix}`: Mask
-- `Λ::Array{Complex{T},3}`: Toeplitz kernel basis
+- `sample_mask::AbstractArray{Bool}`=`trues(size(trj)[2:end])`: Mask indicating which acquired k-space samples are included in the reconstruction
+- `M::Vector{Matrix}`: Mask specific to `FFTNormalOp(M, U; cmaps)` method. Here, `M` represents a Cartesian binary mask that indicates in every time frame which phase-encoding lines were acquired. This means, for example, `M` is sized `(Nx, Ny, Nt)` for a 2D image. Explicit use of a trajectory with `FFTNormalOp(img_shape, trj, U; cmaps)` is generally recommended.
+- `Λ::Array{Complex{T},3}`: Toeplitz kernel basis resulting from internal `calculate_kernel_cartesian` method. 
 - `num_fft_threads::Int`=`round(Int, Threads.nthreads()/size(U, 2))` or `round(Int, Threads.nthreads()/size(Λ, 1)): Number of Threads for FFT
 - `eltype_x`=`eltype(Λ)` define the type of `x` (in the product `FFTNormalOp(Λ) * x`). The default is the same eltype as `Λ`
 

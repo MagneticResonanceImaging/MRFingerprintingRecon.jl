@@ -35,7 +35,7 @@ end
 """
     traj_kooshball_goldenratio(Nr, Ncyc, Nt; thetaRot, phiRot, delay)
 
-Function to calculate  golden means [1] based traj_kooshball trajectory.
+Function to calculate a 3D radial kooshball trajectory with a golden-means angular spacing of k-space readouts [1].
 
 # Arguments
 - `Nr::Int`: Number of read out samples
@@ -49,7 +49,7 @@ Function to calculate  golden means [1] based traj_kooshball trajectory.
 1. Chan RW, Ramsay EA, Cunningham CH, and Plewes DB. "Temporal stability of adaptive 3D radial MRI using multidimensional golden means". Magn. Reson. Med. 61 (2009) pp. 354-363. https://doi.org/10.1002/mrm.21837
 """
 function traj_kooshball_goldenratio(Nr, Ncyc, Nt; thetaRot=0, phiRot=0, delay=(0, 0, 0))
-    gm1, gm2 = calculateGoldenMeans()
+    gm1, gm2 = calculate_golden_means()
     theta = acos.(mod.((0:(Ncyc*Nt-1)) * gm1, 1))
     phi = (0:(Ncyc*Nt-1)) * 2π * gm2
 
@@ -62,8 +62,8 @@ end
 """
     traj_2d_radial_goldenratio(Nr, Ncyc, Nt; thetaRot, phiRot, delay, N)
 
-Function to calculate 2D golden ratio based trajectory [1].
-By modifying `N` also tiny golden angles [2] are supported.
+Function to calculate a 2D radial trajectory with golden-angle spacing between subsequent readouts [1].
+The use of tiny golden angles [2] is supported by modifying `N`.
 
 # Arguments
 - `Nr::Int`: Number of read out samples
@@ -95,7 +95,7 @@ end
 """
     traj_kooshball(Nr, theta, phi; thetaRot, phiRot, delay)
 
-Function to calculate traj_kooshball trajectory.
+Function to calculate a 3D radial kooshball trajectory with custom sets of projection angles.
 
 # Arguments
 - `Nr::Int`: Number of read out samples
@@ -158,14 +158,14 @@ end
 ###############################################
 
 """
-    calculateGoldenMeans()
+    calculate_golden_means()
 
-Function to calculate 3D golden means [1].
+Function to calculate the 3D golden means [1].
 
 # References
 1. Chan RW, Ramsay EA, Cunningham CH, and Plewes DB. "Temporal stability of adaptive 3D radial MRI using multidimensional golden means". Magn. Reson. Med. (2009), 61: 354-363. https://doi.org/10.1002/mrm.21837
 """
-function calculateGoldenMeans()
+function calculate_golden_means()
     M = [0 1 0; 0 0 1; 1 0 1]
     v = eigvecs(M)
     gm1 = real(v[1, 3] / v[3, 3])
