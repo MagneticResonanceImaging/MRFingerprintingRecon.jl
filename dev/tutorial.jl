@@ -2,59 +2,77 @@
 
 # # Non-Cartesian MRI
 
-# This example illustrates how to perform an iterative multi-coil MRI subspace reconstruction from non-Cartesian k-space data
-# with the conjugate gradient algorithm. For this example, we need the following packages:
+# This example illustrates how to perform an MRI subspace reconstruction from non-Cartesian k-space data.
+# For this example, we need the following packages:
 using MRISubspaceRecon
-using IterativeSolvers # for conjugate gradient reconstruction
-using Plots
-plotlyjs(bg = RGBA(31/255,36/255,36/255,1.0), ticks=:native); #hide #!nb
-
-# # Data simulation
-
-# We first simulate some data from a Shepp-Logan phantom and generate some coil maps using
-# various phase modulations. The below packages are only used for the data simulation:
-using FFTW
 using ImagePhantoms
-using NonuniformFFTs
-using Random
 using LinearAlgebra
-
-Nx = 64
-Nc = 2 # nr of coefficients in the temporal subspace
+using IterativeSolvers
+using FFTW
+using NonuniformFFTs
+using Plots
+using Random
+plotlyjs(bg = RGBA(31/255,36/255,36/255,1.0), ticks=:native); #hide #!nb
+# We first simulate some data from a Shepp-Logan phantom and generate some coil maps using
+# various phase modulations:
+T = Float32
+Nx = 32
+Nc = 4 # nr of coefficients in the temporal subspace
 Nt = 20 # nr of acquired time frames per cycle
 Ncyc = 10 # nr of cycles (i.e., repeats of flip angle pattern)
-Ncoil = 1
 img_shape = (Nx, Nx) # 2D image in this example
 
-## create test coefficient image
-x = zeros(ComplexF32, Nx, Nx, Nc)
-x[:, :, 1] = transpose(shepp_logan(Nx)) .* exp(1im * π / 3)
+## create test image
+x = zeros(Complex{T}, Nx, Nx, Nc)
+x[:, :, 1] = transpose(shepp_logan(Nx))
+x[1:end÷2, :, 1] .*= exp(1im * π / 3)
 x[:, :, 2] = shepp_logan(Nx)
 
-p = heatmap(abs.(x[:,:,1]), layout=(1,2), subplot=1, ticks=[], colorbar=false, size=(700,350), title="coeff. 1")
-heatmap!(p, abs.(x[:,:,2]), subplot=2, ticks=[], colorbar=false, title="coeff. 2")
-#md Main.HTMLPlot(p)
-# Next, we set up a set of coil maps and a trajectory for data acquisition. We then generate a set of basis functions. The non-Cartesian methods
-# use float trajectories in range $k \in [-0.5, 0.5)$, as opposed to integer trajectories for Cartesian methods.
-## coil maps as vector of complex arrays
-cmaps = [ones(ComplexF32, Nx, Nx); ones(ComplexF32, Nx, Nx) .* exp(1im * π / 2)]
-println("typeof(cmaps) = $(typeof(cmaps))")
+## coil maps
+Ncoil = 9
+cmaps = ones(Complex{T}, Nx, Nx, Ncoil)
+[cmaps[i, :, 2] .*= exp(1im * π * i / Nx) for i ∈ axes(cmaps, 1)]
+[cmaps[i, :, 3] .*= exp(-1im * π * i / Nx) for i ∈ axes(cmaps, 1)]
+[cmaps[:, i, 4] .*= exp(1im * π * i / Nx) for i ∈ axes(cmaps, 2)]
+[cmaps[:, i, 5] .*= exp(-1im * π * i / Nx) for i ∈ axes(cmaps, 2)]
+[cmaps[i, :, 6] .*= exp(2im * π * i / Nx) for i ∈ axes(cmaps, 1)]
+[cmaps[i, :, 7] .*= exp(-2im * π * i / Nx) for i ∈ axes(cmaps, 1)]
+[cmaps[:, i, 8] .*= exp(2im * π * i / Nx) for i ∈ axes(cmaps, 2)]
+[cmaps[:, i, 9] .*= exp(-2im * π * i / Nx) for i ∈ axes(cmaps, 2)]
 
-## set up a 2D radial trajectory
-trj = traj_2d_radial_goldenratio(2Nx, Ncyc, Nt) # 2 for oversampling
+## coil maps are defined as vectors of complex n-dimensional arrays
+for i ∈ CartesianIndices(@view cmaps[:, :, 1])
+    cmaps[i, :] ./= norm(cmaps[i, :])
+end
+cmaps = [cmaps[:, :, ic] for ic = 1:Ncoil]
+nothing #hide #!nb
+# Next, we set up a kooshball trajectory for data acquisition and generate a set of basis functions. The non-Cartesian methods
+# use float trajectories in range $k \in [-0.5, 0.5)$, as opposed to integer trajectories for Cartesian methods.
+## set up trajectory
+α_g = 2π / (1 + √5)
+phi = Float32.(α_g * (1:Nt*Ncyc))
+theta = Float32.(0 * (1:Nt*Ncyc) .+ pi / 2) 
+phi = reshape(phi, Ncyc, Nt)
+theta = reshape(theta, Ncyc, Nt)
+
+## generate trj as (2, Nx*Ncyc, Nt)-shaped array
+## alternatively, trj can be shaped as (ndims, n_ADC, n_readouts, n_timeframes)
+trj = traj_kooshball(2Nx, theta, phi) # shaped (ndims, nsamples, n_timeframes)
+trj = trj[1:2, :, :] # use only the first 2 dims as a 2D k-space trj
 
 ## set up basis functions
-U = randn(ComplexF32, Nt, Nc)
+U = randn(Complex{T}, Nt, Nc)
 U, _, _ = svd(U)
-println("typeof(trj) = $(typeof(trj))")
-println("typeof(U) = $(typeof(U))")
-println("size(U) = $(size(U))")
-# Finally, we use the phantom image `x`, the coil maps `cmaps`, the trajectory `trj`, and the basis functions `U` to simulate k-space data:
+nothing #hide #!nb
+# We use the phantom image `x`, the coil maps `cmaps`, the trajectory `trj`, and the basis functions `U` to simulate some k-space data:
 ## simulate data as (2Nx*Ncyc, Nt, Ncoil)-shaped array
-data = Array{ComplexF32,3}(undef, 2Nx * Ncyc, Nt, Ncoil)
-nfftplan = PlanNUFFT(ComplexF32, img_shape; fftshift=true)
+## alternatively, data can be shaped as (2Nx, Ncyc, Nt, Ncoil)
+data = Array{Complex{T},3}(undef, 2Nx * Ncyc, Nt, Ncoil)
+nfftplan = PlanNUFFT(Complex{T}, img_shape; fftshift=true)
+xcoil = copy(x)
+
 for icoil ∈ axes(data, 3)
-    xcoil = copy(x)
+    xcoil .= x
     xcoil .*= cmaps[icoil]
     for it ∈ axes(data, 2)
         set_points!(nfftplan, NonuniformFFTs._transform_point_convention.(reshape(trj[:, :, it], 2, :)))
@@ -63,21 +81,8 @@ for icoil ∈ axes(data, 3)
         @views NonuniformFFTs.exec_type2!(data[:, it, icoil], nfftplan, xt)
     end
 end
-println("size(data)   = $(size(data))") # array shape of data
-println("typeof(data) = $(typeof(data))") # type of input data
-
-# By default, the data format uses either 3D arrays. Alternatively, 4D arrays can be used as inputs, where the 4D format is used to place ADC points within a separate array axis from the total number of samples.
+# The data format uses either 3D or 4D arrays, where the 4D format is used to place ADC points within a separate array axis from the total number of samples.
 # Internally, all code relies on 3D arrays and the 4D arrays are handled by wrappers.
-data = reshape(data, 2Nx, Ncyc, Nt, Ncoil)
-trj = reshape(trj, 2, 2Nx, Ncyc, Nt)
-println("size(data) = $(size(data))")
-println("size(trj)  = $(size(trj))")
-# # Sensitivity profiles
-# Coil maps may be auto-calibrated from k-space measurements using ESPIRiT:
-cmaps = calculate_coil_maps(data, trj, img_shape; U)
-println("typeof(cmaps) = $(typeof(calculate_coil_maps))")
-println("size(cmaps) = $(size(cmaps))")
-# # Sample mask
 # Furthermore, reconstructions can make use of a binary mask to exclude specific samples from being included in the reconstruction. 
 # To illustrate the data removal, we create a mask that removes one time frame from one cycle:
 ## create sampling mask
@@ -85,25 +90,18 @@ it_rm = 1
 icyc_rm = 5
 sample_mask = trues(2Nx, Ncyc, Nt)
 sample_mask[:, icyc_rm, it_rm] .= false
-println("typeof(sample_mask) = $(typeof(sample_mask))")
-println("size(sample_mask) = $(size(sample_mask))")
-# # Normal operator and adjoint 
-# Now, we can compute the normal operator using the sample mask:
+sample_mask = reshape(sample_mask, 2Nx*Ncyc, Nt) # masks are 2- or 3-dim depending on format of trj and data
+nothing #hide #!nb
+# Coil maps may also be auto-calibrated from k-space measurements using ESPIRiT:
+cmaps = calculate_coil_maps(data, trj, img_shape; U)
+nothing #hide #!nb
+# Now, we can compute the normal operator and the adjoint NUFFT (backprojection) with the specified sampling mask:
 AᴴA = NFFTNormalOp(img_shape, trj, U; cmaps, sample_mask)
-println(AᴴA)
-# We can also compute the adjoint NUFFT (backprojection) with the specified sampling mask:
 b = calculate_backprojection(data, trj, cmaps; U, sample_mask)
-p = heatmap(abs.(b[:,:,1]), layout=(1,2), subplot=1, ticks=[], colorbar=false, title="coeff. 1", size=(700,350))
-heatmap!(p, abs.(b[:,:,2]), subplot=2, ticks=[], colorbar=false, title="coeff. 2")
-#md Main.HTMLPlot(p)
-# # Iterative solvers
-# The normal operator `A` and the backprojection `b` are compatible with the iterative solvers from [IterativeSolvers.jl](https://github.com/JuliaLinearAlgebra/IterativeSolvers.jl) and 
-# [RegularizedLeastSquares.jl](https://github.com/JuliaImageRecon/RegularizedLeastSquares.jl). This enables solving the inverse problem with various algorithms, including conjugate gradient (CG). In this way we can
-# recover the original image from the backprojection:
-## solve inverse problem with CG. GPU-methods are called through multiple dispatch, i.e., when objects of type `CuArray` are passed as arguments. 
+nothing #hide #!nb
+# GPU-methods are called through multiple dispatch, i.e., when objects of type `CuArray` are passed as arguments. The normal operator `A` and the backprojection `b` are compatible with the iterative solvers from [IterativeSolvers.jl](https://github.com/JuliaLinearAlgebra/IterativeSolvers.jl) and 
+# [RegularizedLeastSquares.jl](https://github.com/JuliaImageRecon/RegularizedLeastSquares.jl). This enables solving the inverse problem with various algorithms, including conjugate gradient (CG):
+## solve inverse problem with CG
 xr = cg(AᴴA, vec(b), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc) # reshape vector back to 2D image with Nc coefficients
-
-p = heatmap(abs.(xr[:,:,1]), layout=(1,2), subplot=1, ticks=[], colorbar=false, size=(700,350), title="coeff. 1")
-heatmap!(p, abs.(xr[:,:,2]), subplot=2, ticks=[], colorbar=false, title="coeff. 2")
-#md Main.HTMLPlot(p)
+nothing #hide #!nb
