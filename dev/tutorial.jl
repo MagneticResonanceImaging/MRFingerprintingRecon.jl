@@ -19,10 +19,10 @@ using NonuniformFFTs
 using Random
 using LinearAlgebra
 
-Nx = 64
+Nx = 32
 Nc = 2 # nr of coefficients in the temporal subspace
 Nt = 10 # nr of acquired time frames per cycle
-Ncyc = 30 # nr of cycles (i.e., repeats of flip angle pattern)
+Ncyc = 20 # nr of cycles (i.e., repeats of flip angle pattern)
 Ncoil = 2
 img_shape = (Nx, Nx) # 2D image in this example
 

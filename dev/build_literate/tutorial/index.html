@@ -11,10 +11,10 @@ using NonuniformFFTs
 using Random
 using LinearAlgebra
 
-Nx = 64
+Nx = 32
 Nc = 2 # nr of coefficients in the temporal subspace
 Nt = 10 # nr of acquired time frames per cycle
-Ncyc = 30 # nr of cycles (i.e., repeats of flip angle pattern)
+Ncyc = 20 # nr of cycles (i.e., repeats of flip angle pattern)
 Ncoil = 2
 img_shape = (Nx, Nx) # 2D image in this example
 
@@ -24,7 +24,7 @@ x[:, :, 1] = transpose(shepp_logan(Nx)) .* exp(1im * π / 3)
 x[:, :, 2] = shepp_logan(Nx)
 
 p = heatmap(abs.(x[:,:,1]), layout=(1,2), subplot=1, ticks=[], colorbar=false, size=(700,350), title=&quot;coeff. 1&quot;)
-heatmap!(p, abs.(x[:,:,2]), subplot=2, ticks=[], colorbar=false, title=&quot;coeff. 2&quot;)</code></pre><object type="text/html" data="../../plots/343919462.html" style="width:100%;height:425px;"></object><p>Next, we set up a set of coil maps and a trajectory for data acquisition. We then generate a set of basis functions. The non-Cartesian methods use float trajectories in range <span>$k \in [-0.5, 0.5)$</span>, as opposed to integer trajectories for Cartesian methods.</p><pre><code class="language-julia hljs"># coil maps as vector of complex arrays
+heatmap!(p, abs.(x[:,:,2]), subplot=2, ticks=[], colorbar=false, title=&quot;coeff. 2&quot;)</code></pre><object type="text/html" data="../../plots/464012905.html" style="width:100%;height:425px;"></object><p>Next, we set up a set of coil maps and a trajectory for data acquisition. We then generate a set of basis functions. The non-Cartesian methods use float trajectories in range <span>$k \in [-0.5, 0.5)$</span>, as opposed to integer trajectories for Cartesian methods.</p><pre><code class="language-julia hljs"># coil maps as vector of complex arrays
 cmaps = [ones(ComplexF32, Nx, Nx); ones(ComplexF32, Nx, Nx) .* ComplexF32.(exp(1im * π / 2))]
 println(&quot;typeof(cmaps) = $(typeof(cmaps))&quot;)
 println(&quot;size(cmaps) = $(size(cmaps))&quot;)
@@ -38,7 +38,7 @@ U, _, _ = svd(U)
 println(&quot;typeof(trj) = $(typeof(trj))&quot;)
 println(&quot;typeof(U) = $(typeof(U))&quot;)
 println(&quot;size(U) = $(size(U))&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">typeof(cmaps) = Matrix{ComplexF32}
-size(cmaps) = (128, 64)
+size(cmaps) = (64, 32)
 typeof(trj) = Array{Float32, 3}
 typeof(U) = Matrix{ComplexF32}
 size(U) = (10, 2)</code></pre><p>Finally, we use the phantom image <code>x</code>, the coil maps <code>cmaps</code>, the trajectory <code>trj</code>, and the basis functions <code>U</code> to simulate k-space data:</p><pre><code class="language-julia hljs"># simulate data as (2Nx*Ncyc, Nt, Ncoil)-shaped array
@@ -55,12 +55,12 @@ for icoil ∈ axes(data, 3)
     end
 end
 println(&quot;size(data)   = $(size(data))&quot;) # array shape of data
-println(&quot;typeof(data) = $(typeof(data))&quot;) # type of input data</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">size(data)   = (3840, 10, 2)
+println(&quot;typeof(data) = $(typeof(data))&quot;) # type of input data</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">size(data)   = (1280, 10, 2)
 typeof(data) = Array{ComplexF32, 3}</code></pre><p>By default, the data format uses either 3D arrays. Alternatively, 4D arrays can be used as inputs, where the 4D format is used to place ADC points within a separate array axis from the total number of samples. Internally, all code relies on 3D arrays and the 4D arrays are handled by wrappers.</p><pre><code class="language-julia hljs">data = reshape(data, 2Nx, Ncyc, Nt, Ncoil)
 trj = reshape(trj, 2, 2Nx, Ncyc, Nt)
 println(&quot;size(data) = $(size(data))&quot;)
-println(&quot;size(trj)  = $(size(trj))&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">size(data) = (128, 30, 10, 2)
-size(trj)  = (2, 128, 30, 10)</code></pre><h1 id="Sensitivity-profiles"><a class="docs-heading-anchor" href="#Sensitivity-profiles">Sensitivity profiles</a><a id="Sensitivity-profiles-1"></a><a class="docs-heading-anchor-permalink" href="#Sensitivity-profiles" title="Permalink"></a></h1><p>Coil maps may be auto-calibrated from k-space measurements using ESPIRiT:</p><pre><code class="language-julia hljs">cmaps = calculate_coil_maps(data, trj, img_shape; U)
+println(&quot;size(trj)  = $(size(trj))&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">size(data) = (64, 20, 10, 2)
+size(trj)  = (2, 64, 20, 10)</code></pre><h1 id="Sensitivity-profiles"><a class="docs-heading-anchor" href="#Sensitivity-profiles">Sensitivity profiles</a><a id="Sensitivity-profiles-1"></a><a class="docs-heading-anchor-permalink" href="#Sensitivity-profiles" title="Permalink"></a></h1><p>Coil maps may be auto-calibrated from k-space measurements using ESPIRiT:</p><pre><code class="language-julia hljs">cmaps = calculate_coil_maps(data, trj, img_shape; U)
 println(&quot;size(cmaps) = $(size(cmaps))&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">size(cmaps) = (2,)</code></pre><h1 id="Sample-mask"><a class="docs-heading-anchor" href="#Sample-mask">Sample mask</a><a id="Sample-mask-1"></a><a class="docs-heading-anchor-permalink" href="#Sample-mask" title="Permalink"></a></h1><p>Furthermore, reconstructions can make use of a binary mask to exclude specific samples from being included in the reconstruction. To illustrate the data removal, we create a mask that removes one time frame from one cycle:</p><pre><code class="language-julia hljs"># create sampling mask
 it_rm = 1
 icyc_rm = 5
@@ -68,10 +68,10 @@ sample_mask = trues(2Nx, Ncyc, Nt)
 sample_mask[:, icyc_rm, it_rm] .= false
 println(&quot;typeof(sample_mask) = $(typeof(sample_mask))&quot;)
 println(&quot;size(sample_mask) = $(size(sample_mask))&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">typeof(sample_mask) = BitArray{3}
-size(sample_mask) = (128, 30, 10)</code></pre><h1 id="Normal-operator-and-adjoint"><a class="docs-heading-anchor" href="#Normal-operator-and-adjoint">Normal operator and adjoint</a><a id="Normal-operator-and-adjoint-1"></a><a class="docs-heading-anchor-permalink" href="#Normal-operator-and-adjoint" title="Permalink"></a></h1><p>Now, we can compute the normal operator using the sample mask:</p><pre><code class="language-julia hljs">AᴴA = NFFTNormalOp(img_shape, trj, U; cmaps, sample_mask)
+size(sample_mask) = (64, 20, 10)</code></pre><h1 id="Normal-operator-and-adjoint"><a class="docs-heading-anchor" href="#Normal-operator-and-adjoint">Normal operator and adjoint</a><a id="Normal-operator-and-adjoint-1"></a><a class="docs-heading-anchor-permalink" href="#Normal-operator-and-adjoint" title="Permalink"></a></h1><p>Now, we can compute the normal operator using the sample mask:</p><pre><code class="language-julia hljs">AᴴA = NFFTNormalOp(img_shape, trj, U; cmaps, sample_mask)
 println(AᴴA)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Linear operator
-  nrow: 8192
-  ncol: 8192
+  nrow: 2048
+  ncol: 2048
   eltype: ComplexF32
   symmetric: true
   hermitian: true
@@ -81,9 +81,9 @@ println(AᴴA)</code></pre><pre class="documenter-example-output"><code class="n
 println(&quot;size(b) = $(size(b))&quot;)
 
 p = heatmap(abs.(b[:,:,1]), layout=(1,2), subplot=1, ticks=[], colorbar=false, title=&quot;coeff. 1&quot;, size=(700,350))
-heatmap!(p, abs.(b[:,:,2]), subplot=2, ticks=[], colorbar=false, title=&quot;coeff. 2&quot;)</code></pre><object type="text/html" data="../../plots/87934764.html" style="width:100%;height:425px;"></object><h1 id="Iterative-solvers"><a class="docs-heading-anchor" href="#Iterative-solvers">Iterative solvers</a><a id="Iterative-solvers-1"></a><a class="docs-heading-anchor-permalink" href="#Iterative-solvers" title="Permalink"></a></h1><p>The normal operator <code>A</code> and the backprojection <code>b</code> are compatible with the iterative solvers from <a href="https://github.com/JuliaLinearAlgebra/IterativeSolvers.jl">IterativeSolvers.jl</a> and <a href="https://github.com/JuliaImageRecon/RegularizedLeastSquares.jl">RegularizedLeastSquares.jl</a>. This enables solving the inverse problem with various algorithms, including conjugate gradient (CG). In this way we can recover the original image from the backprojection:</p><pre><code class="language-julia hljs"># solve inverse problem with CG. GPU-methods are called through multiple dispatch, i.e., when objects of type `CuArray` are passed as arguments.
+heatmap!(p, abs.(b[:,:,2]), subplot=2, ticks=[], colorbar=false, title=&quot;coeff. 2&quot;)</code></pre><object type="text/html" data="../../plots/965922178.html" style="width:100%;height:425px;"></object><h1 id="Iterative-solvers"><a class="docs-heading-anchor" href="#Iterative-solvers">Iterative solvers</a><a id="Iterative-solvers-1"></a><a class="docs-heading-anchor-permalink" href="#Iterative-solvers" title="Permalink"></a></h1><p>The normal operator <code>A</code> and the backprojection <code>b</code> are compatible with the iterative solvers from <a href="https://github.com/JuliaLinearAlgebra/IterativeSolvers.jl">IterativeSolvers.jl</a> and <a href="https://github.com/JuliaImageRecon/RegularizedLeastSquares.jl">RegularizedLeastSquares.jl</a>. This enables solving the inverse problem with various algorithms, including conjugate gradient (CG). In this way we can recover the original image from the backprojection:</p><pre><code class="language-julia hljs"># solve inverse problem with CG. GPU-methods are called through multiple dispatch, i.e., when objects of type `CuArray` are passed as arguments.
 xr = cg(AᴴA, vec(b), maxiter=20)
 xr = reshape(xr, Nx, Nx, Nc) # reshape vector back to 2D image with Nc coefficients
 
 p = heatmap(abs.(xr[:,:,1]), layout=(1,2), subplot=1, ticks=[], colorbar=false, size=(700,350), title=&quot;coeff. 1&quot;)
-heatmap!(p, abs.(xr[:,:,2]), subplot=2, ticks=[], colorbar=false, title=&quot;coeff. 2&quot;)</code></pre><object type="text/html" data="../../plots/684003404.html" style="width:100%;height:425px;"></object><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../../api/">API »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Tuesday 13 January 2026 17:48">Tuesday 13 January 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+heatmap!(p, abs.(xr[:,:,2]), subplot=2, ticks=[], colorbar=false, title=&quot;coeff. 2&quot;)</code></pre><object type="text/html" data="../../plots/502069430.html" style="width:100%;height:425px;"></object><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../../api/">API »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Tuesday 13 January 2026 18:26">Tuesday 13 January 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
